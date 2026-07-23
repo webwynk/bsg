@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
+import { logAuditEventAction } from '../actions'
 
 export async function getAgentsAction() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -98,6 +99,7 @@ export async function createAgentAction(formData: FormData) {
       return { error: error.message }
     }
 
+    await logAuditEventAction('System', `Created new Agent account @${username}`)
     revalidatePath('/superadmin/agents')
     return { success: true, user: data.user }
   }
@@ -121,6 +123,7 @@ export async function createAgentAction(formData: FormData) {
     return { error: error.message }
   }
 
+  await logAuditEventAction('System', `Created new Agent account @${username}`)
   revalidatePath('/superadmin/agents')
   return { success: true, user: data.user }
 }
@@ -145,11 +148,12 @@ export async function transferPointsAction(targetId: string, amount: number, typ
 
     const currentBalance = userData.user.user_metadata?.balance || 0
     if (type === 'withdraw' && currentBalance < amount) {
-      return { error: `Insufficient balance. Current balance is ₹${currentBalance}` }
+      return { error: `Insufficient balance. Current balance is ${currentBalance} Coins` }
     }
 
     const delta = type === 'deposit' ? amount : -amount
     const newBalance = Math.max(0, currentBalance + delta)
+    const targetUsername = userData.user.user_metadata?.username || userData.user.email?.split('@')[0] || 'account'
 
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
       user_metadata: {
@@ -162,6 +166,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       return { error: updateError.message }
     }
 
+    await logAuditEventAction('Transaction', `${type === 'deposit' ? 'Deposited' : 'Withdrew'} ${amount.toLocaleString()} Coins for @${targetUsername}`)
     revalidatePath('/superadmin/agents')
     revalidatePath(`/superadmin/agents/${targetId}`)
     revalidatePath('/agent/players')

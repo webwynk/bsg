@@ -6,7 +6,7 @@ import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, Re
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { getAgentsAction } from './agents/actions'
-import { getRtpAction, updateRtpAction } from './actions'
+import { getRtpAction, updateRtpAction, getAuditLogsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
@@ -14,7 +14,7 @@ export default function SuperAdminDashboard() {
   const [totalCoins, setTotalCoins] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [totalBets] = React.useState(0)
-  const [systemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
+  const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
@@ -32,6 +32,11 @@ export default function SuperAdminDashboard() {
         setRtpValue(res.rtp)
       }
     })
+    getAuditLogsAction().then((res) => {
+      if (res.logs) {
+        setSystemLogs(res.logs)
+      }
+    })
   }
 
   const handleManualRefresh = async () => {
@@ -47,6 +52,7 @@ export default function SuperAdminDashboard() {
     setIsSavingRtp(false)
     if (res.success) {
       setRtpSuccess(`RTP successfully updated to ${rtpValue}%`)
+      fetchMetrics()
       setTimeout(() => setRtpSuccess(null), 2500)
     }
   }
@@ -63,6 +69,11 @@ export default function SuperAdminDashboard() {
     getRtpAction().then((res) => {
       if (isMounted && res.rtp) {
         setRtpValue(res.rtp)
+      }
+    })
+    getAuditLogsAction().then((res) => {
+      if (isMounted && res.logs) {
+        setSystemLogs(res.logs)
       }
     })
     return () => {
@@ -250,7 +261,7 @@ export default function SuperAdminDashboard() {
           </CardHeader>
           <CardContent className="relative">
             {systemLogs.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
                 {systemLogs.map((log) => (
                   <div key={log.id} className="relative pl-8 flex items-start justify-between gap-4 py-1">
                     <span className="absolute left-[6px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-card bg-background flex items-center justify-center">
@@ -267,7 +278,7 @@ export default function SuperAdminDashboard() {
                       <span className="text-[11px] font-medium text-muted-foreground">{log.time}</span>
                     </div>
 
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                       log.type === 'Security' ? 'bg-danger-bg text-danger-text' :
                       log.type === 'System' ? 'bg-success-bg text-success-text' : 'bg-info-bg text-info-text'
                     }`}>
