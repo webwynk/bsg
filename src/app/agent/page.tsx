@@ -15,11 +15,12 @@ import {
 } from "@/components/ui/table"
 import { getPlayersAction } from './players/actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
+import { getAgentDashboardDataAction } from './actions'
 
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
   const [recentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
-  const [balance] = React.useState(0)
+  const [balance, setBalance] = React.useState(0)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   // Quick Transfer widget state
@@ -29,17 +30,22 @@ export default function AgentDashboard() {
   const [quickTransferError, setQuickTransferError] = React.useState<string | null>(null)
   const [quickTransferSuccess, setQuickTransferSuccess] = React.useState<string | null>(null)
 
-  const fetchPlayers = () => {
+  const fetchDashboardData = React.useCallback(() => {
+    getAgentDashboardDataAction().then((res) => {
+      if (res) {
+        setBalance(res.balance || 0)
+      }
+    })
     getPlayersAction().then((res) => {
       if (res.players) {
         setPlayers(res.players)
       }
     })
-  }
+  }, [])
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    fetchPlayers()
+    fetchDashboardData()
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
@@ -67,22 +73,17 @@ export default function AgentDashboard() {
       const selectedP = players.find(p => p.id === selectedPlayerId)
       setQuickTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${amountNum} Coins for @${selectedP?.username || 'player'}!`)
       setQuickAmount('')
-      fetchPlayers()
+      if (res.agentBalance !== undefined) {
+        setBalance(res.agentBalance)
+      }
+      fetchDashboardData()
       setTimeout(() => setQuickTransferSuccess(null), 3000)
     }
   }
 
   React.useEffect(() => {
-    let isMounted = true
-    getPlayersAction().then((res) => {
-      if (isMounted && res.players) {
-        setPlayers(res.players)
-      }
-    })
-    return () => {
-      isMounted = false
-    }
-  }, [])
+    fetchDashboardData()
+  }, [fetchDashboardData])
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">

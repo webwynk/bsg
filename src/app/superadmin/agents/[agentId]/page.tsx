@@ -38,7 +38,7 @@ export default function AgentDetailPage({ params }: Props) {
   const { agentId } = React.use(params)
   
   const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string } | null>(null)
-  const [players] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
+  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
@@ -68,8 +68,14 @@ export default function AgentDetailPage({ params }: Props) {
       if (res.agent) {
         setAgentInfo(res.agent)
       }
+      if (res.players) {
+        setPlayers(res.players)
+        if (res.players.length > 0 && !selectedPlayer) {
+          setSelectedPlayer(res.players[0])
+        }
+      }
     })
-  }, [agentId])
+  }, [agentId, selectedPlayer])
 
   React.useEffect(() => {
     loadAgentDetails()
@@ -425,7 +431,7 @@ export default function AgentDetailPage({ params }: Props) {
                       <span className="text-xs text-muted-foreground">@{player.username}</span>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-bold text-sm font-mono tracking-tight">{formatCurrency(player.balance)}</p>
+                      <p className="font-bold text-sm font-mono tracking-tight">{formatCurrency(player.balance)} Coins</p>
                       <span className="text-[10px] text-muted-foreground uppercase font-semibold">
                         {player.gamePlays} plays
                       </span>

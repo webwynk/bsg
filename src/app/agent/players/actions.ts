@@ -5,6 +5,10 @@ import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 
 export async function getPlayersAction() {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const agentId = user?.id
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -17,7 +21,7 @@ export async function getPlayersAction() {
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
         const players = data.users
-          .filter(u => u.user_metadata?.role === 'player')
+          .filter(u => u.user_metadata?.role === 'player' && (!agentId || u.user_metadata?.agent_id === agentId))
           .map(u => ({
             id: u.id,
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
@@ -43,6 +47,10 @@ export async function createPlayerAction(formData: FormData) {
     return { error: 'Please provide Name, Username, and Password.' }
   }
 
+  const supabase = await createServerClient()
+  const { data: { user: agentUser } } = await supabase.auth.getUser()
+  const agentId = agentUser?.id
+
   const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -61,6 +69,7 @@ export async function createPlayerAction(formData: FormData) {
         full_name: name,
         username,
         role: 'player',
+        agent_id: agentId || null,
         balance: 0,
         status: 'Active',
       },
@@ -71,10 +80,10 @@ export async function createPlayerAction(formData: FormData) {
     }
 
     revalidatePath('/agent/players')
+    revalidatePath('/superadmin/agents')
     return { success: true, user: data.user }
   }
 
-  const supabase = await createServerClient()
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -83,6 +92,7 @@ export async function createPlayerAction(formData: FormData) {
         full_name: name,
         username,
         role: 'player',
+        agent_id: agentId || null,
         balance: 0,
         status: 'Active',
       },
@@ -94,6 +104,7 @@ export async function createPlayerAction(formData: FormData) {
   }
 
   revalidatePath('/agent/players')
+  revalidatePath('/superadmin/agents')
   return { success: true, user: data.user }
 }
 

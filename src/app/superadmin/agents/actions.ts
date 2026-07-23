@@ -18,7 +18,7 @@ export async function getAgentsAction() {
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
         const agents = data.users
-          .filter(u => u.user_metadata?.role === 'agent' || (u.email && u.email.endsWith('@bsg.com') && !u.email.startsWith('admin')))
+          .filter(u => u.user_metadata?.role === 'agent')
           .map(u => ({
             id: u.id,
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
@@ -47,6 +47,20 @@ export async function getAgentDetailAction(agentId: string) {
       const { data: userData, error } = await supabaseAdmin.auth.admin.getUserById(agentId)
       if (!error && userData?.user) {
         const u = userData.user
+        
+        // Fetch all players belonging to this agent
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        const agentPlayers = (usersData?.users || [])
+          .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
+          .map(p => ({
+            id: p.id,
+            name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
+            username: p.user_metadata?.username || p.email?.split('@')[0] || '',
+            balance: p.user_metadata?.balance || 0,
+            status: p.user_metadata?.status || 'Active',
+            gamePlays: 0
+          }))
+
         return {
           agent: {
             id: u.id,
@@ -54,7 +68,8 @@ export async function getAgentDetailAction(agentId: string) {
             username: u.user_metadata?.username || u.email?.split('@')[0] || '',
             balance: u.user_metadata?.balance || 0,
             status: u.user_metadata?.status || 'Active'
-          }
+          },
+          players: agentPlayers
         }
       }
     } catch (_) {}
@@ -141,23 +156,100 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(targetId)
-    if (getUserError || !userData?.user) {
+    const { data: targetUserData, error: getTargetError } = await supabaseAdmin.auth.admin.getUserById(targetId)
+    if (getTargetError || !targetUserData?.user) {
       return { error: 'Target account not found.' }
     }
 
-    const currentBalance = userData.user.user_metadata?.balance || 0
-    if (type === 'withdraw' && currentBalance < amount) {
-      return { error: `Insufficient balance. Current balance is ${currentBalance} Coins` }
+    const targetUser = targetUserData.user
+    const targetRole = targetUser.user_metadata?.role
+    const targetBalance = targetUser.user_metadata?.balance || 0
+    const targetUsername = targetUser.user_metadata?.username || targetUser.email?.split('@')[0] || 'account'
+
+    // Get active caller user
+    const supabase = await createServerClient()
+    const { data: { user: callerUserAuth } } = await supabase.auth.getUser()
+    
+    let callerUser = callerUserAuth
+    if (callerUserAuth) {
+      const { data: freshCaller } = await supabaseAdmin.auth.admin.getUserById(callerUserAuth.id)
+      if (freshCaller?.user) callerUser = freshCaller.user
+    }
+
+    // Case 1: Agent transferring to a Player
+    if (targetRole === 'player') {
+      const agentId = targetUser.user_metadata?.agent_id || callerUser?.id
+      if (!agentId) {
+        return { error: 'Agent session not found.' }
+      }
+
+      const { data: agentUserData } = await supabaseAdmin.auth.admin.getUserById(agentId)
+      if (!agentUserData?.user) {
+        return { error: 'Agent account not found.' }
+      }
+
+      const agentUser = agentUserData.user
+      const agentBalance = agentUser.user_metadata?.balance || 0
+      const agentUsername = agentUser.user_metadata?.username || agentUser.email?.split('@')[0] || 'agent'
+
+      if (type === 'deposit') {
+        if (agentBalance < amount) {
+          return { error: `Insufficient Agent Coins. Agent current balance is ${agentBalance} Coins` }
+        }
+
+        const newAgentBalance = agentBalance - amount
+        const newPlayerBalance = targetBalance + amount
+
+        await supabaseAdmin.auth.admin.updateUserById(agentId, {
+          user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
+        })
+
+        await supabaseAdmin.auth.admin.updateUserById(targetId, {
+          user_metadata: { ...targetUser.user_metadata, balance: newPlayerBalance }
+        })
+
+        await logAuditEventAction('Transaction', `Agent @${agentUsername} deposited ${amount.toLocaleString()} Coins to Player @${targetUsername}`)
+        revalidatePath('/agent')
+        revalidatePath('/agent/players')
+        revalidatePath('/superadmin/agents')
+        revalidatePath(`/superadmin/agents/${agentId}`)
+        return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
+      } else {
+        if (targetBalance < amount) {
+          return { error: `Insufficient Player balance. Player current balance is ${targetBalance} Coins` }
+        }
+
+        const newPlayerBalance = targetBalance - amount
+        const newAgentBalance = agentBalance + amount
+
+        await supabaseAdmin.auth.admin.updateUserById(targetId, {
+          user_metadata: { ...targetUser.user_metadata, balance: newPlayerBalance }
+        })
+
+        await supabaseAdmin.auth.admin.updateUserById(agentId, {
+          user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
+        })
+
+        await logAuditEventAction('Transaction', `Agent @${agentUsername} withdrew ${amount.toLocaleString()} Coins from Player @${targetUsername}`)
+        revalidatePath('/agent')
+        revalidatePath('/agent/players')
+        revalidatePath('/superadmin/agents')
+        revalidatePath(`/superadmin/agents/${agentId}`)
+        return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
+      }
+    }
+
+    // Case 2: SuperAdmin transferring to an Agent directly
+    if (type === 'withdraw' && targetBalance < amount) {
+      return { error: `Insufficient balance. Agent current balance is ${targetBalance} Coins` }
     }
 
     const delta = type === 'deposit' ? amount : -amount
-    const newBalance = Math.max(0, currentBalance + delta)
-    const targetUsername = userData.user.user_metadata?.username || userData.user.email?.split('@')[0] || 'account'
+    const newBalance = Math.max(0, targetBalance + delta)
 
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
       user_metadata: {
-        ...userData.user.user_metadata,
+        ...targetUser.user_metadata,
         balance: newBalance
       }
     })
@@ -166,10 +258,9 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       return { error: updateError.message }
     }
 
-    await logAuditEventAction('Transaction', `${type === 'deposit' ? 'Deposited' : 'Withdrew'} ${amount.toLocaleString()} Coins for @${targetUsername}`)
+    await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${amount.toLocaleString()} Coins for Agent @${targetUsername}`)
     revalidatePath('/superadmin/agents')
     revalidatePath(`/superadmin/agents/${targetId}`)
-    revalidatePath('/agent/players')
     return { success: true, newBalance }
   }
 
@@ -211,7 +302,7 @@ export async function toggleAgentStatusAction(agentId: string, currentStatus: st
     if (newStatus === 'Blocked') {
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
       if (usersData?.users) {
-        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player')
+        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
         for (const player of agentPlayers) {
           await supabaseAdmin.auth.admin.updateUserById(player.id, {
             user_metadata: {
@@ -225,7 +316,7 @@ export async function toggleAgentStatusAction(agentId: string, currentStatus: st
     }
 
     const logDetail = newStatus === 'Blocked' 
-      ? `Blocked Agent @${agentUsername} and cascading blocked all player accounts`
+      ? `Blocked Agent @${agentUsername} and cascading blocked ${blockedPlayersCount} player accounts`
       : `Unblocked Agent @${agentUsername}`
     
     await logAuditEventAction('Security', logDetail)
