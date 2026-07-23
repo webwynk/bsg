@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import Link from 'next/link'
 import {
   Table,
   TableBody,
@@ -21,10 +22,10 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
+import { Plus, Eye, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { createAgentAction, getAgentsAction, transferPointsAction } from './actions'
+import { createAgentAction, getAgentsAction } from './actions'
 
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
@@ -36,12 +37,6 @@ export default function AgentsPage() {
   const [isLoading, setIsLoading] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
-
-  // Transfer points modal state
-  const [activeTransferModal, setActiveTransferModal] = React.useState<{ agentId: string; type: 'deposit' | 'withdraw' } | null>(null)
-  const [transferAmount, setTransferAmount] = React.useState('')
-  const [isTransferring, setIsTransferring] = React.useState(false)
-  const [transferError, setTransferError] = React.useState<string | null>(null)
 
   const itemsPerPage = 10
 
@@ -81,28 +76,6 @@ export default function AgentsPage() {
     }
   }
 
-  const handleTransferPoints = async (agentId: string, type: 'deposit' | 'withdraw') => {
-    const amountNum = parseFloat(transferAmount)
-    if (isNaN(amountNum) || amountNum <= 0) {
-      setTransferError('Please enter a valid positive amount.')
-      return
-    }
-
-    setIsTransferring(true)
-    setTransferError(null)
-
-    const res = await transferPointsAction(agentId, amountNum, type)
-
-    setIsTransferring(false)
-    if (res.error) {
-      setTransferError(res.error)
-    } else {
-      setActiveTransferModal(null)
-      setTransferAmount('')
-      loadAgents()
-    }
-  }
-
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     agent.username.toLowerCase().includes(searchQuery.toLowerCase())
@@ -117,7 +90,7 @@ export default function AgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Agents</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Manage your agent network, transfer coins, and monitor activity.
+            Manage your agent network, view single agent details, and monitor activity.
           </p>
         </div>
 
@@ -194,7 +167,7 @@ export default function AgentsPage() {
                 <TableHead className="text-muted-foreground min-w-[120px]">Username</TableHead>
                 <TableHead className="text-right text-muted-foreground min-w-[120px]">Coins</TableHead>
                 <TableHead className="text-center text-muted-foreground min-w-[100px]">Status</TableHead>
-                <TableHead className="text-right text-muted-foreground min-w-[200px]">Actions</TableHead>
+                <TableHead className="text-right text-muted-foreground min-w-[120px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -202,9 +175,9 @@ export default function AgentsPage() {
                 paginatedAgents.map((agent) => (
                   <TableRow key={agent.id} className="border-border hover:bg-secondary/50">
                     <TableCell className="font-semibold text-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
-                      <a href={`/superadmin/agents/${agent.id}`} className="hover:underline font-bold text-primary">
+                      <Link href={`/superadmin/agents/${agent.id}`} className="hover:underline font-bold text-primary">
                         {agent.name}
-                      </a>
+                      </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">@{agent.username}</TableCell>
                     <TableCell className="text-right text-foreground font-mono font-bold">
@@ -220,121 +193,12 @@ export default function AgentsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right space-x-2 whitespace-nowrap">
-                      {/* Deposit Dialog */}
-                      <Dialog 
-                        open={activeTransferModal?.agentId === agent.id && activeTransferModal?.type === 'deposit'}
-                        onOpenChange={(open) => {
-                          if (open) {
-                            setActiveTransferModal({ agentId: agent.id, type: 'deposit' })
-                            setTransferAmount('')
-                            setTransferError(null)
-                          } else {
-                            setActiveTransferModal(null)
-                          }
-                        }}
+                      <Link
+                        href={`/superadmin/agents/${agent.id}`}
+                        className={buttonVariants({ variant: "outline", size: "sm", className: "border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-bold" })}
                       >
-                        <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer" })}>
-                          <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
-                          <DialogHeader>
-                            <DialogTitle>Issue Coins to Agent</DialogTitle>
-                            <DialogDescription className="text-muted-foreground">
-                              Add coins to {agent.name}&apos;s account.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            {transferError && (
-                              <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                                {transferError}
-                              </div>
-                            )}
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Current Coins:</span>
-                              <span className="font-bold text-success-text">{formatCurrency(agent.balance)}</span>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="deposit-amount">Amount (Coins)</Label>
-                              <Input 
-                                id="deposit-amount" 
-                                type="number" 
-                                placeholder="50000" 
-                                value={transferAmount}
-                                onChange={(e) => setTransferAmount(e.target.value)}
-                                className="bg-background border-border text-foreground text-lg" 
-                              />
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button 
-                              onClick={() => handleTransferPoints(agent.id, 'deposit')} 
-                              disabled={isTransferring}
-                              className="w-full bg-success text-white hover:bg-success/90 font-bold cursor-pointer"
-                            >
-                              {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                              {isTransferring ? 'Processing...' : 'Confirm Deposit'}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-
-                      {/* Withdraw Dialog */}
-                      <Dialog
-                        open={activeTransferModal?.agentId === agent.id && activeTransferModal?.type === 'withdraw'}
-                        onOpenChange={(open) => {
-                          if (open) {
-                            setActiveTransferModal({ agentId: agent.id, type: 'withdraw' })
-                            setTransferAmount('')
-                            setTransferError(null)
-                          } else {
-                            setActiveTransferModal(null)
-                          }
-                        }}
-                      >
-                        <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer" })}>
-                          <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
-                          <DialogHeader>
-                            <DialogTitle>Withdraw Coins from Agent</DialogTitle>
-                            <DialogDescription className="text-muted-foreground">
-                              Recall coins from {agent.name}&apos;s account.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            {transferError && (
-                              <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                                {transferError}
-                              </div>
-                            )}
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Current Coins:</span>
-                              <span className="font-bold text-danger-text">{formatCurrency(agent.balance)}</span>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="withdraw-amount">Amount (Coins)</Label>
-                              <Input 
-                                id="withdraw-amount" 
-                                type="number" 
-                                placeholder="50000" 
-                                value={transferAmount}
-                                onChange={(e) => setTransferAmount(e.target.value)}
-                                className="bg-background border-border text-foreground text-lg" 
-                              />
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button 
-                              onClick={() => handleTransferPoints(agent.id, 'withdraw')} 
-                              disabled={isTransferring}
-                              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold cursor-pointer"
-                            >
-                              {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                              {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                        <Eye className="mr-1.5 h-3.5 w-3.5" /> View
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))
