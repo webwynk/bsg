@@ -24,30 +24,38 @@ import { Label } from "@/components/ui/label"
 import { Plus, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { createAgentAction, getAgentsAction } from './actions'
+import { createAgentAction, getAgentsAction, transferPointsAction } from './actions'
 
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
+  
+  // Create Agent modal state
   const [isOpen, setIsOpen] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
 
+  // Transfer points modal state
+  const [activeTransferModal, setActiveTransferModal] = React.useState<{ agentId: string; type: 'deposit' | 'withdraw' } | null>(null)
+  const [transferAmount, setTransferAmount] = React.useState('')
+  const [isTransferring, setIsTransferring] = React.useState(false)
+  const [transferError, setTransferError] = React.useState<string | null>(null)
+
   const itemsPerPage = 10
 
-  React.useEffect(() => {
-    let isMounted = true
+  const loadAgents = React.useCallback(() => {
     getAgentsAction().then((res) => {
-      if (isMounted && res.agents) {
+      if (res.agents) {
         setAgents(res.agents)
       }
     })
-    return () => {
-      isMounted = false
-    }
   }, [])
+
+  React.useEffect(() => {
+    loadAgents()
+  }, [loadAgents])
 
   const handleCreateAgent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -56,7 +64,6 @@ export default function AgentsPage() {
     setSuccessMessage(null)
 
     const formData = new FormData(e.currentTarget)
-    const name = formData.get('name') as string
     const username = formData.get('username') as string
 
     const res = await createAgentAction(formData)
@@ -66,20 +73,33 @@ export default function AgentsPage() {
       setErrorMessage(res.error)
     } else {
       setSuccessMessage(`Agent "@${username}" created successfully!`)
-      setAgents((prev) => [
-        {
-          id: res.user?.id || Date.now().toString(),
-          name,
-          username,
-          balance: 0,
-          status: 'Active',
-        },
-        ...prev,
-      ])
+      loadAgents()
       setTimeout(() => {
         setIsOpen(false)
         setSuccessMessage(null)
       }, 1200)
+    }
+  }
+
+  const handleTransferPoints = async (agentId: string, type: 'deposit' | 'withdraw') => {
+    const amountNum = parseFloat(transferAmount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setTransferError('Please enter a valid positive amount.')
+      return
+    }
+
+    setIsTransferring(true)
+    setTransferError(null)
+
+    const res = await transferPointsAction(agentId, amountNum, type)
+
+    setIsTransferring(false)
+    if (res.error) {
+      setTransferError(res.error)
+    } else {
+      setActiveTransferModal(null)
+      setTransferAmount('')
+      loadAgents()
     }
   }
 
@@ -200,7 +220,19 @@ export default function AgentsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right space-x-2 whitespace-nowrap">
-                      <Dialog>
+                      {/* Deposit Dialog */}
+                      <Dialog 
+                        open={activeTransferModal?.agentId === agent.id && activeTransferModal?.type === 'deposit'}
+                        onOpenChange={(open) => {
+                          if (open) {
+                            setActiveTransferModal({ agentId: agent.id, type: 'deposit' })
+                            setTransferAmount('')
+                            setTransferError(null)
+                          } else {
+                            setActiveTransferModal(null)
+                          }
+                        }}
+                      >
                         <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer" })}>
                           <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
                         </DialogTrigger>
@@ -212,22 +244,53 @@ export default function AgentsPage() {
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
+                            {transferError && (
+                              <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                                {transferError}
+                              </div>
+                            )}
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Current Balance:</span>
                               <span className="font-bold text-success-text">{formatCurrency(agent.balance)}</span>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="amount">Amount (INR)</Label>
-                              <Input id="amount" type="number" placeholder="50000" className="bg-background border-border text-foreground text-lg" />
+                              <Label htmlFor="deposit-amount">Amount (INR)</Label>
+                              <Input 
+                                id="deposit-amount" 
+                                type="number" 
+                                placeholder="50000" 
+                                value={transferAmount}
+                                onChange={(e) => setTransferAmount(e.target.value)}
+                                className="bg-background border-border text-foreground text-lg" 
+                              />
                             </div>
                           </div>
                           <DialogFooter>
-                            <Button className="w-full bg-success text-white hover:bg-success/90">Confirm Deposit</Button>
+                            <Button 
+                              onClick={() => handleTransferPoints(agent.id, 'deposit')} 
+                              disabled={isTransferring}
+                              className="w-full bg-success text-white hover:bg-success/90 font-bold cursor-pointer"
+                            >
+                              {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              {isTransferring ? 'Processing...' : 'Confirm Deposit'}
+                            </Button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
 
-                      <Dialog>
+                      {/* Withdraw Dialog */}
+                      <Dialog
+                        open={activeTransferModal?.agentId === agent.id && activeTransferModal?.type === 'withdraw'}
+                        onOpenChange={(open) => {
+                          if (open) {
+                            setActiveTransferModal({ agentId: agent.id, type: 'withdraw' })
+                            setTransferAmount('')
+                            setTransferError(null)
+                          } else {
+                            setActiveTransferModal(null)
+                          }
+                        }}
+                      >
                         <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer" })}>
                           <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
                         </DialogTrigger>
@@ -239,17 +302,36 @@ export default function AgentsPage() {
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
+                            {transferError && (
+                              <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                                {transferError}
+                              </div>
+                            )}
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">Current Balance:</span>
                               <span className="font-bold text-danger-text">{formatCurrency(agent.balance)}</span>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="amount">Amount (INR)</Label>
-                              <Input id="amount" type="number" placeholder="50000" max={agent.balance / 100} className="bg-background border-border text-foreground text-lg" />
+                              <Label htmlFor="withdraw-amount">Amount (INR)</Label>
+                              <Input 
+                                id="withdraw-amount" 
+                                type="number" 
+                                placeholder="50000" 
+                                value={transferAmount}
+                                onChange={(e) => setTransferAmount(e.target.value)}
+                                className="bg-background border-border text-foreground text-lg" 
+                              />
                             </div>
                           </div>
                           <DialogFooter>
-                            <Button className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90">Confirm Withdrawal</Button>
+                            <Button 
+                              onClick={() => handleTransferPoints(agent.id, 'withdraw')} 
+                              disabled={isTransferring}
+                              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold cursor-pointer"
+                            >
+                              {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
+                            </Button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>

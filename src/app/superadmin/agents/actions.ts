@@ -22,7 +22,7 @@ export async function getAgentsAction() {
             id: u.id,
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
             username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-            balance: 0,
+            balance: u.user_metadata?.balance || 0,
             status: 'Active'
           }))
         return { agents }
@@ -46,7 +46,6 @@ export async function createAgentAction(formData: FormData) {
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (serviceRoleKey) {
-    // Service role admin API bypasses email sending and rate limits completely!
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       serviceRoleKey,
@@ -61,6 +60,7 @@ export async function createAgentAction(formData: FormData) {
         full_name: name,
         username,
         role: 'agent',
+        balance: 0,
       },
     })
 
@@ -72,7 +72,6 @@ export async function createAgentAction(formData: FormData) {
     return { success: true, user: data.user }
   }
 
-  // Fallback to standard client
   const supabase = await createServerClient()
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -82,6 +81,7 @@ export async function createAgentAction(formData: FormData) {
         full_name: name,
         username,
         role: 'agent',
+        balance: 0,
       },
     },
   })
@@ -92,4 +92,49 @@ export async function createAgentAction(formData: FormData) {
 
   revalidatePath('/superadmin/agents')
   return { success: true, user: data.user }
+}
+
+export async function transferPointsAction(targetId: string, amount: number, type: 'deposit' | 'withdraw') {
+  if (!targetId || !amount || amount <= 0) {
+    return { error: 'Please enter a valid non-zero amount.' }
+  }
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(targetId)
+    if (getUserError || !userData?.user) {
+      return { error: 'Target account not found.' }
+    }
+
+    const currentBalance = userData.user.user_metadata?.balance || 0
+    if (type === 'withdraw' && currentBalance < amount) {
+      return { error: `Insufficient balance. Current balance is ${currentBalance}` }
+    }
+
+    const delta = type === 'deposit' ? amount : -amount
+    const newBalance = Math.max(0, currentBalance + delta)
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
+      user_metadata: {
+        ...userData.user.user_metadata,
+        balance: newBalance
+      }
+    })
+
+    if (updateError) {
+      return { error: updateError.message }
+    }
+
+    revalidatePath('/superadmin/agents')
+    revalidatePath('/agent/players')
+    return { success: true, newBalance }
+  }
+
+  return { error: 'Service Role Key not configured in Vercel environment variables.' }
 }
