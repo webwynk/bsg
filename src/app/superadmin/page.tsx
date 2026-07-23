@@ -6,15 +6,20 @@ import { Users, DollarSign, Activity, Percent, Settings2, ShieldCheck, TrendingU
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 
-const MOCK_RECENT_SYSTEM_LOGS = [
-  { id: 'LOG-001', type: 'System', detail: 'Agent "agent_alpha" balance topped up by ₹50,000.00', time: '5 mins ago' },
-  { id: 'LOG-002', type: 'Game', detail: 'Player "rahul99" won ₹2,500.00 on Wheel of Fortune', time: '12 mins ago' },
-  { id: 'LOG-003', type: 'Security', detail: 'Admin login detected from IP 192.168.1.45', time: '30 mins ago' },
-  { id: 'LOG-004', type: 'Agent', detail: 'Agent "agent_beta" registered player "neil_k"', time: '1 hour ago' },
-]
-
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
+  const [totalPoints, setTotalPoints] = React.useState(0)
+  const [activeAgents, setActiveAgents] = React.useState(0)
+  const [totalBets, setTotalBets] = React.useState(0)
+  const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    setTimeout(() => {
+      setIsRefreshing(false)
+    }, 600)
+  }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
@@ -28,8 +33,8 @@ export default function SuperAdminDashboard() {
             Real-time management dashboard and network controls (God Mode).
           </p>
         </div>
-        <Button variant="outline" size="sm" className="w-fit self-start md:self-auto hover:bg-secondary">
-          <RefreshCw className="mr-2 h-4 w-4 animate-spin-slow" /> Refresh Metrics
+        <Button onClick={handleRefresh} variant="outline" size="sm" className="w-fit self-start md:self-auto hover:bg-secondary cursor-pointer">
+          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Metrics
         </Button>
       </div>
 
@@ -44,11 +49,11 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">12,450,000</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{totalPoints.toLocaleString('en-IN')}</div>
             <div className="flex items-center space-x-1.5 mt-2">
               <TrendingUp className="h-3.5 w-3.5 text-success-text" />
-              <span className="text-xs font-semibold text-success-text">+2.1%</span>
-              <span className="text-xs text-muted-foreground">from last week</span>
+              <span className="text-xs font-semibold text-success-text">0.0%</span>
+              <span className="text-xs text-muted-foreground">live tracking</span>
             </div>
           </CardContent>
         </Card>
@@ -62,9 +67,9 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">142</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents}</div>
             <p className="text-xs text-muted-foreground mt-2">
-              <span className="font-semibold text-foreground">12 new</span> accounts registered today
+              <span className="font-semibold text-foreground">0 new</span> registered today
             </p>
           </CardContent>
         </Card>
@@ -81,7 +86,7 @@ export default function SuperAdminDashboard() {
             <div className="text-3xl font-bold font-mono tracking-tight text-amber-500">{rtpValue}%</div>
             <div className="flex items-center space-x-1.5 mt-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs text-muted-foreground">Active optimization cycle</span>
+              <span className="text-xs text-muted-foreground">Active optimization engine</span>
             </div>
           </CardContent>
         </Card>
@@ -95,9 +100,9 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">8,234</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{totalBets}</div>
             <p className="text-xs text-muted-foreground mt-2">
-              Peak traffic: <span className="font-semibold text-foreground">1,240 rpm</span>
+              Live traffic: <span className="font-semibold text-foreground">0 rpm</span>
             </p>
           </CardContent>
         </Card>
@@ -183,46 +188,40 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            {/* Timeline connector line */}
-            <div className="absolute left-[27px] top-[24px] bottom-[24px] w-0.5 bg-border/60" />
+            {systemLogs.length > 0 ? (
+              <div className="space-y-4">
+                {systemLogs.map((log) => (
+                  <div key={log.id} className="relative pl-8 flex items-start justify-between gap-4 py-1">
+                    <span className="absolute left-[6px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-card bg-background flex items-center justify-center">
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        log.type === 'Security' ? 'bg-danger' :
+                        log.type === 'System' ? 'bg-success' : 'bg-info'
+                      }`} />
+                    </span>
 
-            <div className="space-y-4">
-              {MOCK_RECENT_SYSTEM_LOGS.map((log) => (
-                <div key={log.id} className="relative pl-8 flex items-start justify-between gap-4 py-1">
-                  {/* Timeline dot */}
-                  <span className={`absolute left-[6px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-card bg-background flex items-center justify-center`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      log.type === 'Security' ? 'bg-danger' :
-                      log.type === 'System' ? 'bg-success' : 'bg-info'
-                    }`} />
-                  </span>
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground leading-normal pr-2">
+                        {log.detail}
+                      </p>
+                      <span className="text-[11px] font-medium text-muted-foreground">{log.time}</span>
+                    </div>
 
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground leading-normal pr-2">
-                      {log.detail}
-                    </p>
-                    <span className="text-[11px] font-medium text-muted-foreground">{log.time}</span>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      log.type === 'Security' ? 'bg-danger-bg text-danger-text' :
+                      log.type === 'System' ? 'bg-success-bg text-success-text' : 'bg-info-bg text-info-text'
+                    }`}>
+                      {log.type}
+                    </span>
                   </div>
-
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                    log.type === 'Security' ? 'bg-danger-bg text-danger-text' :
-                    log.type === 'System' ? 'bg-success-bg text-success-text' : 'bg-info-bg text-info-text'
-                  }`}>
-                    {log.type}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-muted-foreground font-medium">
+                No system logs recorded yet. Real-time actions will appear here.
+              </div>
+            )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Database Warning Bar */}
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-center space-x-3">
-        <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
-        <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
-          <strong>Database Notice:</strong> Currently utilizing mock client data. Live Supabase database integration is pending.
-        </p>
       </div>
     </div>
   )
