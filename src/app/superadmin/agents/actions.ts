@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase'
+import { createClient as createServerClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 export async function createAgentAction(formData: FormData) {
   const name = (formData.get('name') as string || '').trim()
@@ -13,15 +14,44 @@ export async function createAgentAction(formData: FormData) {
   }
 
   const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
-  const supabase = await createClient()
 
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (serviceRoleKey) {
+    // Service role admin API bypasses email sending and rate limits completely!
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      serviceRoleKey,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: name,
+        username,
+        role: 'agent',
+      },
+    })
+
+    if (error) {
+      return { error: error.message }
+    }
+
+    revalidatePath('/superadmin/agents')
+    return { success: true, user: data.user }
+  }
+
+  // Fallback to standard client
+  const supabase = await createServerClient()
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: {
         full_name: name,
-        username: username,
+        username,
         role: 'agent',
       },
     },
