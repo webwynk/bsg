@@ -14,13 +14,54 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { createPlayerAction } from './actions'
 
 export default function PlayersPage() {
-  const [players] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
+  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
+
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
+
+  const handleCreatePlayer = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+
+    const formData = new FormData(e.currentTarget)
+    const name = formData.get('name') as string
+    const username = formData.get('username') as string
+
+    const res = await createPlayerAction(formData)
+
+    setIsLoading(false)
+    if (res.error) {
+      setErrorMessage(res.error)
+    } else {
+      setSuccessMessage(`Player "@${username}" created successfully!`)
+      setPlayers((prev) => [
+        {
+          id: res.user?.id || Date.now().toString(),
+          name,
+          username,
+          balance: 0,
+          status: 'Active',
+          gamePlays: 0,
+        },
+        ...prev,
+      ])
+      setTimeout(() => {
+        setIsOpen(false)
+        setSuccessMessage(null)
+      }, 1200)
+    }
+  }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
@@ -32,7 +73,7 @@ export default function PlayersPage() {
           </p>
         </div>
 
-        <Dialog>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger className={buttonVariants({ variant: "default" })}>
             <Plus className="mr-2 h-4 w-4" /> Create Player
           </DialogTrigger>
@@ -43,23 +84,40 @@ export default function PlayersPage() {
                 Enter details to provision a new player account.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right text-muted-foreground">Name</Label>
-                <Input id="name" placeholder="Rahul S." className="col-span-3 bg-background border-border text-foreground" />
+
+            <form onSubmit={handleCreatePlayer}>
+              <div className="grid gap-4 py-4">
+                {errorMessage && (
+                  <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                    {errorMessage}
+                  </div>
+                )}
+                {successMessage && (
+                  <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                    {successMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right text-muted-foreground">Name</Label>
+                  <Input id="name" name="name" placeholder="Rahul S." className="col-span-3 bg-background border-border text-foreground" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="username" className="text-right text-muted-foreground">Username</Label>
+                  <Input id="username" name="username" placeholder="rahul99" className="col-span-3 bg-background border-border text-foreground" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="password" className="text-right text-muted-foreground">Password</Label>
+                  <Input id="password" name="password" type="password" className="col-span-3 bg-background border-border text-foreground" required />
+                </div>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="username" className="text-right text-muted-foreground">Username</Label>
-                <Input id="username" placeholder="rahul99" className="col-span-3 bg-background border-border text-foreground" />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="password" className="text-right text-muted-foreground">Password</Label>
-                <Input id="password" type="password" className="col-span-3 bg-background border-border text-foreground" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="submit" className="w-full">Create Player</Button>
-            </DialogFooter>
+              <DialogFooter>
+                <Button type="submit" disabled={isLoading} className="w-full font-bold cursor-pointer">
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isLoading ? 'Creating Player...' : 'Create Player'}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>

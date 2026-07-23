@@ -21,15 +21,55 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, ArrowUpRight, ArrowDownRight } from "lucide-react"
+import { Plus, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { createAgentAction } from './actions'
 
 export default function AgentsPage() {
-  const [agents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
+  const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
+
   const itemsPerPage = 10
+
+  const handleCreateAgent = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+
+    const formData = new FormData(e.currentTarget)
+    const name = formData.get('name') as string
+    const username = formData.get('username') as string
+
+    const res = await createAgentAction(formData)
+
+    setIsLoading(false)
+    if (res.error) {
+      setErrorMessage(res.error)
+    } else {
+      setSuccessMessage(`Agent "@${username}" created successfully!`)
+      setAgents((prev) => [
+        {
+          id: res.user?.id || Date.now().toString(),
+          name,
+          username,
+          balance: 0,
+          status: 'Active',
+        },
+        ...prev,
+      ])
+      setTimeout(() => {
+        setIsOpen(false)
+        setSuccessMessage(null)
+      }, 1200)
+    }
+  }
 
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -49,7 +89,7 @@ export default function AgentsPage() {
           </p>
         </div>
 
-        <Dialog>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger className={buttonVariants({ variant: "default" })}>
             <Plus className="mr-2 h-4 w-4" /> Add Agent
           </DialogTrigger>
@@ -60,29 +100,46 @@ export default function AgentsPage() {
                 Create a new agent account. They will need these credentials to log in.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right text-muted-foreground">
-                  Name
-                </Label>
-                <Input id="name" placeholder="John Doe" className="col-span-3 bg-background border-border text-foreground" />
+
+            <form onSubmit={handleCreateAgent}>
+              <div className="grid gap-4 py-4">
+                {errorMessage && (
+                  <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                    {errorMessage}
+                  </div>
+                )}
+                {successMessage && (
+                  <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                    {successMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right text-muted-foreground">
+                    Name
+                  </Label>
+                  <Input id="name" name="name" placeholder="John Doe" className="col-span-3 bg-background border-border text-foreground" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="username" className="text-right text-muted-foreground">
+                    Username
+                  </Label>
+                  <Input id="username" name="username" placeholder="agent_john" className="col-span-3 bg-background border-border text-foreground" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="password" className="text-right text-muted-foreground">
+                    Password
+                  </Label>
+                  <Input id="password" name="password" type="password" className="col-span-3 bg-background border-border text-foreground" required />
+                </div>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="username" className="text-right text-muted-foreground">
-                  Username
-                </Label>
-                <Input id="username" placeholder="agent_john" className="col-span-3 bg-background border-border text-foreground" />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="password" className="text-right text-muted-foreground">
-                  Password
-                </Label>
-                <Input id="password" type="password" className="col-span-3 bg-background border-border text-foreground" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="submit" className="w-full">Create Agent</Button>
-            </DialogFooter>
+              <DialogFooter>
+                <Button type="submit" disabled={isLoading} className="w-full font-bold cursor-pointer">
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isLoading ? 'Creating Agent...' : 'Create Agent'}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -117,7 +174,7 @@ export default function AgentsPage() {
                         {agent.name}
                       </a>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{agent.username}</TableCell>
+                    <TableCell className="text-muted-foreground">@{agent.username}</TableCell>
                     <TableCell className="text-right text-foreground font-mono font-bold">
                       {formatCurrency(agent.balance)}
                     </TableCell>
