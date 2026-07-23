@@ -144,8 +144,10 @@ export async function createAgentAction(formData: FormData) {
 }
 
 export async function transferPointsAction(targetId: string, amount: number, type: 'deposit' | 'withdraw') {
-  if (!targetId || !amount || amount <= 0) {
-    return { error: 'Please enter a valid non-zero amount.' }
+  const sanitizedAmount = Math.round((amount || 0) * 100) / 100
+
+  if (!targetId || isNaN(sanitizedAmount) || sanitizedAmount <= 0) {
+    return { error: 'Please enter a valid positive amount.' }
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -193,12 +195,15 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       const agentUsername = agentUser.user_metadata?.username || agentUser.email?.split('@')[0] || 'agent'
 
       if (type === 'deposit') {
-        if (agentBalance < amount) {
-          return { error: `Insufficient Agent Coins. Agent current balance is ${agentBalance} Coins` }
+        // STRICT OVERDRAFT CHECK: Agent cannot deposit more than available balance!
+        if (agentBalance < sanitizedAmount) {
+          return { 
+            error: `Insufficient Agent Coins. You only have ${agentBalance.toLocaleString()} Coins available, but tried to deposit ${sanitizedAmount.toLocaleString()} Coins.` 
+          }
         }
 
-        const newAgentBalance = agentBalance - amount
-        const newPlayerBalance = targetBalance + amount
+        const newAgentBalance = Math.max(0, agentBalance - sanitizedAmount)
+        const newPlayerBalance = targetBalance + sanitizedAmount
 
         await supabaseAdmin.auth.admin.updateUserById(agentId, {
           user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
@@ -208,19 +213,22 @@ export async function transferPointsAction(targetId: string, amount: number, typ
           user_metadata: { ...targetUser.user_metadata, balance: newPlayerBalance }
         })
 
-        await logAuditEventAction('Transaction', `Agent @${agentUsername} deposited ${amount.toLocaleString()} Coins to Player @${targetUsername}`)
+        await logAuditEventAction('Transaction', `Agent @${agentUsername} deposited ${sanitizedAmount.toLocaleString()} Coins to Player @${targetUsername}`)
         revalidatePath('/agent')
         revalidatePath('/agent/players')
         revalidatePath('/superadmin/agents')
         revalidatePath(`/superadmin/agents/${agentId}`)
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
       } else {
-        if (targetBalance < amount) {
-          return { error: `Insufficient Player balance. Player current balance is ${targetBalance} Coins` }
+        // STRICT OVERDRAFT CHECK: Agent cannot withdraw more than player's available balance!
+        if (targetBalance < sanitizedAmount) {
+          return { 
+            error: `Insufficient Player Coins. Player @${targetUsername} only has ${targetBalance.toLocaleString()} Coins, but tried to withdraw ${sanitizedAmount.toLocaleString()} Coins.` 
+          }
         }
 
-        const newPlayerBalance = targetBalance - amount
-        const newAgentBalance = agentBalance + amount
+        const newPlayerBalance = Math.max(0, targetBalance - sanitizedAmount)
+        const newAgentBalance = agentBalance + sanitizedAmount
 
         await supabaseAdmin.auth.admin.updateUserById(targetId, {
           user_metadata: { ...targetUser.user_metadata, balance: newPlayerBalance }
@@ -230,7 +238,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
           user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
         })
 
-        await logAuditEventAction('Transaction', `Agent @${agentUsername} withdrew ${amount.toLocaleString()} Coins from Player @${targetUsername}`)
+        await logAuditEventAction('Transaction', `Agent @${agentUsername} withdrew ${sanitizedAmount.toLocaleString()} Coins from Player @${targetUsername}`)
         revalidatePath('/agent')
         revalidatePath('/agent/players')
         revalidatePath('/superadmin/agents')
@@ -240,11 +248,13 @@ export async function transferPointsAction(targetId: string, amount: number, typ
     }
 
     // Case 2: SuperAdmin transferring to an Agent directly
-    if (type === 'withdraw' && targetBalance < amount) {
-      return { error: `Insufficient balance. Agent current balance is ${targetBalance} Coins` }
+    if (type === 'withdraw' && targetBalance < sanitizedAmount) {
+      return { 
+        error: `Insufficient Agent Coins. Agent @${targetUsername} only has ${targetBalance.toLocaleString()} Coins, but tried to withdraw ${sanitizedAmount.toLocaleString()} Coins.` 
+      }
     }
 
-    const delta = type === 'deposit' ? amount : -amount
+    const delta = type === 'deposit' ? sanitizedAmount : -sanitizedAmount
     const newBalance = Math.max(0, targetBalance + delta)
 
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
@@ -258,7 +268,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       return { error: updateError.message }
     }
 
-    await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${amount.toLocaleString()} Coins for Agent @${targetUsername}`)
+    await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Agent @${targetUsername}`)
     revalidatePath('/superadmin/agents')
     revalidatePath(`/superadmin/agents/${targetId}`)
     return { success: true, newBalance }
