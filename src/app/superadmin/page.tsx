@@ -2,23 +2,33 @@
 
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Users, DollarSign, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw } from 'lucide-react'
+import { Users, DollarSign, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { getAgentsAction } from './agents/actions'
+import { getRtpAction, updateRtpAction } from './actions'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
-  const [totalPoints] = React.useState(0)
+  const [totalPoints, setTotalPoints] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [totalBets] = React.useState(0)
   const [systemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [isSavingRtp, setIsSavingRtp] = React.useState(false)
+  const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
 
   const fetchMetrics = () => {
     getAgentsAction().then((res) => {
       if (res.agents) {
         setActiveAgents(res.agents.length)
+        const total = res.agents.reduce((acc, a) => acc + (a.balance || 0), 0)
+        setTotalPoints(total)
+      }
+    })
+    getRtpAction().then((res) => {
+      if (res.rtp) {
+        setRtpValue(res.rtp)
       }
     })
   }
@@ -29,11 +39,29 @@ export default function SuperAdminDashboard() {
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
+  const handleApplyRtp = async () => {
+    setIsSavingRtp(true)
+    setRtpSuccess(null)
+    const res = await updateRtpAction(rtpValue)
+    setIsSavingRtp(false)
+    if (res.success) {
+      setRtpSuccess(`RTP successfully updated to ${rtpValue}%`)
+      setTimeout(() => setRtpSuccess(null), 2500)
+    }
+  }
+
   React.useEffect(() => {
     let isMounted = true
     getAgentsAction().then((res) => {
       if (isMounted && res.agents) {
         setActiveAgents(res.agents.length)
+        const total = res.agents.reduce((acc, a) => acc + (a.balance || 0), 0)
+        setTotalPoints(total)
+      }
+    })
+    getRtpAction().then((res) => {
+      if (isMounted && res.rtp) {
+        setRtpValue(res.rtp)
       }
     })
     return () => {
@@ -69,10 +97,10 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">{totalPoints.toLocaleString('en-IN')}</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">₹{totalPoints.toLocaleString('en-IN')}</div>
             <div className="flex items-center space-x-1.5 mt-2">
               <TrendingUp className="h-3.5 w-3.5 text-success-text" />
-              <span className="text-xs font-semibold text-success-text">0.0%</span>
+              <span className="text-xs font-semibold text-success-text">Active</span>
               <span className="text-xs text-muted-foreground">live tracking</span>
             </div>
           </CardContent>
@@ -146,6 +174,13 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            {rtpSuccess && (
+              <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-2">
+                <Check className="h-4 w-4 text-success-text" />
+                <span>{rtpSuccess}</span>
+              </div>
+            )}
+
             <div className="space-y-4">
               <Slider 
                 value={[rtpValue]}
@@ -186,8 +221,13 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <Button className="w-full font-bold cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90">
-              Apply Configuration
+            <Button 
+              onClick={handleApplyRtp} 
+              disabled={isSavingRtp}
+              className="w-full font-bold cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {isSavingRtp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isSavingRtp ? 'Saving RTP...' : 'Apply Configuration'}
             </Button>
           </CardContent>
         </Card>

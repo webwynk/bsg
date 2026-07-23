@@ -22,8 +22,8 @@ export async function getPlayersAction() {
             id: u.id,
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
             username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-            balance: 0,
-            status: 'Active',
+            balance: u.user_metadata?.balance || 0,
+            status: u.user_metadata?.status || 'Active',
             gamePlays: 0
           }))
         return { players }
@@ -47,7 +47,6 @@ export async function createPlayerAction(formData: FormData) {
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (serviceRoleKey) {
-    // Service role admin API bypasses email sending and rate limits completely!
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       serviceRoleKey,
@@ -62,6 +61,8 @@ export async function createPlayerAction(formData: FormData) {
         full_name: name,
         username,
         role: 'player',
+        balance: 0,
+        status: 'Active',
       },
     })
 
@@ -73,7 +74,6 @@ export async function createPlayerAction(formData: FormData) {
     return { success: true, user: data.user }
   }
 
-  // Fallback to standard client
   const supabase = await createServerClient()
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -83,6 +83,8 @@ export async function createPlayerAction(formData: FormData) {
         full_name: name,
         username,
         role: 'player',
+        balance: 0,
+        status: 'Active',
       },
     },
   })
@@ -93,4 +95,37 @@ export async function createPlayerAction(formData: FormData) {
 
   revalidatePath('/agent/players')
   return { success: true, user: data.user }
+}
+
+export async function togglePlayerStatusAction(playerId: string, currentStatus: string) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
+    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
+    if (getUserError || !userData?.user) {
+      return { error: 'Player account not found.' }
+    }
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
+      user_metadata: {
+        ...userData.user.user_metadata,
+        status: newStatus
+      }
+    })
+
+    if (updateError) {
+      return { error: updateError.message }
+    }
+
+    revalidatePath('/agent/players')
+    return { success: true, newStatus }
+  }
+
+  return { error: 'Service Role Key not configured.' }
 }

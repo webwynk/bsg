@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Wallet, Users, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Check } from 'lucide-react'
+import { Wallet, Users, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Check, Loader2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,12 +14,20 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { getPlayersAction } from './players/actions'
+import { transferPointsAction } from '@/app/superadmin/agents/actions'
 
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
   const [recentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
   const [balance] = React.useState(0)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+
+  // Quick Transfer widget state
+  const [selectedPlayerId, setSelectedPlayerId] = React.useState('')
+  const [quickAmount, setQuickAmount] = React.useState('')
+  const [isQuickTransferring, setIsQuickTransferring] = React.useState(false)
+  const [quickTransferError, setQuickTransferError] = React.useState<string | null>(null)
+  const [quickTransferSuccess, setQuickTransferSuccess] = React.useState<string | null>(null)
 
   const fetchPlayers = () => {
     getPlayersAction().then((res) => {
@@ -33,6 +41,35 @@ export default function AgentDashboard() {
     setIsRefreshing(true)
     fetchPlayers()
     setTimeout(() => setIsRefreshing(false), 500)
+  }
+
+  const handleQuickTransfer = async (type: 'deposit' | 'withdraw') => {
+    if (!selectedPlayerId) {
+      setQuickTransferError('Please select a player from the list.')
+      return
+    }
+    const amountNum = parseFloat(quickAmount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setQuickTransferError('Please enter a valid positive amount.')
+      return
+    }
+
+    setIsQuickTransferring(true)
+    setQuickTransferError(null)
+    setQuickTransferSuccess(null)
+
+    const res = await transferPointsAction(selectedPlayerId, amountNum, type)
+
+    setIsQuickTransferring(false)
+    if (res.error) {
+      setQuickTransferError(res.error)
+    } else {
+      const selectedP = players.find(p => p.id === selectedPlayerId)
+      setQuickTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ₹${amountNum} for @${selectedP?.username || 'player'}!`)
+      setQuickAmount('')
+      fetchPlayers()
+      setTimeout(() => setQuickTransferSuccess(null), 3000)
+    }
   }
 
   React.useEffect(() => {
@@ -105,15 +142,29 @@ export default function AgentDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {quickTransferError && (
+              <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                {quickTransferError}
+              </div>
+            )}
+            {quickTransferSuccess && (
+              <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-2">
+                <Check className="h-4 w-4 text-success-text" />
+                <span>{quickTransferSuccess}</span>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="player-select">Select Player</Label>
               <select 
                 id="player-select"
+                value={selectedPlayerId}
+                onChange={(e) => setSelectedPlayerId(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
               >
                 <option value="">-- Choose a Player --</option>
                 {players.map(p => (
-                  <option key={p.id} value={p.username}>
+                  <option key={p.id} value={p.id}>
                     {p.name} (@{p.username}) - {formatCurrency(p.balance)}
                   </option>
                 ))}
@@ -126,16 +177,29 @@ export default function AgentDashboard() {
                 id="quick-amount" 
                 type="number" 
                 placeholder="1000" 
+                value={quickAmount}
+                onChange={(e) => setQuickAmount(e.target.value)}
                 className="bg-background border-border text-foreground"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4 pt-2">
-              <Button className="bg-success text-white hover:bg-success/90 cursor-pointer">
-                <ArrowUpRight className="mr-1 h-4 w-4" /> Quick Deposit
+              <Button 
+                onClick={() => handleQuickTransfer('deposit')}
+                disabled={isQuickTransferring}
+                className="bg-success text-white hover:bg-success/90 cursor-pointer font-bold"
+              >
+                {isQuickTransferring ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ArrowUpRight className="mr-1 h-4 w-4" />}
+                Quick Deposit
               </Button>
-              <Button variant="destructive" className="cursor-pointer">
-                <ArrowDownRight className="mr-1 h-4 w-4" /> Quick Withdraw
+              <Button 
+                onClick={() => handleQuickTransfer('withdraw')}
+                disabled={isQuickTransferring}
+                variant="destructive" 
+                className="cursor-pointer font-bold"
+              >
+                {isQuickTransferring ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ArrowDownRight className="mr-1 h-4 w-4" />}
+                Quick Withdraw
               </Button>
             </div>
           </CardContent>

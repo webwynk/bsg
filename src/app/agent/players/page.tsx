@@ -14,31 +14,45 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
-import { createPlayerAction, getPlayersAction } from './actions'
+import { createPlayerAction, getPlayersAction, togglePlayerStatusAction } from './actions'
+import { transferPointsAction } from '@/app/superadmin/agents/actions'
 
 export default function PlayersPage() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
 
+  // Create Player modal state
   const [isOpen, setIsOpen] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
 
-  React.useEffect(() => {
-    let isMounted = true
+  // Point transfer state
+  const [activeTransferModal, setActiveTransferModal] = React.useState<'deposit' | 'withdraw' | null>(null)
+  const [transferAmount, setTransferAmount] = React.useState('')
+  const [isTransferring, setIsTransferring] = React.useState(false)
+  const [transferError, setTransferError] = React.useState<string | null>(null)
+
+  // Status toggle state
+  const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
+
+  const loadPlayers = React.useCallback(() => {
     getPlayersAction().then((res) => {
-      if (isMounted && res.players) {
+      if (res.players) {
         setPlayers(res.players)
+        if (res.players.length > 0 && !selectedPlayer) {
+          setSelectedPlayer(res.players[0])
+        }
       }
     })
-    return () => {
-      isMounted = false
-    }
-  }, [])
+  }, [selectedPlayer])
+
+  React.useEffect(() => {
+    loadPlayers()
+  }, [loadPlayers])
 
   const handleCreatePlayer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -47,7 +61,6 @@ export default function PlayersPage() {
     setSuccessMessage(null)
 
     const formData = new FormData(e.currentTarget)
-    const name = formData.get('name') as string
     const username = formData.get('username') as string
 
     const res = await createPlayerAction(formData)
@@ -57,21 +70,48 @@ export default function PlayersPage() {
       setErrorMessage(res.error)
     } else {
       setSuccessMessage(`Player "@${username}" created successfully!`)
-      setPlayers((prev) => [
-        {
-          id: res.user?.id || Date.now().toString(),
-          name,
-          username,
-          balance: 0,
-          status: 'Active',
-          gamePlays: 0,
-        },
-        ...prev,
-      ])
+      loadPlayers()
       setTimeout(() => {
         setIsOpen(false)
         setSuccessMessage(null)
       }, 1200)
+    }
+  }
+
+  const handleToggleStatus = async () => {
+    if (!selectedPlayer) return
+    setIsTogglingStatus(true)
+    const res = await togglePlayerStatusAction(selectedPlayer.id, selectedPlayer.status)
+    setIsTogglingStatus(false)
+    if (res.success && res.newStatus) {
+      setSelectedPlayer({ ...selectedPlayer, status: res.newStatus })
+      loadPlayers()
+    }
+  }
+
+  const handleTransferPoints = async (type: 'deposit' | 'withdraw') => {
+    if (!selectedPlayer) return
+    const amountNum = parseFloat(transferAmount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setTransferError('Please enter a valid positive amount.')
+      return
+    }
+
+    setIsTransferring(true)
+    setTransferError(null)
+
+    const res = await transferPointsAction(selectedPlayer.id, amountNum, type)
+
+    setIsTransferring(false)
+    if (res.error) {
+      setTransferError(res.error)
+    } else {
+      setActiveTransferModal(null)
+      setTransferAmount('')
+      if (res.newBalance !== undefined) {
+        setSelectedPlayer({ ...selectedPlayer, balance: res.newBalance })
+      }
+      loadPlayers()
     }
   }
 
@@ -138,7 +178,7 @@ export default function PlayersPage() {
         {/* Left Bento: Players Directory List */}
         <Card className="lg:col-span-5 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[580px]">
           <CardHeader className="border-b border-border/60 pb-4">
-            <CardTitle className="text-lg font-bold text-foreground">Registered Players</CardTitle>
+            <CardTitle className="text-lg font-bold text-foreground">Registered Players ({players.length})</CardTitle>
             <CardDescription className="text-muted-foreground">
               Click a player to view details or perform balance operations.
             </CardDescription>
@@ -157,14 +197,14 @@ export default function PlayersPage() {
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center space-x-2">
                         <p className="font-bold text-sm text-foreground truncate">{player.name}</p>
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${player.status === 'Active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        <span className={`inline-block w-2 h-2 rounded-full ${player.status === 'Active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                       </div>
                       <span className="text-xs text-muted-foreground">@{player.username}</span>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-bold text-sm font-mono">{formatCurrency(player.balance)}</p>
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                        {player.gamePlays} plays
+                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${player.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                        {player.status}
                       </span>
                     </div>
                   </div>
@@ -184,12 +224,134 @@ export default function PlayersPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <CardTitle className="text-lg font-bold text-foreground">
-                  {selectedPlayer ? `History of ${selectedPlayer.name}` : 'Player History'}
+                  {selectedPlayer ? `Player: ${selectedPlayer.name}` : 'Player Details'}
                 </CardTitle>
                 <CardDescription className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
                   {selectedPlayer ? `@${selectedPlayer.username} • Balance: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
                 </CardDescription>
               </div>
+
+              {selectedPlayer && (
+                <div className="flex items-center space-x-2 shrink-0">
+                  {/* Deposit Modal */}
+                  <Dialog 
+                    open={activeTransferModal === 'deposit'}
+                    onOpenChange={(open) => {
+                      setActiveTransferModal(open ? 'deposit' : null)
+                      setTransferAmount('')
+                      setTransferError(null)
+                    }}
+                  >
+                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer text-xs" })}>
+                      <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
+                      <DialogHeader>
+                        <DialogTitle>Deposit Points</DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                          Add points to {selectedPlayer.name}&apos;s balance.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        {transferError && (
+                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                            {transferError}
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <Label htmlFor="player-deposit-amount">Amount (INR)</Label>
+                          <Input 
+                            id="player-deposit-amount" 
+                            type="number" 
+                            placeholder="1000" 
+                            value={transferAmount}
+                            onChange={(e) => setTransferAmount(e.target.value)}
+                            className="bg-background border-border text-foreground text-lg" 
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button 
+                          onClick={() => handleTransferPoints('deposit')} 
+                          disabled={isTransferring}
+                          className="w-full bg-success text-white hover:bg-success/90 font-bold cursor-pointer"
+                        >
+                          {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          {isTransferring ? 'Processing...' : 'Confirm Deposit'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Withdraw Modal */}
+                  <Dialog 
+                    open={activeTransferModal === 'withdraw'}
+                    onOpenChange={(open) => {
+                      setActiveTransferModal(open ? 'withdraw' : null)
+                      setTransferAmount('')
+                      setTransferError(null)
+                    }}
+                  >
+                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer text-xs" })}>
+                      <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
+                      <DialogHeader>
+                        <DialogTitle>Withdraw Points</DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                          Recall points from {selectedPlayer.name}&apos;s balance.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        {transferError && (
+                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                            {transferError}
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <Label htmlFor="player-withdraw-amount">Amount (INR)</Label>
+                          <Input 
+                            id="player-withdraw-amount" 
+                            type="number" 
+                            placeholder="1000" 
+                            value={transferAmount}
+                            onChange={(e) => setTransferAmount(e.target.value)}
+                            className="bg-background border-border text-foreground text-lg" 
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button 
+                          onClick={() => handleTransferPoints('withdraw')} 
+                          disabled={isTransferring}
+                          className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold cursor-pointer"
+                        >
+                          {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Block / Unblock Button */}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleToggleStatus}
+                    disabled={isTogglingStatus}
+                    className={`text-xs cursor-pointer ${
+                      selectedPlayer.status === 'Active' 
+                        ? 'border-red-500/30 text-red-500 hover:bg-red-500/10' 
+                        : 'border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10'
+                    }`}
+                  >
+                    {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
+                      selectedPlayer.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    {selectedPlayer.status === 'Active' ? 'Block Account' : 'Unblock Account'}
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
 
