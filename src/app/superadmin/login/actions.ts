@@ -12,8 +12,13 @@ export async function superAdminLogin(formData: FormData) {
     redirect('/superadmin/login?error=Please enter both username and password.')
   }
 
-  // Support pure username by converting to internal format if @ isn't present
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.internal`
+  let email = username
+  if (!username.includes('@')) {
+    // If username is 'admin', automatically resolve to admin@bestsmartgame.com
+    email = username.toLowerCase() === 'admin' 
+      ? 'admin@bestsmartgame.com' 
+      : `${username.toLowerCase()}@bsg.internal`
+  }
 
   const supabase = await createClient()
 
