@@ -25,10 +25,10 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { getAgentDetailAction, transferPointsAction } from '../actions'
+import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
 
 interface Props {
   params: React.Usable<{ agentId: string }>
@@ -49,6 +49,16 @@ export default function AgentDetailPage({ params }: Props) {
   const [isTransferring, setIsTransferring] = React.useState(false)
   const [transferError, setTransferError] = React.useState<string | null>(null)
 
+  // Status toggle state
+  const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
+
+  // Password reset modal state
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false)
+  const [newPassword, setNewPassword] = React.useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false)
+  const [passwordError, setPasswordError] = React.useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = React.useState<string | null>(null)
+
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 4
@@ -64,6 +74,38 @@ export default function AgentDetailPage({ params }: Props) {
   React.useEffect(() => {
     loadAgentDetails()
   }, [loadAgentDetails])
+
+  const handleToggleAgentStatus = async () => {
+    if (!agentInfo) return
+    setIsTogglingStatus(true)
+    const res = await toggleAgentStatusAction(agentId, agentInfo.status)
+    setIsTogglingStatus(false)
+    if (res.success && res.newStatus) {
+      setAgentInfo({ ...agentInfo, status: res.newStatus })
+      loadAgentDetails()
+    }
+  }
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsUpdatingPassword(true)
+    setPasswordError(null)
+    setPasswordSuccess(null)
+
+    const res = await updateAgentPasswordAction(agentId, newPassword)
+
+    setIsUpdatingPassword(false)
+    if (res.error) {
+      setPasswordError(res.error)
+    } else {
+      setPasswordSuccess('Password updated successfully!')
+      setNewPassword('')
+      setTimeout(() => {
+        setIsPasswordModalOpen(false)
+        setPasswordSuccess(null)
+      }, 1500)
+    }
+  }
 
   const handleTransferPoints = async (type: 'deposit' | 'withdraw') => {
     const amountNum = parseFloat(transferAmount)
@@ -125,8 +167,8 @@ export default function AgentDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Deposit & Withdraw Buttons directly on single agent page */}
-        <div className="flex items-center space-x-3 shrink-0">
+        {/* Action Controls */}
+        <div className="flex items-center space-x-2 shrink-0 flex-wrap gap-y-2">
           {/* Deposit Modal */}
           <Dialog
             open={activeTransferModal === 'deposit'}
@@ -136,7 +178,7 @@ export default function AgentDetailPage({ params }: Props) {
               setTransferError(null)
             }}
           >
-            <DialogTrigger className={buttonVariants({ variant: "outline", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer font-bold" })}>
+            <DialogTrigger className={buttonVariants({ variant: "outline", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer font-bold text-xs" })}>
               <ArrowUpRight className="mr-1.5 h-4 w-4" /> Deposit Coins
             </DialogTrigger>
             <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
@@ -190,7 +232,7 @@ export default function AgentDetailPage({ params }: Props) {
               setTransferError(null)
             }}
           >
-            <DialogTrigger className={buttonVariants({ variant: "outline", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer font-bold" })}>
+            <DialogTrigger className={buttonVariants({ variant: "outline", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer font-bold text-xs" })}>
               <ArrowDownRight className="mr-1.5 h-4 w-4" /> Withdraw Coins
             </DialogTrigger>
             <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
@@ -234,6 +276,72 @@ export default function AgentDetailPage({ params }: Props) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Change Password Modal */}
+          <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+            <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer font-bold text-xs" })}>
+              <Key className="mr-1.5 h-3.5 w-3.5" /> Change Password
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
+              <DialogHeader>
+                <DialogTitle>Reset Agent Password</DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  Set a new login password for {agentInfo?.name} (@{agentInfo?.username}).
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleUpdatePassword}>
+                <div className="grid gap-4 py-4">
+                  {passwordError && (
+                    <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                      {passwordError}
+                    </div>
+                  )}
+                  {passwordSuccess && (
+                    <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                      {passwordSuccess}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <Input 
+                      id="new-password" 
+                      type="password" 
+                      placeholder="••••••••" 
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="bg-background border-border text-foreground"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={isUpdatingPassword} className="w-full font-bold cursor-pointer">
+                    {isUpdatingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {isUpdatingPassword ? 'Updating Password...' : 'Update Password'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Block / Unblock Agent Button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleToggleAgentStatus}
+            disabled={isTogglingStatus}
+            className={`text-xs font-bold cursor-pointer ${
+              agentInfo?.status === 'Active' 
+                ? 'border-red-500/30 text-red-500 hover:bg-red-500/10' 
+                : 'border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10'
+            }`}
+          >
+            {isTogglingStatus ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : (
+              agentInfo?.status === 'Active' ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {agentInfo?.status === 'Active' ? 'Block Agent' : 'Unblock Agent'}
+          </Button>
         </div>
       </div>
 

@@ -175,3 +175,97 @@ export async function transferPointsAction(targetId: string, amount: number, typ
 
   return { error: 'Service Role Key not configured in Vercel environment variables.' }
 }
+
+export async function toggleAgentStatusAction(agentId: string, currentStatus: string) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
+    
+    // 1. Update Agent status
+    const { data: agentUserData, error: getAgentError } = await supabaseAdmin.auth.admin.getUserById(agentId)
+    if (getAgentError || !agentUserData?.user) {
+      return { error: 'Agent account not found.' }
+    }
+
+    const agentUsername = agentUserData.user.user_metadata?.username || agentUserData.user.email?.split('@')[0] || 'agent'
+
+    const { error: updateAgentError } = await supabaseAdmin.auth.admin.updateUserById(agentId, {
+      user_metadata: {
+        ...agentUserData.user.user_metadata,
+        status: newStatus
+      }
+    })
+
+    if (updateAgentError) {
+      return { error: updateAgentError.message }
+    }
+
+    // 2. Cascading Block/Unblock for all players under this Agent
+    let blockedPlayersCount = 0
+    if (newStatus === 'Blocked') {
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      if (usersData?.users) {
+        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player')
+        for (const player of agentPlayers) {
+          await supabaseAdmin.auth.admin.updateUserById(player.id, {
+            user_metadata: {
+              ...player.user_metadata,
+              status: 'Blocked'
+            }
+          })
+          blockedPlayersCount++
+        }
+      }
+    }
+
+    const logDetail = newStatus === 'Blocked' 
+      ? `Blocked Agent @${agentUsername} and cascading blocked all player accounts`
+      : `Unblocked Agent @${agentUsername}`
+    
+    await logAuditEventAction('Security', logDetail)
+    revalidatePath('/superadmin/agents')
+    revalidatePath(`/superadmin/agents/${agentId}`)
+    return { success: true, newStatus, blockedPlayersCount }
+  }
+
+  return { error: 'Service Role Key not configured.' }
+}
+
+export async function updateAgentPasswordAction(agentId: string, newPassword: string) {
+  if (!newPassword || newPassword.length < 6) {
+    return { error: 'Password must be at least 6 characters.' }
+  }
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const { data: agentUserData } = await supabaseAdmin.auth.admin.getUserById(agentId)
+    const agentUsername = agentUserData?.user?.user_metadata?.username || 'agent'
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(agentId, {
+      password: newPassword
+    })
+
+    if (updateError) {
+      return { error: updateError.message }
+    }
+
+    await logAuditEventAction('Security', `Updated password for Agent @${agentUsername}`)
+    revalidatePath('/superadmin/agents')
+    revalidatePath(`/superadmin/agents/${agentId}`)
+    return { success: true }
+  }
+
+  return { error: 'Service Role Key not configured.' }
+}
