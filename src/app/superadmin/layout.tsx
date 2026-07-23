@@ -14,6 +14,9 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
     return <div className="min-h-screen bg-background text-foreground">{children}</div>
   }
 
+  const isDashboardActive = pathname === '/superadmin' || pathname === '/superadmin/'
+  const isAgentsActive = !!pathname?.startsWith('/superadmin/agents')
+
   const handleSignOut = () => {
     document.cookie = "mock_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
     window.location.href = '/superadmin/login'
@@ -31,15 +34,32 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
           <ThemeToggle />
         </div>
         <nav className="flex-1 px-4 space-y-2">
-          <Link href="/superadmin" className={`block px-4 py-2 rounded-md font-bold transition-all ${pathname === '/superadmin' ? 'bg-secondary text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}>
+          <Link 
+            href="/superadmin" 
+            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+              isDashboardActive 
+                ? 'bg-secondary text-primary font-bold shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+            }`}
+          >
             Dashboard
           </Link>
-          <Link href="/superadmin/agents" className={`block px-4 py-2 rounded-md font-medium transition-all ${pathname === '/superadmin/agents' ? 'bg-secondary text-primary font-bold' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}>
+          <Link 
+            href="/superadmin/agents" 
+            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+              isAgentsActive 
+                ? 'bg-secondary text-primary font-bold shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+            }`}
+          >
             Agents
           </Link>
         </nav>
         <div className="p-4 border-t border-border">
-          <button onClick={handleSignOut} className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors font-semibold cursor-pointer text-left">
+          <button 
+            onClick={handleSignOut} 
+            className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors font-semibold cursor-pointer text-left"
+          >
             Sign Out
           </button>
         </div>
@@ -74,17 +94,21 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
         <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border z-20 items-center justify-around">
           <Link 
             href="/superadmin" 
-            className={`flex flex-col items-center justify-center flex-1 h-full font-bold transition-all ${pathname === '/superadmin' ? 'text-primary' : 'text-muted-foreground'}`}
+            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
+              isDashboardActive ? 'text-primary font-bold' : 'text-muted-foreground'
+            }`}
           >
             <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase">Overview</span>
+            <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">Overview</span>
           </Link>
           <Link 
             href="/superadmin/agents" 
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${pathname === '/superadmin/agents' ? 'text-primary font-bold' : 'text-muted-foreground'}`}
+            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
+              isAgentsActive ? 'text-primary font-bold' : 'text-muted-foreground'
+            }`}
           >
             <Users className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase">Agents</span>
+            <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">Agents</span>
           </Link>
         </nav>
       </div>

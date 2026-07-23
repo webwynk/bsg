@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Wallet, Users, History, LogOut } from 'lucide-react'
 
@@ -9,9 +10,17 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const isLoginPage = pathname?.endsWith('/login')
 
-  // Bypass layout wrapper for login screen
   if (isLoginPage) {
     return <div className="min-h-screen bg-background text-foreground">{children}</div>
+  }
+
+  const isCashierActive = pathname === '/agent' || pathname === '/agent/'
+  const isPlayersActive = !!pathname?.startsWith('/agent/players')
+  const isHistoryActive = !!pathname?.startsWith('/agent/history')
+
+  const handleSignOut = () => {
+    document.cookie = "mock_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
+    window.location.href = '/agent/login'
   }
 
   return (
@@ -26,25 +35,44 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
           <ThemeToggle />
         </div>
         <nav className="flex-1 px-4 space-y-2">
-          <a href="/agent" className="block px-4 py-2 rounded-md bg-secondary text-primary font-bold">
+          <Link 
+            href="/agent" 
+            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+              isCashierActive 
+                ? 'bg-secondary text-primary font-bold shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+            }`}
+          >
             Cashier
-          </a>
-          <a href="/agent/players" className="block px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium">
+          </Link>
+          <Link 
+            href="/agent/players" 
+            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+              isPlayersActive 
+                ? 'bg-secondary text-primary font-bold shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+            }`}
+          >
             Players
-          </a>
-          <a href="/agent/history" className="block px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium">
+          </Link>
+          <Link 
+            href="/agent/history" 
+            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+              isHistoryActive 
+                ? 'bg-secondary text-primary font-bold shadow-xs' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+            }`}
+          >
             History
-          </a>
+          </Link>
         </nav>
         <div className="p-4 border-t border-border">
-          <form action={async () => {
-            document.cookie = "mock_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
-            window.location.href = '/agent/login'
-          }}>
-            <button className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors font-semibold cursor-pointer">
-              Sign Out
-            </button>
-          </form>
+          <button 
+            onClick={handleSignOut} 
+            className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors font-semibold cursor-pointer text-left"
+          >
+            Sign Out
+          </button>
         </div>
       </aside>
 
@@ -59,10 +87,7 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center space-x-2">
             <ThemeToggle />
             <button 
-              onClick={() => {
-                document.cookie = "mock_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
-                window.location.href = '/agent/login'
-              }}
+              onClick={handleSignOut}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-red-500 hover:bg-red-500/10 cursor-pointer"
               aria-label="Sign Out"
             >
@@ -78,27 +103,33 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
 
         {/* Mobile Bottom Navigation Bar */}
         <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border z-20 items-center justify-around">
-          <a 
+          <Link 
             href="/agent" 
-            className="flex flex-col items-center justify-center flex-1 h-full text-primary font-bold transition-all"
+            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
+              isCashierActive ? 'text-primary font-bold' : 'text-muted-foreground'
+            }`}
           >
             <Wallet className="h-5 w-5" />
             <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">Cashier</span>
-          </a>
-          <a 
+          </Link>
+          <Link 
             href="/agent/players" 
-            className="flex flex-col items-center justify-center flex-1 h-full text-muted-foreground hover:text-foreground transition-all"
+            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
+              isPlayersActive ? 'text-primary font-bold' : 'text-muted-foreground'
+            }`}
           >
             <Users className="h-5 w-5" />
             <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">Players</span>
-          </a>
-          <a 
+          </Link>
+          <Link 
             href="/agent/history" 
-            className="flex flex-col items-center justify-center flex-1 h-full text-muted-foreground hover:text-foreground transition-all"
+            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
+              isHistoryActive ? 'text-primary font-bold' : 'text-muted-foreground'
+            }`}
           >
             <History className="h-5 w-5" />
             <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">History</span>
-          </a>
+          </Link>
         </nav>
       </div>
     </div>
