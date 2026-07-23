@@ -17,7 +17,7 @@ export async function superAdminLogin(formData: FormData) {
     // If username is 'admin', automatically resolve to admin@bestsmartgame.com
     email = username.toLowerCase() === 'admin' 
       ? 'admin@bestsmartgame.com' 
-      : `${username.toLowerCase()}@bsg.internal`
+      : `${username.toLowerCase()}@bsg.com`
   }
 
   const supabase = await createClient()

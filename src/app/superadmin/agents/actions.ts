@@ -12,7 +12,7 @@ export async function createAgentAction(formData: FormData) {
     return { error: 'Please provide Name, Username, and Password.' }
   }
 
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.internal`
+  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.signUp({

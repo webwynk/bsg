@@ -13,7 +13,7 @@ export async function agentLogin(formData: FormData) {
   }
 
   // Support pure username by converting to internal format if @ isn't present
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.internal`
+  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
 
   const supabase = await createClient()
 
