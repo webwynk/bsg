@@ -21,7 +21,7 @@ export async function getPlayersAction() {
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
         const players = data.users
-          .filter(u => u.user_metadata?.role === 'player' && (!agentId || u.user_metadata?.agent_id === agentId))
+          .filter(u => u.user_metadata?.role === 'player' && (!agentId || !u.user_metadata?.agent_id || u.user_metadata?.agent_id === agentId))
           .map(u => ({
             id: u.id,
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
@@ -80,6 +80,7 @@ export async function createPlayerAction(formData: FormData) {
     }
 
     revalidatePath('/agent/players')
+    revalidatePath('/agent')
     revalidatePath('/superadmin/agents')
     return { success: true, user: data.user }
   }
@@ -104,6 +105,7 @@ export async function createPlayerAction(formData: FormData) {
   }
 
   revalidatePath('/agent/players')
+  revalidatePath('/agent')
   revalidatePath('/superadmin/agents')
   return { success: true, user: data.user }
 }

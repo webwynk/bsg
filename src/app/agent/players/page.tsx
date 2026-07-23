@@ -39,16 +39,20 @@ export default function PlayersPage() {
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
 
-  const loadPlayers = React.useCallback(() => {
+  const loadPlayers = React.useCallback((currentSelectedId?: string) => {
     getPlayersAction().then((res) => {
       if (res.players) {
         setPlayers(res.players)
-        if (res.players.length > 0 && !selectedPlayer) {
+        const targetId = currentSelectedId || selectedPlayer?.id
+        if (targetId) {
+          const match = res.players.find(p => p.id === targetId)
+          if (match) setSelectedPlayer(match)
+        } else if (res.players.length > 0) {
           setSelectedPlayer(res.players[0])
         }
       }
     })
-  }, [selectedPlayer])
+  }, [selectedPlayer?.id])
 
   React.useEffect(() => {
     loadPlayers()
@@ -85,7 +89,7 @@ export default function PlayersPage() {
     setIsTogglingStatus(false)
     if (res.success && res.newStatus) {
       setSelectedPlayer({ ...selectedPlayer, status: res.newStatus })
-      loadPlayers()
+      loadPlayers(selectedPlayer.id)
     }
   }
 
@@ -111,7 +115,7 @@ export default function PlayersPage() {
       if (res.newBalance !== undefined) {
         setSelectedPlayer({ ...selectedPlayer, balance: res.newBalance })
       }
-      loadPlayers()
+      loadPlayers(selectedPlayer.id)
     }
   }
 

@@ -48,10 +48,10 @@ export async function getAgentDetailAction(agentId: string) {
       if (!error && userData?.user) {
         const u = userData.user
         
-        // Fetch all players belonging to this agent
+        // Fetch all players belonging to this agent (or unassigned legacy players)
         const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
         const agentPlayers = (usersData?.users || [])
-          .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
+          .filter(p => p.user_metadata?.role === 'player' && (p.user_metadata?.agent_id === agentId || !p.user_metadata?.agent_id))
           .map(p => ({
             id: p.id,
             name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
@@ -180,7 +180,15 @@ export async function transferPointsAction(targetId: string, amount: number, typ
 
     // Case 1: Agent transferring to a Player
     if (targetRole === 'player') {
-      const agentId = targetUser.user_metadata?.agent_id || callerUser?.id
+      let agentId = targetUser.user_metadata?.agent_id || callerUser?.id
+
+      // Fallback: if player has no agent_id set yet, link to caller or first active agent
+      if (!agentId) {
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        const firstAgent = (usersData?.users || []).find(u => u.user_metadata?.role === 'agent')
+        if (firstAgent) agentId = firstAgent.id
+      }
+
       if (!agentId) {
         return { error: 'Agent session not found.' }
       }
@@ -210,7 +218,11 @@ export async function transferPointsAction(targetId: string, amount: number, typ
         })
 
         await supabaseAdmin.auth.admin.updateUserById(targetId, {
-          user_metadata: { ...targetUser.user_metadata, balance: newPlayerBalance }
+          user_metadata: { 
+            ...targetUser.user_metadata, 
+            agent_id: agentId,
+            balance: newPlayerBalance 
+          }
         })
 
         await logAuditEventAction('Transaction', `Agent @${agentUsername} deposited ${sanitizedAmount.toLocaleString()} Coins to Player @${targetUsername}`)
@@ -231,7 +243,11 @@ export async function transferPointsAction(targetId: string, amount: number, typ
         const newAgentBalance = agentBalance + sanitizedAmount
 
         await supabaseAdmin.auth.admin.updateUserById(targetId, {
-          user_metadata: { ...targetUser.user_metadata, balance: newPlayerBalance }
+          user_metadata: { 
+            ...targetUser.user_metadata, 
+            agent_id: agentId,
+            balance: newPlayerBalance 
+          }
         })
 
         await supabaseAdmin.auth.admin.updateUserById(agentId, {
@@ -312,7 +328,7 @@ export async function toggleAgentStatusAction(agentId: string, currentStatus: st
     if (newStatus === 'Blocked') {
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
       if (usersData?.users) {
-        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
+        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player' && (u.user_metadata?.agent_id === agentId || !u.user_metadata?.agent_id))
         for (const player of agentPlayers) {
           await supabaseAdmin.auth.admin.updateUserById(player.id, {
             user_metadata: {
