@@ -4,6 +4,36 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 
+export async function getPlayersAction() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      })
+
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers()
+      if (!error && data?.users) {
+        const players = data.users
+          .filter(u => u.user_metadata?.role === 'player')
+          .map(u => ({
+            id: u.id,
+            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
+            username: u.user_metadata?.username || u.email?.split('@')[0] || '',
+            balance: 0,
+            status: 'Active',
+            gamePlays: 0
+          }))
+        return { players }
+      }
+    } catch (_) {}
+  }
+
+  return { players: [] }
+}
+
 export async function createPlayerAction(formData: FormData) {
   const name = (formData.get('name') as string || '').trim()
   const username = (formData.get('username') as string || '').trim()

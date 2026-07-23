@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label"
 import { Plus, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { createAgentAction } from './actions'
+import { createAgentAction, getAgentsAction } from './actions'
 
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
@@ -36,6 +36,18 @@ export default function AgentsPage() {
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
 
   const itemsPerPage = 10
+
+  React.useEffect(() => {
+    let isMounted = true
+    getAgentsAction().then((res) => {
+      if (isMounted && res.agents) {
+        setAgents(res.agents)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const handleCreateAgent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

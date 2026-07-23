@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Plus, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
-import { createPlayerAction } from './actions'
+import { createPlayerAction, getPlayersAction } from './actions'
 
 export default function PlayersPage() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
@@ -27,6 +27,18 @@ export default function PlayersPage() {
   const [isLoading, setIsLoading] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let isMounted = true
+    getPlayersAction().then((res) => {
+      if (isMounted && res.players) {
+        setPlayers(res.players)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const handleCreatePlayer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
