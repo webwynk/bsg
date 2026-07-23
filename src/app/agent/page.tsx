@@ -13,11 +13,39 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table"
+import { getPlayersAction } from './players/actions'
 
 export default function AgentDashboard() {
-  const [players] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
+  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
   const [recentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
   const [balance] = React.useState(0)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+
+  const fetchPlayers = () => {
+    getPlayersAction().then((res) => {
+      if (res.players) {
+        setPlayers(res.players)
+      }
+    })
+  }
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    fetchPlayers()
+    setTimeout(() => setIsRefreshing(false), 500)
+  }
+
+  React.useEffect(() => {
+    let isMounted = true
+    getPlayersAction().then((res) => {
+      if (isMounted && res.players) {
+        setPlayers(res.players)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
@@ -81,7 +109,7 @@ export default function AgentDashboard() {
               <Label htmlFor="player-select">Select Player</Label>
               <select 
                 id="player-select"
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
               >
                 <option value="">-- Choose a Player --</option>
                 {players.map(p => (
@@ -122,8 +150,8 @@ export default function AgentDashboard() {
                 Your latest cashier transfer transactions.
               </CardDescription>
             </div>
-            <Button variant="ghost" size="icon" className="text-muted-foreground">
-              <RefreshCw className="h-4 w-4" />
+            <Button onClick={handleManualRefresh} variant="ghost" size="icon" className="text-muted-foreground cursor-pointer">
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
           </CardHeader>
           <CardContent>

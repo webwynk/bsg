@@ -11,22 +11,22 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { formatCurrency } from "@/lib/utils"
-import { ArrowDownRight, ArrowUpRight } from "lucide-react"
+import { ArrowDownRight, ArrowUpRight, Check } from "lucide-react"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 
-const MOCK_TRANSACTIONS = [
-  { id: 'TXN-1029', type: 'withdraw', amount: 500000, target: 'rahul99', date: '2023-10-24 14:32', status: 'Completed' },
-  { id: 'TXN-1028', type: 'deposit', amount: 120000, target: 'vikram_k', date: '2023-10-24 11:15', status: 'Completed' },
-  { id: 'TXN-1027', type: 'deposit', amount: 50000, target: 'neha_r', date: '2023-10-23 09:45', status: 'Completed' },
-  { id: 'TXN-1026', type: 'withdraw', amount: 1000000, target: 'rahul99', date: '2023-10-22 18:20', status: 'Completed' },
-  { id: 'TXN-1025', type: 'deposit', amount: 300000, target: 'amit_p', date: '2023-10-21 12:10', status: 'Completed' },
-]
-
 export default function HistoryPage() {
+  const [transactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string; status: string }>>([])
   const [currentPage, setCurrentPage] = React.useState(1)
-  const itemsPerPage = 3
-  const totalPages = Math.ceil(MOCK_TRANSACTIONS.length / itemsPerPage)
-  const paginatedTransactions = MOCK_TRANSACTIONS.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const itemsPerPage = 10
+
+  const filteredTransactions = transactions.filter(txn =>
+    txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    txn.target.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1
+  const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
@@ -40,6 +40,8 @@ export default function HistoryPage() {
       <div className="flex items-center justify-between mb-4">
         <Input 
           placeholder="Search by transaction ID or username..." 
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           className="max-w-sm bg-card border-border text-foreground" 
         />
       </div>
@@ -59,43 +61,53 @@ export default function HistoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedTransactions.map((txn) => (
-                <TableRow key={txn.id} className="border-border hover:bg-secondary/50">
-                  <TableCell className="font-semibold text-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">{txn.id}</TableCell>
-                  <TableCell className="text-muted-foreground">{txn.date}</TableCell>
-                  <TableCell>
-                    {txn.type === 'deposit' ? (
-                      <span className="inline-flex items-center text-success-text text-xs font-bold">
-                        <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
+              {paginatedTransactions.length > 0 ? (
+                paginatedTransactions.map((txn) => (
+                  <TableRow key={txn.id} className="border-border hover:bg-secondary/50">
+                    <TableCell className="font-semibold text-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">{txn.id}</TableCell>
+                    <TableCell className="text-muted-foreground">{txn.date}</TableCell>
+                    <TableCell>
+                      {txn.type === 'deposit' ? (
+                        <span className="inline-flex items-center text-success-text text-xs font-bold">
+                          <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-danger-text text-xs font-bold">
+                          <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-foreground font-semibold">@{txn.target}</TableCell>
+                    <TableCell className={`text-right font-mono font-bold ${txn.type === 'deposit' ? 'text-success-text' : 'text-danger-text'}`}>
+                      {txn.type === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex items-center rounded-full bg-secondary/80 px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                        <Check className="mr-1 h-3 w-3 text-success-text" /> {txn.status}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center text-danger-text text-xs font-bold">
-                        <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-foreground font-semibold">@{txn.target}</TableCell>
-                  <TableCell className={`text-right font-mono font-bold ${txn.type === 'deposit' ? 'text-success-text' : 'text-danger-text'}`}>
-                    {txn.type === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className="inline-flex items-center rounded-full bg-secondary/80 px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                      {txn.status}
-                    </span>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground text-xs font-medium">
+                    No transactions recorded yet. Cashier point transfers will appear here.
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </div>
 
-        <ResponsivePagination 
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-          totalItems={MOCK_TRANSACTIONS.length}
-          itemsPerPage={itemsPerPage}
-        />
+        {filteredTransactions.length > itemsPerPage && (
+          <ResponsivePagination 
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filteredTransactions.length}
+            itemsPerPage={itemsPerPage}
+          />
+        )}
       </div>
     </div>
   )

@@ -5,21 +5,41 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Users, DollarSign, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
+import { getAgentsAction } from './agents/actions'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
   const [totalPoints] = React.useState(0)
-  const [activeAgents] = React.useState(0)
+  const [activeAgents, setActiveAgents] = React.useState(0)
   const [totalBets] = React.useState(0)
   const [systemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    setTimeout(() => {
-      setIsRefreshing(false)
-    }, 600)
+  const fetchMetrics = () => {
+    getAgentsAction().then((res) => {
+      if (res.agents) {
+        setActiveAgents(res.agents.length)
+      }
+    })
   }
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    fetchMetrics()
+    setTimeout(() => setIsRefreshing(false), 500)
+  }
+
+  React.useEffect(() => {
+    let isMounted = true
+    getAgentsAction().then((res) => {
+      if (isMounted && res.agents) {
+        setActiveAgents(res.agents.length)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
@@ -33,7 +53,7 @@ export default function SuperAdminDashboard() {
             Real-time management dashboard and network controls (God Mode).
           </p>
         </div>
-        <Button onClick={handleRefresh} variant="outline" size="sm" className="w-fit self-start md:self-auto hover:bg-secondary cursor-pointer">
+        <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-fit self-start md:self-auto hover:bg-secondary cursor-pointer">
           <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Metrics
         </Button>
       </div>
@@ -69,7 +89,7 @@ export default function SuperAdminDashboard() {
           <CardContent className="pt-2">
             <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents}</div>
             <p className="text-xs text-muted-foreground mt-2">
-              <span className="font-semibold text-foreground">0 new</span> registered today
+              <span className="font-semibold text-foreground">{activeAgents} registered</span> agent network
             </p>
           </CardContent>
         </Card>
