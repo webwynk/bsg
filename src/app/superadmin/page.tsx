@@ -2,15 +2,16 @@
 
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Users, DollarSign, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2 } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { getAgentsAction } from './agents/actions'
 import { getRtpAction, updateRtpAction } from './actions'
+import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
-  const [totalPoints, setTotalPoints] = React.useState(0)
+  const [totalCoins, setTotalCoins] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [totalBets] = React.useState(0)
   const [systemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
@@ -23,7 +24,7 @@ export default function SuperAdminDashboard() {
       if (res.agents) {
         setActiveAgents(res.agents.length)
         const total = res.agents.reduce((acc, a) => acc + (a.balance || 0), 0)
-        setTotalPoints(total)
+        setTotalCoins(total)
       }
     })
     getRtpAction().then((res) => {
@@ -56,7 +57,7 @@ export default function SuperAdminDashboard() {
       if (isMounted && res.agents) {
         setActiveAgents(res.agents.length)
         const total = res.agents.reduce((acc, a) => acc + (a.balance || 0), 0)
-        setTotalPoints(total)
+        setTotalCoins(total)
       }
     })
     getRtpAction().then((res) => {
@@ -88,16 +89,16 @@ export default function SuperAdminDashboard() {
 
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 auto-rows-min">
-        {/* Bento Card 1: Total Points Issued */}
+        {/* Bento Card 1: Total Coins Issued */}
         <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Points Issued</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Coins Issued</span>
             <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
-              <DollarSign className="h-5 w-5" />
+              <Coins className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">₹{totalPoints.toLocaleString('en-IN')}</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{formatCurrency(totalCoins)}</div>
             <div className="flex items-center space-x-1.5 mt-2">
               <TrendingUp className="h-3.5 w-3.5 text-success-text" />
               <span className="text-xs font-semibold text-success-text">Active</span>

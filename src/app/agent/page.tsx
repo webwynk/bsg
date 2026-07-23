@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Wallet, Users, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Check, Loader2 } from 'lucide-react'
+import { Coins, Users, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Check, Loader2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,7 +65,7 @@ export default function AgentDashboard() {
       setQuickTransferError(res.error)
     } else {
       const selectedP = players.find(p => p.id === selectedPlayerId)
-      setQuickTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ₹${amountNum} for @${selectedP?.username || 'player'}!`)
+      setQuickTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${amountNum} Coins for @${selectedP?.username || 'player'}!`)
       setQuickAmount('')
       fetchPlayers()
       setTimeout(() => setQuickTransferSuccess(null), 3000)
@@ -89,7 +89,7 @@ export default function AgentDashboard() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Agent Cashier</h1>
         <p className="text-muted-foreground mt-1">
-          Quick point transfers and player activity snapshot.
+          Quick coin transfers and player activity snapshot.
         </p>
       </div>
 
@@ -97,12 +97,12 @@ export default function AgentDashboard() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-card border-border text-foreground">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Available Balance</CardTitle>
-            <Wallet className="h-4 w-4 text-success-text" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Available Coins</CardTitle>
+            <Coins className="h-4 w-4 text-success-text" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">{formatCurrency(balance)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Points available to allocate</p>
+            <p className="text-xs text-muted-foreground mt-1">Coins available to allocate</p>
           </CardContent>
         </Card>
 
@@ -130,15 +130,15 @@ export default function AgentDashboard() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Quick Point Transfer Widget */}
+        {/* Quick Coin Transfer Widget */}
         <Card className="bg-card border-border text-foreground">
           <CardHeader>
             <div className="flex items-center space-x-2">
               <Send className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Quick Point Transfer</CardTitle>
+              <CardTitle>Quick Coin Transfer</CardTitle>
             </div>
             <CardDescription className="text-muted-foreground">
-              Instantly deposit or withdraw points for any player.
+              Instantly deposit or withdraw coins for any player.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -165,14 +165,14 @@ export default function AgentDashboard() {
                 <option value="">-- Choose a Player --</option>
                 {players.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.name} (@{p.username}) - {formatCurrency(p.balance)}
+                    {p.name} (@{p.username}) - {formatCurrency(p.balance)} Coins
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quick-amount">Amount (INR)</Label>
+              <Label htmlFor="quick-amount">Amount (Coins)</Label>
               <Input 
                 id="quick-amount" 
                 type="number" 
@@ -209,7 +209,7 @@ export default function AgentDashboard() {
         <Card className="bg-card border-border text-foreground">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle>Recent Point Transfers</CardTitle>
+              <CardTitle>Recent Coin Transfers</CardTitle>
               <CardDescription className="text-muted-foreground">
                 Your latest cashier transfer transactions.
               </CardDescription>
@@ -253,7 +253,7 @@ export default function AgentDashboard() {
                 </Table>
               ) : (
                 <div className="py-12 text-center text-xs text-muted-foreground font-medium">
-                  No point transfers recorded yet.
+                  No coin transfers recorded yet.
                 </div>
               )}
             </div>

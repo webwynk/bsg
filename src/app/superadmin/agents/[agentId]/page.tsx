@@ -25,7 +25,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Wallet, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction } from '../actions'
@@ -137,13 +137,13 @@ export default function AgentDetailPage({ params }: Props) {
             }}
           >
             <DialogTrigger className={buttonVariants({ variant: "outline", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer font-bold" })}>
-              <ArrowUpRight className="mr-1.5 h-4 w-4" /> Deposit Points
+              <ArrowUpRight className="mr-1.5 h-4 w-4" /> Deposit Coins
             </DialogTrigger>
             <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
               <DialogHeader>
-                <DialogTitle>Issue Points to Agent</DialogTitle>
+                <DialogTitle>Issue Coins to Agent</DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Add points to {agentInfo?.name}&apos;s balance.
+                  Add coins to {agentInfo?.name}&apos;s account.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -153,11 +153,11 @@ export default function AgentDetailPage({ params }: Props) {
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Current Balance:</span>
+                  <span className="text-muted-foreground">Current Coins:</span>
                   <span className="font-bold text-success-text">{formatCurrency(agentInfo?.balance || 0)}</span>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="agent-deposit-amount">Amount (INR)</Label>
+                  <Label htmlFor="agent-deposit-amount">Amount (Coins)</Label>
                   <Input 
                     id="agent-deposit-amount" 
                     type="number" 
@@ -191,13 +191,13 @@ export default function AgentDetailPage({ params }: Props) {
             }}
           >
             <DialogTrigger className={buttonVariants({ variant: "outline", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer font-bold" })}>
-              <ArrowDownRight className="mr-1.5 h-4 w-4" /> Withdraw Points
+              <ArrowDownRight className="mr-1.5 h-4 w-4" /> Withdraw Coins
             </DialogTrigger>
             <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
               <DialogHeader>
-                <DialogTitle>Withdraw Points from Agent</DialogTitle>
+                <DialogTitle>Withdraw Coins from Agent</DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Recall points from {agentInfo?.name}&apos;s balance.
+                  Recall coins from {agentInfo?.name}&apos;s account.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -207,11 +207,11 @@ export default function AgentDetailPage({ params }: Props) {
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Current Balance:</span>
+                  <span className="text-muted-foreground">Current Coins:</span>
                   <span className="font-bold text-danger-text">{formatCurrency(agentInfo?.balance || 0)}</span>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="agent-withdraw-amount">Amount (INR)</Label>
+                  <Label htmlFor="agent-withdraw-amount">Amount (Coins)</Label>
                   <Input 
                     id="agent-withdraw-amount" 
                     type="number" 
@@ -241,8 +241,8 @@ export default function AgentDetailPage({ params }: Props) {
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Points Balance</span>
-            <Wallet className="h-5 w-5 text-emerald-500" />
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Coins Balance</span>
+            <Coins className="h-5 w-5 text-emerald-500" />
           </CardHeader>
           <CardContent className="pt-2">
             <div className="text-2xl font-bold font-mono tracking-tight">{formatCurrency(agentInfo?.balance || 0)}</div>
@@ -343,7 +343,7 @@ export default function AgentDetailPage({ params }: Props) {
                     {selectedPlayer ? `History of ${selectedPlayer.name}` : 'Player History'}
                   </CardTitle>
                   <CardDescription className="text-muted-foreground text-xs truncate">
-                    {selectedPlayer ? `@${selectedPlayer.username} • Balance: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
+                    {selectedPlayer ? `@${selectedPlayer.username} • Coins: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
                   </CardDescription>
                 </div>
               </div>
@@ -390,7 +390,7 @@ export default function AgentDetailPage({ params }: Props) {
                 activeTab === 'points' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Points History (0)
+              Coins History (0)
             </button>
           </div>
 

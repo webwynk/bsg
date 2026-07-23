@@ -121,7 +121,7 @@ export default function PlayersPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Player Management</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Register players, block/unblock accounts, and transfer points.
+            Register players, block/unblock accounts, and transfer coins.
           </p>
         </div>
 
@@ -180,7 +180,7 @@ export default function PlayersPage() {
           <CardHeader className="border-b border-border/60 pb-4">
             <CardTitle className="text-lg font-bold text-foreground">Registered Players ({players.length})</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Click a player to view details or perform balance operations.
+              Click a player to view details or perform coin operations.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0 overflow-y-auto flex-1">
@@ -202,7 +202,7 @@ export default function PlayersPage() {
                       <span className="text-xs text-muted-foreground">@{player.username}</span>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-bold text-sm font-mono">{formatCurrency(player.balance)}</p>
+                      <p className="font-bold text-sm font-mono">{formatCurrency(player.balance)} Coins</p>
                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${player.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
                         {player.status}
                       </span>
@@ -227,7 +227,7 @@ export default function PlayersPage() {
                   {selectedPlayer ? `Player: ${selectedPlayer.name}` : 'Player Details'}
                 </CardTitle>
                 <CardDescription className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                  {selectedPlayer ? `@${selectedPlayer.username} • Balance: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
+                  {selectedPlayer ? `@${selectedPlayer.username} • Coins: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
                 </CardDescription>
               </div>
 
@@ -242,14 +242,14 @@ export default function PlayersPage() {
                       setTransferError(null)
                     }}
                   >
-                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer text-xs" })}>
-                      <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
+                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer text-xs font-bold" })}>
+                      <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit Coins
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
                       <DialogHeader>
-                        <DialogTitle>Deposit Points</DialogTitle>
+                        <DialogTitle>Deposit Coins</DialogTitle>
                         <DialogDescription className="text-muted-foreground">
-                          Add points to {selectedPlayer.name}&apos;s balance.
+                          Add coins to {selectedPlayer.name}&apos;s account.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
@@ -259,7 +259,7 @@ export default function PlayersPage() {
                           </div>
                         )}
                         <div className="space-y-2">
-                          <Label htmlFor="player-deposit-amount">Amount (INR)</Label>
+                          <Label htmlFor="player-deposit-amount">Amount (Coins)</Label>
                           <Input 
                             id="player-deposit-amount" 
                             type="number" 
@@ -292,14 +292,14 @@ export default function PlayersPage() {
                       setTransferError(null)
                     }}
                   >
-                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer text-xs" })}>
-                      <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
+                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer text-xs font-bold" })}>
+                      <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw Coins
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
                       <DialogHeader>
-                        <DialogTitle>Withdraw Points</DialogTitle>
+                        <DialogTitle>Withdraw Coins</DialogTitle>
                         <DialogDescription className="text-muted-foreground">
-                          Recall points from {selectedPlayer.name}&apos;s balance.
+                          Recall coins from {selectedPlayer.name}&apos;s account.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
@@ -309,7 +309,7 @@ export default function PlayersPage() {
                           </div>
                         )}
                         <div className="space-y-2">
-                          <Label htmlFor="player-withdraw-amount">Amount (INR)</Label>
+                          <Label htmlFor="player-withdraw-amount">Amount (Coins)</Label>
                           <Input 
                             id="player-withdraw-amount" 
                             type="number" 
@@ -371,7 +371,7 @@ export default function PlayersPage() {
                 activeTab === 'points' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              Points History (0)
+              Coins History (0)
             </button>
           </div>
 

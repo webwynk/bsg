@@ -117,7 +117,7 @@ export default function AgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Agents</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Manage your agent network, transfer points, and monitor activity.
+            Manage your agent network, transfer coins, and monitor activity.
           </p>
         </div>
 
@@ -192,7 +192,7 @@ export default function AgentsPage() {
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] min-w-[150px]">Name</TableHead>
                 <TableHead className="text-muted-foreground min-w-[120px]">Username</TableHead>
-                <TableHead className="text-right text-muted-foreground min-w-[120px]">Balance</TableHead>
+                <TableHead className="text-right text-muted-foreground min-w-[120px]">Coins</TableHead>
                 <TableHead className="text-center text-muted-foreground min-w-[100px]">Status</TableHead>
                 <TableHead className="text-right text-muted-foreground min-w-[200px]">Actions</TableHead>
               </TableRow>
@@ -238,9 +238,9 @@ export default function AgentsPage() {
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
                           <DialogHeader>
-                            <DialogTitle>Issue Points to Agent</DialogTitle>
+                            <DialogTitle>Issue Coins to Agent</DialogTitle>
                             <DialogDescription className="text-muted-foreground">
-                              Add points to {agent.name}&apos;s balance.
+                              Add coins to {agent.name}&apos;s account.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
@@ -250,11 +250,11 @@ export default function AgentsPage() {
                               </div>
                             )}
                             <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Current Balance:</span>
+                              <span className="text-muted-foreground">Current Coins:</span>
                               <span className="font-bold text-success-text">{formatCurrency(agent.balance)}</span>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="deposit-amount">Amount (INR)</Label>
+                              <Label htmlFor="deposit-amount">Amount (Coins)</Label>
                               <Input 
                                 id="deposit-amount" 
                                 type="number" 
@@ -296,9 +296,9 @@ export default function AgentsPage() {
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
                           <DialogHeader>
-                            <DialogTitle>Withdraw Points from Agent</DialogTitle>
+                            <DialogTitle>Withdraw Coins from Agent</DialogTitle>
                             <DialogDescription className="text-muted-foreground">
-                              Recall points from {agent.name}&apos;s balance.
+                              Recall coins from {agent.name}&apos;s account.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
@@ -308,11 +308,11 @@ export default function AgentsPage() {
                               </div>
                             )}
                             <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Current Balance:</span>
+                              <span className="text-muted-foreground">Current Coins:</span>
                               <span className="font-bold text-danger-text">{formatCurrency(agent.balance)}</span>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="withdraw-amount">Amount (INR)</Label>
+                              <Label htmlFor="withdraw-amount">Amount (Coins)</Label>
                               <Input 
                                 id="withdraw-amount" 
                                 type="number" 
