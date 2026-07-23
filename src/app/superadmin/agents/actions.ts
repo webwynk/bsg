@@ -23,7 +23,7 @@ export async function getAgentsAction() {
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
             username: u.user_metadata?.username || u.email?.split('@')[0] || '',
             balance: u.user_metadata?.balance || 0,
-            status: 'Active'
+            status: u.user_metadata?.status || 'Active'
           }))
         return { agents }
       }
@@ -31,6 +31,35 @@ export async function getAgentsAction() {
   }
 
   return { agents: [] }
+}
+
+export async function getAgentDetailAction(agentId: string) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      })
+
+      const { data: userData, error } = await supabaseAdmin.auth.admin.getUserById(agentId)
+      if (!error && userData?.user) {
+        const u = userData.user
+        return {
+          agent: {
+            id: u.id,
+            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
+            username: u.user_metadata?.username || u.email?.split('@')[0] || '',
+            balance: u.user_metadata?.balance || 0,
+            status: u.user_metadata?.status || 'Active'
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  return { error: 'Agent not found' }
 }
 
 export async function createAgentAction(formData: FormData) {
@@ -61,6 +90,7 @@ export async function createAgentAction(formData: FormData) {
         username,
         role: 'agent',
         balance: 0,
+        status: 'Active',
       },
     })
 
@@ -82,6 +112,7 @@ export async function createAgentAction(formData: FormData) {
         username,
         role: 'agent',
         balance: 0,
+        status: 'Active',
       },
     },
   })
@@ -114,7 +145,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
 
     const currentBalance = userData.user.user_metadata?.balance || 0
     if (type === 'withdraw' && currentBalance < amount) {
-      return { error: `Insufficient balance. Current balance is ${currentBalance}` }
+      return { error: `Insufficient balance. Current balance is ₹${currentBalance}` }
     }
 
     const delta = type === 'deposit' ? amount : -amount
@@ -132,6 +163,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
     }
 
     revalidatePath('/superadmin/agents')
+    revalidatePath(`/superadmin/agents/${targetId}`)
     revalidatePath('/agent/players')
     return { success: true, newBalance }
   }
