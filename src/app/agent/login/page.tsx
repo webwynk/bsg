@@ -53,15 +53,14 @@ export default async function AgentLogin({ searchParams }: Props) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Email Address
+                  Username
                 </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/70" />
                   <Input
                     id="username"
                     name="username"
-                    type="email"
-                    placeholder="agent@example.com"
+                    placeholder="agent"
                     className="pl-9 bg-background/50 border-border/80 focus:border-primary/50 text-sm h-10 rounded-lg"
                     required
                   />

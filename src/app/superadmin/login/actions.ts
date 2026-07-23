@@ -5,12 +5,15 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
 export async function superAdminLogin(formData: FormData) {
-  const email = (formData.get('username') as string || '').trim()
+  const username = (formData.get('username') as string || '').trim()
   const password = (formData.get('password') as string || '').trim()
 
-  if (!email || !password) {
-    redirect('/superadmin/login?error=Please enter both email and password.')
+  if (!username || !password) {
+    redirect('/superadmin/login?error=Please enter both username and password.')
   }
+
+  // Support pure username by converting to internal format if @ isn't present
+  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.internal`
 
   const supabase = await createClient()
 
@@ -20,7 +23,7 @@ export async function superAdminLogin(formData: FormData) {
   })
 
   if (error || !data.user) {
-    redirect(`/superadmin/login?error=${encodeURIComponent(error?.message || 'Invalid credentials')}`)
+    redirect(`/superadmin/login?error=${encodeURIComponent(error?.message || 'Invalid username or password')}`)
   }
 
   const cookieStore = await cookies()
