@@ -2,14 +2,6 @@
 
 import * as React from 'react'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -22,11 +14,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, ArrowUpRight, ArrowDownRight, UserMinus, UserCheck } from "lucide-react"
+import { Plus } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 
 export default function PlayersPage() {
-  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
+  const [players] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
 
@@ -110,7 +102,7 @@ export default function PlayersPage() {
               </div>
             ) : (
               <div className="p-12 text-center text-muted-foreground text-xs font-medium">
-                No players created yet. Click "Create Player" to provision a game account.
+                No players created yet. Click &quot;Create Player&quot; to provision a game account.
               </div>
             )}
           </CardContent>

@@ -26,7 +26,7 @@ import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 
 export default function AgentsPage() {
-  const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
+  const [agents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const itemsPerPage = 10
@@ -139,7 +139,7 @@ export default function AgentsPage() {
                           <DialogHeader>
                             <DialogTitle>Issue Points to Agent</DialogTitle>
                             <DialogDescription className="text-muted-foreground">
-                              Add points to {agent.name}'s balance.
+                              Add points to {agent.name}&apos;s balance.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
@@ -166,7 +166,7 @@ export default function AgentsPage() {
                           <DialogHeader>
                             <DialogTitle>Withdraw Points from Agent</DialogTitle>
                             <DialogDescription className="text-muted-foreground">
-                              Recall points from {agent.name}'s balance.
+                              Recall points from {agent.name}&apos;s balance.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
@@ -190,7 +190,7 @@ export default function AgentsPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-32 text-center text-muted-foreground text-xs font-medium">
-                    No agents created yet. Click "Add Agent" to register your first agent.
+                    No agents created yet. Click &quot;Add Agent&quot; to register your first agent.
                   </TableCell>
                 </TableRow>
               )}

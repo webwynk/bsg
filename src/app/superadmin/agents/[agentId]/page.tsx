@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import Link from 'next/link'
 import {
   Table,
   TableBody,
@@ -17,41 +18,6 @@ import { ArrowLeft, Users, Wallet, Activity, CalendarIcon, ArrowUpRight, ArrowDo
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 
-const MOCK_AGENT_INFO = {
-  id: '1',
-  name: 'Alpha Agency',
-  username: 'agent_alpha',
-  balance: 5000000,
-  status: 'Active',
-  totalPlayers: 12,
-}
-
-const MOCK_AGENT_PLAYERS = [
-  { id: 'p1', name: 'Rahul S.', username: 'rahul99', balance: 1500000, status: 'Active', gamePlays: 142 },
-  { id: 'p2', name: 'Vikram K.', username: 'vikram_k', balance: 50000, status: 'Active', gamePlays: 18 },
-  { id: 'p3', name: 'Neha R.', username: 'neha_r', balance: 250000, status: 'Blocked', gamePlays: 89 },
-  { id: 'p4', name: 'Amit P.', username: 'amit_p', balance: 0, status: 'Active', gamePlays: 0 },
-]
-
-// Mock databases of game play and point transfers
-const MOCK_GAME_PLAYS = [
-  { id: 'SPIN-101', player: 'rahul99', game: 'Wheel of Fortune', bet: 10000, win: 25000, date: '2026-07-01' },
-  { id: 'SPIN-102', player: 'rahul99', game: 'Slot Rush', bet: 20000, win: 0, date: '2026-07-01' },
-  { id: 'SPIN-103', player: 'rahul99', game: 'Double Ring', bet: 15000, win: 30000, date: '2026-06-30' },
-  { id: 'SPIN-104', player: 'vikram_k', game: 'Slot Rush', bet: 5000, win: 0, date: '2026-07-01' },
-  { id: 'SPIN-105', player: 'neha_r', game: 'Wheel of Fortune', bet: 50000, win: 150000, date: '2026-06-28' },
-  { id: 'SPIN-106', player: 'rahul99', game: 'Double Ring', bet: 10000, win: 0, date: '2026-06-25' },
-  { id: 'SPIN-107', player: 'rahul99', game: 'Slot Rush', bet: 30000, win: 60000, date: '2026-06-25' },
-]
-
-const MOCK_POINTS_HISTORY = [
-  { id: 'TXN-501', player: 'rahul99', type: 'deposit', amount: 500000, date: '2026-07-01' },
-  { id: 'TXN-502', player: 'rahul99', type: 'withdraw', amount: 100000, date: '2026-06-30' },
-  { id: 'TXN-503', player: 'vikram_k', type: 'deposit', amount: 50000, date: '2026-07-01' },
-  { id: 'TXN-504', player: 'neha_r', type: 'deposit', amount: 250000, date: '2026-06-28' },
-  { id: 'TXN-505', player: 'rahul99', type: 'deposit', amount: 150000, date: '2026-06-25' },
-]
-
 interface Props {
   params: React.Usable<{ agentId: string }>
 }
@@ -59,65 +25,41 @@ interface Props {
 export default function AgentDetailPage({ params }: Props) {
   const { agentId } = React.use(params)
   
-  // Selected player state
-  const [selectedPlayer, setSelectedPlayer] = React.useState(MOCK_AGENT_PLAYERS[0])
+  const [players] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
+  const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
-  
-  // Calendar date filter state (default is undefined -> show all history)
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
 
-  // Sub-table pagination states
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 4
 
-  // Reset pagination when player or date changes
-  React.useEffect(() => {
-    setGamesPage(1)
-    setPointsPage(1)
-  }, [selectedPlayer, filterDate])
+  const gamePlays: Array<{ id: string; player: string; game: string; bet: number; win: number; date: string }> = []
+  const pointsHistory: Array<{ id: string; player: string; type: 'deposit' | 'withdraw'; amount: number; date: string }> = []
 
-  // Filter lists based on selected player & date filter
-  const filteredGamePlays = MOCK_GAME_PLAYS.filter(play => {
-    if (play.player !== selectedPlayer.username) return false
-    if (filterDate) {
-      const dateString = filterDate.toISOString().split('T')[0]
-      return play.date === dateString
-    }
-    return true
-  })
+  const totalGamesPages = Math.ceil(gamePlays.length / itemsPerPage) || 1
+  const paginatedGames = gamePlays.slice((gamesPage - 1) * itemsPerPage, gamesPage * itemsPerPage)
 
-  const filteredPointsHistory = MOCK_POINTS_HISTORY.filter(txn => {
-    if (txn.player !== selectedPlayer.username) return false
-    if (filterDate) {
-      const dateString = filterDate.toISOString().split('T')[0]
-      return txn.date === dateString
-    }
-    return true
-  })
-
-  // Sliced logs for pagination
-  const totalGamesPages = Math.ceil(filteredGamePlays.length / itemsPerPage)
-  const paginatedGames = filteredGamePlays.slice((gamesPage - 1) * itemsPerPage, gamesPage * itemsPerPage)
-
-  const totalPointsPages = Math.ceil(filteredPointsHistory.length / itemsPerPage)
-  const paginatedPoints = filteredPointsHistory.slice((pointsPage - 1) * itemsPerPage, pointsPage * itemsPerPage)
+  const totalPointsPages = Math.ceil(pointsHistory.length / itemsPerPage) || 1
+  const paginatedPoints = pointsHistory.slice((pointsPage - 1) * itemsPerPage, pointsPage * itemsPerPage)
 
   const handleClearFilter = () => {
     setFilterDate(undefined)
+    setGamesPage(1)
+    setPointsPage(1)
   }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
       {/* Header */}
       <div className="flex items-center space-x-4">
-        <a href="/superadmin/agents" className={buttonVariants({ variant: "outline", size: "icon-sm" })}>
+        <Link href="/superadmin/agents" className={buttonVariants({ variant: "outline", size: "icon-sm" })}>
           <ArrowLeft className="h-4 w-4" />
-        </a>
+        </Link>
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{MOCK_AGENT_INFO.name}</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Agent Details</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Agent ID: {agentId} &bull; Username: @{MOCK_AGENT_INFO.username}
+            Agent ID: {agentId}
           </p>
         </div>
       </div>
@@ -130,7 +72,7 @@ export default function AgentDetailPage({ params }: Props) {
             <Wallet className="h-5 w-5 text-emerald-500" />
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-2xl font-bold font-mono tracking-tight">{formatCurrency(MOCK_AGENT_INFO.balance)}</div>
+            <div className="text-2xl font-bold font-mono tracking-tight">{formatCurrency(0)}</div>
             <p className="text-xs text-muted-foreground mt-2">Available for player allocation</p>
           </CardContent>
         </Card>
@@ -141,7 +83,7 @@ export default function AgentDetailPage({ params }: Props) {
             <Users className="h-5 w-5 text-blue-500" />
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-2xl font-bold font-mono tracking-tight">{MOCK_AGENT_INFO.totalPlayers}</div>
+            <div className="text-2xl font-bold font-mono tracking-tight">{players.length}</div>
             <p className="text-xs text-muted-foreground mt-2">Players registered under this agency</p>
           </CardContent>
         </Card>
@@ -152,19 +94,17 @@ export default function AgentDetailPage({ params }: Props) {
             <Activity className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent className="pt-2">
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${
-              MOCK_AGENT_INFO.status === 'Active' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'
-            }`}>
-              {MOCK_AGENT_INFO.status}
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide bg-success-bg text-success-text">
+              Active
             </span>
             <p className="text-xs text-muted-foreground mt-2">Operational state</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Layout: Bento Grids (Left: Players, Right: Detailed User History) */}
+      {/* Main Layout */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
-        {/* Left Bento: Agent's Players List (Col-span 5 on Desktop) */}
+        {/* Left Bento */}
         <Card className="lg:col-span-5 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[580px]">
           <CardHeader className="border-b border-border/60 pb-4">
             <div className="flex items-center justify-between">
@@ -175,65 +115,64 @@ export default function AgentDetailPage({ params }: Props) {
                 </CardDescription>
               </div>
               <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
-                {MOCK_AGENT_PLAYERS.length} total
+                {players.length} total
               </span>
-            </div>
-            <div className="mt-3">
-              <input
-                type="text"
-                placeholder="Search players..."
-                className="w-full h-8 px-3 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
             </div>
           </CardHeader>
           <CardContent className="p-0 overflow-y-auto flex-1">
-            <div className="divide-y divide-border/60">
-              {MOCK_AGENT_PLAYERS.map((player) => (
-                <div
-                  key={player.id}
-                  onClick={() => setSelectedPlayer(player)}
-                  className={`p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-secondary/40 transition-all duration-150 ${
-                    selectedPlayer.id === player.id ? 'bg-secondary/80 border-l-4 border-primary' : ''
-                  }`}
-                >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <p className="font-bold text-sm text-foreground truncate">{player.name}</p>
-                      <span className={`w-1.5 h-1.5 rounded-full ${player.status === 'Active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+            {players.length > 0 ? (
+              <div className="divide-y divide-border/60">
+                {players.map((player) => (
+                  <div
+                    key={player.id}
+                    onClick={() => {
+                      setSelectedPlayer(player)
+                      setGamesPage(1)
+                      setPointsPage(1)
+                    }}
+                    className={`p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-secondary/40 transition-all duration-150 ${
+                      selectedPlayer?.id === player.id ? 'bg-secondary/80 border-l-4 border-primary' : ''
+                    }`}
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <p className="font-bold text-sm text-foreground truncate">{player.name}</p>
+                        <span className={`w-1.5 h-1.5 rounded-full ${player.status === 'Active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                      </div>
+                      <span className="text-xs text-muted-foreground">@{player.username}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">@{player.username}</span>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-sm font-mono tracking-tight">{formatCurrency(player.balance)}</p>
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        {player.gamePlays} plays
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-bold text-sm font-mono tracking-tight">{formatCurrency(player.balance)}</p>
-                    <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                      {player.gamePlays} plays
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-12 text-center text-muted-foreground text-xs font-medium">
+                No players registered under this agent yet.
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Right Bento: Selected Player Detailed History (Col-span 7 on Desktop) */}
+        {/* Right Bento */}
         <Card className="lg:col-span-7 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[580px]">
           <CardHeader className="border-b border-border/60 pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full border border-primary/20 bg-secondary/50 flex items-center justify-center font-bold text-primary tracking-wider text-sm shadow-sm shrink-0">
-                  {selectedPlayer.name.split(' ').map(n => n[0]).join('')}
-                </div>
                 <div className="min-w-0">
                   <CardTitle className="text-lg font-bold text-foreground truncate">
-                    History of {selectedPlayer.name}
+                    {selectedPlayer ? `History of ${selectedPlayer.name}` : 'Player History'}
                   </CardTitle>
                   <CardDescription className="text-muted-foreground text-xs truncate">
-                    @{selectedPlayer.username} &bull; Balance: <span className="font-bold text-foreground font-mono">{formatCurrency(selectedPlayer.balance)}</span>
+                    {selectedPlayer ? `@${selectedPlayer.username} • Balance: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
                   </CardDescription>
                 </div>
               </div>
               
-              {/* Calendar Filter widget */}
               <div className="flex items-center space-x-2 shrink-0">
                 <Popover>
                   <PopoverTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "w-[130px] justify-start text-left font-normal border-border bg-background cursor-pointer text-xs" })}>
@@ -244,7 +183,11 @@ export default function AgentDetailPage({ params }: Props) {
                     <Calendar
                       mode="single"
                       selected={filterDate}
-                      onSelect={setFilterDate}
+                      onSelect={(d) => {
+                        setFilterDate(d)
+                        setGamesPage(1)
+                        setPointsPage(1)
+                      }}
                     />
                   </PopoverContent>
                 </Popover>
@@ -257,7 +200,6 @@ export default function AgentDetailPage({ params }: Props) {
             </div>
           </CardHeader>
 
-          {/* Navigation tabs styled as a premium segment control */}
           <div className="px-4 py-2 border-b border-border/60 bg-secondary/20 flex space-x-2">
             <button
               onClick={() => setActiveTab('games')}
@@ -265,7 +207,7 @@ export default function AgentDetailPage({ params }: Props) {
                 activeTab === 'games' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Game Plays ({filteredGamePlays.length})
+              Game Plays (0)
             </button>
             <button
               onClick={() => setActiveTab('points')}
@@ -273,7 +215,7 @@ export default function AgentDetailPage({ params }: Props) {
                 activeTab === 'points' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Points History ({filteredPointsHistory.length})
+              Points History (0)
             </button>
           </div>
 
@@ -315,12 +257,12 @@ export default function AgentDetailPage({ params }: Props) {
                   )}
                 </div>
 
-                {filteredGamePlays.length > itemsPerPage && (
+                {gamePlays.length > itemsPerPage && (
                   <ResponsivePagination 
                     currentPage={gamesPage}
                     totalPages={totalGamesPages}
                     onPageChange={setGamesPage}
-                    totalItems={filteredGamePlays.length}
+                    totalItems={gamePlays.length}
                     itemsPerPage={itemsPerPage}
                   />
                 )}
@@ -365,12 +307,12 @@ export default function AgentDetailPage({ params }: Props) {
                   )}
                 </div>
 
-                {filteredPointsHistory.length > itemsPerPage && (
+                {pointsHistory.length > itemsPerPage && (
                   <ResponsivePagination 
                     currentPage={pointsPage}
                     totalPages={totalPointsPages}
                     onPageChange={setPointsPage}
-                    totalItems={filteredPointsHistory.length}
+                    totalItems={pointsHistory.length}
                     itemsPerPage={itemsPerPage}
                   />
                 )}

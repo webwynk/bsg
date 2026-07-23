@@ -8,10 +8,10 @@ import { Button } from '@/components/ui/button'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
-  const [totalPoints, setTotalPoints] = React.useState(0)
-  const [activeAgents, setActiveAgents] = React.useState(0)
-  const [totalBets, setTotalBets] = React.useState(0)
-  const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
+  const [totalPoints] = React.useState(0)
+  const [activeAgents] = React.useState(0)
+  const [totalBets] = React.useState(0)
+  const [systemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   const handleRefresh = async () => {
