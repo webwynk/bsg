@@ -17,7 +17,15 @@ DECLARE
   v_green int;
   v_black int;
   v_hash text;
+  v_status text;
 BEGIN
+  -- Determine current round status
+  v_status := CASE 
+    WHEN v_secs_remaining > 5 THEN 'betting' 
+    WHEN v_secs_remaining > 0 THEN 'spinning' 
+    ELSE 'complete' 
+  END;
+
   -- Check if round row already exists
   SELECT * INTO v_round FROM public.game_rounds WHERE round_number = v_round_num;
 
@@ -38,7 +46,7 @@ BEGIN
     ) VALUES (
       v_round_num,
       to_timestamp((v_round_num + 1) * 60),
-      CASE WHEN v_secs_remaining > 5 THEN 'betting' ELSE 'spinning' END,
+      v_status,
       v_red,
       v_green,
       v_black
@@ -48,7 +56,7 @@ BEGIN
   RETURN jsonb_build_object(
     'round_id', v_round.id,
     'round_number', v_round.round_number,
-    'status', CASE WHEN v_secs_remaining > 5 THEN 'betting' ELSE 'spinning' END,
+    'status', v_status,
     'scheduled_at', v_round.scheduled_at,
     'seconds_remaining', v_secs_remaining,
     'red', v_round.red,
