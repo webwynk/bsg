@@ -10,8 +10,8 @@ SET search_path = public
 AS $$
 DECLARE
   v_now_epoch int := extract(epoch from now())::int;
-  v_round_num bigint := floor(v_now_epoch / 60)::bigint;
-  v_secs_remaining int := 60 - (v_now_epoch % 60);
+  v_round_num bigint := floor(v_now_epoch / 73)::bigint;
+  v_secs_remaining int := 73 - (v_now_epoch % 73);
   v_round public.game_rounds;
   v_red int;
   v_green int;
@@ -19,9 +19,9 @@ DECLARE
   v_hash text;
   v_status text;
 BEGIN
-  -- Determine current round status
+  -- Determine current round status (60s betting, 13s spinning/revealing)
   v_status := CASE 
-    WHEN v_secs_remaining > 5 THEN 'betting' 
+    WHEN v_secs_remaining >= 14 THEN 'betting' 
     WHEN v_secs_remaining > 0 THEN 'spinning' 
     ELSE 'complete' 
   END;
@@ -45,7 +45,7 @@ BEGIN
       black
     ) VALUES (
       v_round_num,
-      to_timestamp((v_round_num + 1) * 60),
+      to_timestamp((v_round_num + 1) * 73),
       v_status,
       v_red,
       v_green,
