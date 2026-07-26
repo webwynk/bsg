@@ -103,25 +103,40 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
           {children}
         </main>
 
-        {/* Mobile Bottom Navigation Bar */}
-        <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-md border-t border-border z-20 items-center justify-around">
+        {/* Mobile Bottom Navigation Bar (Modern Floating Glassmorphic Design) */}
+        <nav className="flex md:hidden fixed bottom-2.5 left-3 right-3 h-14 bg-card/90 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl z-30 items-center justify-around px-1.5">
           <Link 
             href="/superadmin" 
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isDashboardActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isDashboardActive 
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
-            <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Overview</span>
+            {isDashboardActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <LayoutDashboard className={`h-4 w-4 transition-transform duration-300 ${isDashboardActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isDashboardActive ? 'font-black text-primary' : 'font-bold'}`}>
+              Overview
+            </span>
           </Link>
+
           <Link 
             href="/superadmin/agents" 
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isAgentsActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isAgentsActive 
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
-            <Users className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Agents</span>
+            {isAgentsActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <Users className={`h-4 w-4 transition-transform duration-300 ${isAgentsActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isAgentsActive ? 'font-black text-primary' : 'font-bold'}`}>
+              Agents
+            </span>
           </Link>
         </nav>
       </div>

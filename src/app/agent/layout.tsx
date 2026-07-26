@@ -115,34 +115,57 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
 
-        {/* Mobile Bottom Navigation Bar */}
-        <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-md border-t border-border z-20 items-center justify-around">
+        {/* Mobile Bottom Navigation Bar (Modern Floating Glassmorphic Design) */}
+        <nav className="flex md:hidden fixed bottom-2.5 left-3 right-3 h-14 bg-card/90 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl z-30 items-center justify-around px-1.5">
           <Link 
             href="/agent" 
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isCashierActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isCashierActive 
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
-            <Wallet className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Cashier</span>
+            {isCashierActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <Wallet className={`h-4 w-4 transition-transform duration-300 ${isCashierActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isCashierActive ? 'font-black text-primary' : 'font-bold'}`}>
+              Cashier
+            </span>
           </Link>
+
           <Link 
             href="/agent/players" 
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isPlayersActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isPlayersActive 
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
-            <Users className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Players</span>
+            {isPlayersActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <Users className={`h-4 w-4 transition-transform duration-300 ${isPlayersActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isPlayersActive ? 'font-black text-primary' : 'font-bold'}`}>
+              Players
+            </span>
           </Link>
+
           <Link 
             href="/agent/history" 
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isHistoryActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isHistoryActive 
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
-            <History className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">History</span>
+            {isHistoryActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <History className={`h-4 w-4 transition-transform duration-300 ${isHistoryActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isHistoryActive ? 'font-black text-primary' : 'font-bold'}`}>
+              History
+            </span>
           </Link>
         </nav>
       </div>
