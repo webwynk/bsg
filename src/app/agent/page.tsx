@@ -22,6 +22,7 @@ export default function AgentDashboard() {
   const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
   const [balance, setBalance] = React.useState(0)
   const [todaysProfitLoss, setTodaysProfitLoss] = React.useState(0)
+  const [isLoadingDashboard, setIsLoadingDashboard] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   // Quick Transfer widget state
@@ -32,20 +33,23 @@ export default function AgentDashboard() {
   const [quickTransferSuccess, setQuickTransferSuccess] = React.useState<string | null>(null)
 
   const fetchDashboardData = React.useCallback(() => {
-    getAgentDashboardDataAction().then((res) => {
-      if (res) {
-        setBalance(res.balance || 0)
-        setTodaysProfitLoss(res.todaysProfitLoss || 0)
-        if (res.recentTransactions) {
-          setRecentTransactions(res.recentTransactions)
+    setIsLoadingDashboard(true)
+    Promise.all([
+      getAgentDashboardDataAction(),
+      getPlayersAction()
+    ]).then(([resDash, resPlayers]) => {
+      setIsLoadingDashboard(false)
+      if (resDash) {
+        setBalance(resDash.balance || 0)
+        setTodaysProfitLoss(resDash.todaysProfitLoss || 0)
+        if (resDash.recentTransactions) {
+          setRecentTransactions(resDash.recentTransactions)
         }
       }
-    })
-    getPlayersAction().then((res) => {
-      if (res.players) {
-        setPlayers(res.players)
+      if (resPlayers?.players) {
+        setPlayers(resPlayers.players)
       }
-    })
+    }).catch(() => setIsLoadingDashboard(false))
   }, [])
 
   const handleManualRefresh = async () => {
@@ -107,7 +111,11 @@ export default function AgentDashboard() {
             <Coins className="h-4 w-4 text-success-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono">{formatCurrency(balance)}</div>
+            {isLoadingDashboard ? (
+              <div className="h-7 w-24 bg-secondary/80 animate-pulse rounded my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold font-mono">{formatCurrency(balance)}</div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Coins available to allocate</p>
           </CardContent>
         </Card>
@@ -118,7 +126,11 @@ export default function AgentDashboard() {
             <Users className="h-4 w-4 text-info-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{players.length}</div>
+            {isLoadingDashboard ? (
+              <div className="h-7 w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold">{players.length}</div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Registered players network</p>
           </CardContent>
         </Card>
@@ -129,9 +141,13 @@ export default function AgentDashboard() {
             <ArrowUpRight className="h-4 w-4 text-success-text" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold font-mono ${todaysProfitLoss >= 0 ? 'text-success-text' : 'text-danger-text'}`}>
-              {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
-            </div>
+            {isLoadingDashboard ? (
+              <div className="h-7 w-24 bg-secondary/80 animate-pulse rounded my-0.5" />
+            ) : (
+              <div className={`text-2xl font-bold font-mono ${todaysProfitLoss >= 0 ? 'text-success-text' : 'text-danger-text'}`}>
+                {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Based on player win/loss records today</p>
           </CardContent>
         </Card>
@@ -228,7 +244,20 @@ export default function AgentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="rounded-md border border-border">
-              {recentTransactions.length > 0 ? (
+              {isLoadingDashboard ? (
+                <Table>
+                  <TableBody>
+                    {[1, 2, 3, 4].map((i) => (
+                      <TableRow key={i} className="border-border">
+                        <TableCell><div className="h-4 bg-secondary/80 rounded animate-pulse w-24" /></TableCell>
+                        <TableCell><div className="h-4 bg-secondary/60 rounded animate-pulse w-28" /></TableCell>
+                        <TableCell className="text-right"><div className="h-4 bg-secondary/70 rounded animate-pulse w-16 ml-auto" /></TableCell>
+                        <TableCell className="text-right"><div className="h-4 bg-secondary/60 rounded animate-pulse w-14 ml-auto" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : recentTransactions.length > 0 ? (
                 <Table>
                   <TableBody>
                     {recentTransactions.map((txn) => (

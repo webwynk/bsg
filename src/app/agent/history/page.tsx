@@ -17,16 +17,19 @@ import { getAgentTransactionHistoryAction } from '../actions'
 
 export default function HistoryPage() {
   const [transactions, setTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string; status: string }>>([])
+  const [isLoading, setIsLoading] = React.useState(true)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const itemsPerPage = 10
 
   React.useEffect(() => {
+    setIsLoading(true)
     getAgentTransactionHistoryAction().then((res) => {
+      setIsLoading(false)
       if (res.transactions) {
         setTransactions(res.transactions)
       }
-    })
+    }).catch(() => setIsLoading(false))
   }, [])
 
   const filteredTransactions = transactions.filter(txn =>
@@ -70,7 +73,18 @@ export default function HistoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedTransactions.length > 0 ? (
+              {isLoading ? (
+                [1, 2, 3, 4, 5].map((i) => (
+                  <TableRow key={i} className="border-border">
+                    <TableCell><div className="h-4 bg-secondary/80 rounded animate-pulse w-24" /></TableCell>
+                    <TableCell><div className="h-4 bg-secondary/60 rounded animate-pulse w-28" /></TableCell>
+                    <TableCell><div className="h-4 bg-secondary/70 rounded animate-pulse w-16" /></TableCell>
+                    <TableCell><div className="h-4 bg-secondary/80 rounded animate-pulse w-20" /></TableCell>
+                    <TableCell className="text-right"><div className="h-4 bg-secondary/70 rounded animate-pulse w-16 ml-auto" /></TableCell>
+                    <TableCell className="text-center"><div className="h-4 bg-secondary/60 rounded animate-pulse w-14 mx-auto" /></TableCell>
+                  </TableRow>
+                ))
+              ) : paginatedTransactions.length > 0 ? (
                 paginatedTransactions.map((txn) => (
                   <TableRow key={txn.id} className="border-border hover:bg-secondary/50">
                     <TableCell className="font-semibold text-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">{txn.id}</TableCell>

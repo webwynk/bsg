@@ -17,30 +17,33 @@ export default function SuperAdminDashboard() {
   const [activePlayers, setActivePlayers] = React.useState(0)
   const [totalBets24h, setTotalBets24h] = React.useState(0)
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
+  const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
 
   const fetchMetrics = () => {
-    getSystemOverviewMetricsAction().then((res) => {
-      if (res) {
-        setTotalCoins(res.totalCoins || 0)
-        setTodaysCoins(res.todaysCoinsIssued || 0)
-        setActiveAgents(res.activeAgents || 0)
-        setActivePlayers(res.activePlayers || 0)
-        setTotalBets24h(res.totalBets24h || 0)
+    setIsLoadingMetrics(true)
+    Promise.all([
+      getSystemOverviewMetricsAction(),
+      getRtpAction(),
+      getAuditLogsAction()
+    ]).then(([resMetrics, resRtp, resLogs]) => {
+      setIsLoadingMetrics(false)
+      if (resMetrics) {
+        setTotalCoins(resMetrics.totalCoins || 0)
+        setTodaysCoins(resMetrics.todaysCoinsIssued || 0)
+        setActiveAgents(resMetrics.activeAgents || 0)
+        setActivePlayers(resMetrics.activePlayers || 0)
+        setTotalBets24h(resMetrics.totalBets24h || 0)
       }
-    })
-    getRtpAction().then((res) => {
-      if (res.rtp) {
-        setRtpValue(res.rtp)
+      if (resRtp?.rtp) {
+        setRtpValue(resRtp.rtp)
       }
-    })
-    getAuditLogsAction().then((res) => {
-      if (res.logs) {
-        setSystemLogs(res.logs)
+      if (resLogs?.logs) {
+        setSystemLogs(resLogs.logs)
       }
-    })
+    }).catch(() => setIsLoadingMetrics(false))
   }
 
   const handleManualRefresh = async () => {
@@ -62,29 +65,7 @@ export default function SuperAdminDashboard() {
   }
 
   React.useEffect(() => {
-    let isMounted = true
-    getSystemOverviewMetricsAction().then((res) => {
-      if (isMounted && res) {
-        setTotalCoins(res.totalCoins || 0)
-        setTodaysCoins(res.todaysCoinsIssued || 0)
-        setActiveAgents(res.activeAgents || 0)
-        setActivePlayers(res.activePlayers || 0)
-        setTotalBets24h(res.totalBets24h || 0)
-      }
-    })
-    getRtpAction().then((res) => {
-      if (isMounted && res.rtp) {
-        setRtpValue(res.rtp)
-      }
-    })
-    getAuditLogsAction().then((res) => {
-      if (isMounted && res.logs) {
-        setSystemLogs(res.logs)
-      }
-    })
-    return () => {
-      isMounted = false
-    }
+    fetchMetrics()
   }, [])
 
   return (
@@ -118,10 +99,14 @@ export default function SuperAdminDashboard() {
               </div>
             </CardHeader>
             <CardContent className="pt-2">
-              <div className="text-3xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
-                <span>{formatCurrency(todaysCoins)}</span>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-              </div>
+              {isLoadingMetrics ? (
+                <div className="h-8 w-28 bg-secondary/80 animate-pulse rounded my-1" />
+              ) : (
+                <div className="text-3xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                  <span>{formatCurrency(todaysCoins)}</span>
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                </div>
+              )}
               <div className="flex items-center space-x-1.5 mt-2">
                 <TrendingUp className="h-3.5 w-3.5 text-success-text" />
                 <span className="text-xs font-semibold text-success-text">Given to agents today</span>
@@ -140,7 +125,11 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents} <span className="text-sm font-normal text-muted-foreground">Agents</span></div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-24 bg-secondary/80 animate-pulse rounded my-1" />
+            ) : (
+              <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents} <span className="text-sm font-normal text-muted-foreground">Agents</span></div>
+            )}
             <p className="text-xs text-muted-foreground mt-2">
               <span className="font-semibold text-foreground">{activePlayers} registered</span> players network
             </p>
@@ -156,7 +145,11 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight text-amber-500">{rtpValue}%</div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-20 bg-secondary/80 animate-pulse rounded my-1" />
+            ) : (
+              <div className="text-3xl font-bold font-mono tracking-tight text-amber-500">{rtpValue}%</div>
+            )}
             <div className="flex items-center space-x-1.5 mt-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-xs text-muted-foreground">Active optimization engine</span>
@@ -173,9 +166,13 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">{totalBets24h}</div>
+            {isLoadingMetrics ? (
+              <div className="h-8 w-24 bg-secondary/80 animate-pulse rounded my-1" />
+            ) : (
+              <div className="text-3xl font-bold font-mono tracking-tight">{totalBets24h}</div>
+            )}
             <p className="text-xs text-muted-foreground mt-2">
-              Spins in last <span className="font-semibold text-foreground">24 hours</span>
+              Coins bet in last <span className="font-semibold text-foreground">24 hours</span>
             </p>
           </CardContent>
         </Card>
@@ -217,32 +214,13 @@ export default function SuperAdminDashboard() {
                   }
                 }}
                 max={99} 
-                min={80} 
-                step={0.1}
-                className="py-4 cursor-pointer"
+                min={50} 
+                step={0.5}
+                className="w-full cursor-pointer"
               />
-              <div className="grid grid-cols-3 text-center text-xs text-muted-foreground font-semibold">
-                <span className="text-left">Tight (80%)</span>
-                <span>Normal (95%)</span>
-                <span className="text-right">Loose (99%)</span>
-              </div>
-            </div>
-
-            {/* Presets */}
-            <div className="space-y-2">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick Presets</span>
-              <div className="grid grid-cols-4 gap-2">
-                {[85, 92, 96.5, 98.5].map((preset) => (
-                  <Button
-                    key={preset}
-                    variant={rtpValue === preset ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setRtpValue(preset)}
-                    className="w-full text-xs font-bold border-border cursor-pointer transition-all active:scale-95"
-                  >
-                    {preset}%
-                  </Button>
-                ))}
+              <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                <span>50% (High House Edge)</span>
+                <span>99% (Low House Edge)</span>
               </div>
             </div>
 
@@ -273,7 +251,16 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="relative">
-            {systemLogs.length > 0 ? (
+            {isLoadingMetrics ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-lg bg-secondary/20 animate-pulse border border-border/40">
+                    <div className="h-4 bg-secondary/80 rounded w-2/3" />
+                    <div className="h-4 bg-secondary/60 rounded w-1/6" />
+                  </div>
+                ))}
+              </div>
+            ) : systemLogs.length > 0 ? (
               <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
                 {systemLogs.map((log) => (
                   <div key={log.id} className="relative pl-8 flex items-start justify-between gap-4 py-1">

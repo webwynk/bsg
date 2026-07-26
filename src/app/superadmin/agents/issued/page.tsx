@@ -155,9 +155,13 @@ export default function CoinsIssuedPage() {
             <ArrowUpRight className="h-5 w-5 text-emerald-500" />
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
-              +{formatCurrency(summary.totalDeposited)}
-            </div>
+            {isLoading ? (
+              <div className="h-7 w-28 bg-secondary/80 animate-pulse rounded my-1" />
+            ) : (
+              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
+                +{formatCurrency(summary.totalDeposited)}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Total coins given to agents</p>
           </CardContent>
         </Card>
@@ -168,9 +172,13 @@ export default function CoinsIssuedPage() {
             <ArrowDownRight className="h-5 w-5 text-red-500" />
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-2xl font-bold font-mono tracking-tight text-red-600 dark:text-red-400">
-              -{formatCurrency(summary.totalWithdrawn)}
-            </div>
+            {isLoading ? (
+              <div className="h-7 w-28 bg-secondary/80 animate-pulse rounded my-1" />
+            ) : (
+              <div className="text-2xl font-bold font-mono tracking-tight text-red-600 dark:text-red-400">
+                -{formatCurrency(summary.totalWithdrawn)}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Total coins recalled from agents</p>
           </CardContent>
         </Card>
@@ -181,9 +189,13 @@ export default function CoinsIssuedPage() {
             <Coins className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-2xl font-bold font-mono tracking-tight text-foreground">
-              {formatCurrency(summary.netIssued)}
-            </div>
+            {isLoading ? (
+              <div className="h-7 w-28 bg-secondary/80 animate-pulse rounded my-1" />
+            ) : (
+              <div className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                {formatCurrency(summary.netIssued)}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Net coins circulating in agency accounts</p>
           </CardContent>
         </Card>
@@ -303,7 +315,17 @@ export default function CoinsIssuedPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {transactions.length > 0 ? (
+              {isLoading ? (
+                [1, 2, 3, 4, 5].map((i) => (
+                  <TableRow key={i} className="border-border">
+                    <TableCell><div className="h-4 bg-secondary/80 rounded animate-pulse w-24" /></TableCell>
+                    <TableCell><div className="h-4 bg-secondary/60 rounded animate-pulse w-28" /></TableCell>
+                    <TableCell><div className="h-4 bg-secondary/70 rounded animate-pulse w-20" /></TableCell>
+                    <TableCell className="text-right"><div className="h-4 bg-secondary/80 rounded animate-pulse w-16 ml-auto" /></TableCell>
+                    <TableCell className="text-right"><div className="h-4 bg-secondary/60 rounded animate-pulse w-24 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              ) : transactions.length > 0 ? (
                 transactions.map((tx) => (
                   <TableRow key={tx.id} className="border-border hover:bg-secondary/40">
                     <TableCell className="font-mono text-xs font-semibold text-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
