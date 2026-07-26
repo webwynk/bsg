@@ -183,7 +183,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       const callerRole = callerUser?.user_metadata?.role
 
       // Security check: If caller is an agent, they MUST own this player!
-      if (callerRole === 'agent' && targetUser.user_metadata?.agent_id && targetUser.user_metadata.agent_id !== callerUser.id) {
+      if (callerRole === 'agent' && callerUser && targetUser.user_metadata?.agent_id && targetUser.user_metadata.agent_id !== callerUser.id) {
         return { error: 'Unauthorized. You can only transfer coins to your own assigned players.' }
       }
 
