@@ -93,6 +93,8 @@ export default function AgentDetailPage({ params }: Props) {
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
+    setGamesPage(1)
+    setPointsPage(1)
     getPlayerDetailHistoryAction(playerId).then((res) => {
       setIsLoadingHistory(false)
       if (res) {
@@ -131,6 +133,8 @@ export default function AgentDetailPage({ params }: Props) {
     setIsLoadingHistory(true)
     setGamePlays([])
     setPointsHistory([])
+    setGamesPage(1)
+    setPointsPage(1)
     loadPlayerHistory(player.id)
   }
 

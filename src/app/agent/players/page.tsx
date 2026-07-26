@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins, Calendar } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
 import {
@@ -70,6 +71,21 @@ export default function PlayersPage() {
   }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
 
+  // Pagination states
+  const [gamesPage, setGamesPage] = React.useState(1)
+  const [pointsPage, setPointsPage] = React.useState(1)
+  const itemsPerPage = 5
+
+  const paginatedGames = React.useMemo(() => {
+    const start = (gamesPage - 1) * itemsPerPage
+    return gamePlays.slice(start, start + itemsPerPage)
+  }, [gamePlays, gamesPage])
+
+  const paginatedPoints = React.useMemo(() => {
+    const start = (pointsPage - 1) * itemsPerPage
+    return pointsHistory.slice(start, start + itemsPerPage)
+  }, [pointsHistory, pointsPage])
+
   // Create Player modal state
   const [isOpen, setIsOpen] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
@@ -99,6 +115,8 @@ export default function PlayersPage() {
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
+    setGamesPage(1)
+    setPointsPage(1)
     getPlayerDetailHistoryAction(playerId).then((res) => {
       setIsLoadingHistory(false)
       if (res) {
@@ -143,6 +161,8 @@ export default function PlayersPage() {
     setIsLoadingHistory(true)
     setGamePlays([])
     setPointsHistory([])
+    setGamesPage(1)
+    setPointsPage(1)
     loadPlayerHistory(player.id)
   }
 
@@ -751,7 +771,7 @@ export default function PlayersPage() {
                       <>
                         {/* --- MOBILE CARDS VIEW (< sm) --- */}
                         <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
-                          {gamePlays.map((spin) => {
+                          {paginatedGames.map((spin) => {
                             const isExpanded = !!expandedSpins[spin.id]
                             const singleCount = Object.keys(spin.singleBets || {}).length
                             const doubleCount = Object.keys(spin.doubleBets || {}).length
@@ -930,7 +950,7 @@ export default function PlayersPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {gamePlays.map((spin) => {
+                              {paginatedGames.map((spin) => {
                                 const isExpanded = !!expandedSpins[spin.id]
                                 const singleCount = Object.keys(spin.singleBets || {}).length
                                 const doubleCount = Object.keys(spin.doubleBets || {}).length
@@ -1083,6 +1103,19 @@ export default function PlayersPage() {
                             </TableBody>
                           </Table>
                         </div>
+
+                        {/* Pagination Bar for Game Plays */}
+                        {gamePlays.length > itemsPerPage && (
+                          <div className="p-3 border-t border-border/60">
+                            <ResponsivePagination 
+                              currentPage={gamesPage}
+                              totalPages={Math.ceil(gamePlays.length / itemsPerPage)}
+                              onPageChange={setGamesPage}
+                              totalItems={gamePlays.length}
+                              itemsPerPage={itemsPerPage}
+                            />
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
@@ -1091,42 +1124,57 @@ export default function PlayersPage() {
                     )
                   ) : (
                     pointsHistory.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-border hover:bg-transparent bg-secondary/20">
-                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Transaction ID</TableHead>
-                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
-                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Type</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Amount</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Balance After</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {pointsHistory.map((tx) => (
-                            <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
-                              <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
-                              <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
-                              <TableCell className="text-[11px] p-2.5">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
-                                  tx.type === 'deposit'
-                                    ? 'bg-success-bg text-success-text border border-emerald-500/20'
-                                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
-                                }`}>
-                                  {tx.type}
-                                </span>
-                              </TableCell>
-                              <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
-                                tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
-                              }`}>
-                                {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                {formatCurrency(tx.balanceAfter)}
-                              </TableCell>
+                      <>
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-border hover:bg-transparent bg-secondary/20">
+                              <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Transaction ID</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Type</TableHead>
+                              <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Amount</TableHead>
+                              <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Balance After</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedPoints.map((tx) => (
+                              <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
+                                <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
+                                <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
+                                <TableCell className="text-[11px] p-2.5">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
+                                    tx.type === 'deposit'
+                                      ? 'bg-success-bg text-success-text border border-emerald-500/20'
+                                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                    {tx.type}
+                                  </span>
+                                </TableCell>
+                                <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
+                                  tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
+                                }`}>
+                                  {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
+                                  {formatCurrency(tx.balanceAfter)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+
+                        {/* Pagination Bar for Coins History */}
+                        {pointsHistory.length > itemsPerPage && (
+                          <div className="p-3 border-t border-border/60">
+                            <ResponsivePagination 
+                              currentPage={pointsPage}
+                              totalPages={Math.ceil(pointsHistory.length / itemsPerPage)}
+                              onPageChange={setPointsPage}
+                              totalItems={pointsHistory.length}
+                              itemsPerPage={itemsPerPage}
+                            />
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
                         No coin transactions recorded yet for this player.
