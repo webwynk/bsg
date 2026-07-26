@@ -270,7 +270,7 @@ export default function CoinsIssuedPage() {
             {/* Date Quick Pills */}
             <div className="flex items-center space-x-1 border-l border-border/60 pl-2">
               {[
-                { label: 'All', value: 'all' },
+                { label: 'Lifetime', value: 'all' },
                 { label: 'Today', value: 'today' },
                 { label: '7D', value: '7days' },
                 { label: '30D', value: '30days' },
@@ -308,6 +308,7 @@ export default function CoinsIssuedPage() {
                     setDatePreset('all')
                     setCurrentPage(1)
                   }}
+                  disabled={(date) => date > new Date()}
                 />
               </PopoverContent>
             </Popover>

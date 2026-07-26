@@ -204,7 +204,7 @@ export default function HistoryPage() {
             {/* Quick Date Pills */}
             <div className="flex items-center space-x-1 border-l border-border/60 pl-2">
               {[
-                { label: 'All', value: 'all' },
+                { label: 'Lifetime', value: 'all' },
                 { label: 'Today', value: 'today' },
                 { label: '7D', value: '7days' },
                 { label: '30D', value: '30days' },

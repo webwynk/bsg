@@ -987,18 +987,43 @@ export default function PlayersPage() {
                   </div>
 
                   {/* Right Side: Date Picker & Quick Filter Pills */}
-                  <div className="flex items-center flex-wrap gap-2">
+                  <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
+                    {/* Today / Lifetime Quick Date Presets */}
+                    <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                      <button
+                        onClick={() => setFilterDate(new Date())}
+                        className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+                          filterDate && filterDate.toDateString() === new Date().toDateString()
+                            ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        onClick={() => setFilterDate(undefined)}
+                        className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+                          !filterDate
+                            ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Lifetime
+                      </button>
+                    </div>
+
                     {/* Date Picker Popover */}
                     <Popover>
                       <PopoverTrigger className="h-8 px-2.5 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-xl flex items-center justify-center cursor-pointer">
                         <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                        {filterDate ? filterDate.toLocaleDateString() : 'Filter Date'}
+                        {filterDate ? filterDate.toLocaleDateString() : 'Custom Date'}
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
                         <Calendar
                           mode="single"
                           selected={filterDate}
                           onSelect={setFilterDate}
+                          disabled={(date) => date > new Date()}
                         />
                       </PopoverContent>
                     </Popover>
@@ -1008,9 +1033,9 @@ export default function PlayersPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setFilterDate(undefined)}
-                        className="h-8 px-2 text-[10px] font-bold text-muted-foreground hover:text-foreground"
+                        className="h-8 px-2 text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
                       >
-                        <X className="mr-1 h-3 w-3" /> Clear Date
+                        <X className="mr-1 h-3 w-3" /> Clear
                       </Button>
                     )}
 
@@ -1022,7 +1047,7 @@ export default function PlayersPage() {
                             key={outcome}
                             onClick={() => setFilterOutcome(outcome)}
                             className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
-                              filterOutcome === outcome ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                              filterOutcome === outcome ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
                             {outcome}
@@ -1039,7 +1064,7 @@ export default function PlayersPage() {
                             key={m}
                             onClick={() => setFilterMode(m)}
                             className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
-                              filterMode === m ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                              filterMode === m ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
                             {m}
