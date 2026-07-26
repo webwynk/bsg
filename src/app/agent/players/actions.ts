@@ -204,11 +204,29 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
           }
         }
 
+        const picked = p.numbers_picked || {}
+        const singleBetsObj = (picked.single && Object.keys(picked.single).length > 0) 
+          ? picked.single 
+          : (p.single_bets || {})
+        const doubleBetsObj = (picked.double && Object.keys(picked.double).length > 0) 
+          ? picked.double 
+          : (p.double_bets || {})
+        const tripleBetsObj = (picked.triple && Object.keys(picked.triple).length > 0) 
+          ? picked.triple 
+          : (p.triple_bets || {})
+
         const activeModes = []
-        if (p.single_bets && Object.keys(p.single_bets).length > 0) activeModes.push('SINGLE')
-        if (p.double_bets && Object.keys(p.double_bets).length > 0) activeModes.push('DOUBLE')
-        if (p.triple_bets && Object.keys(p.triple_bets).length > 0) activeModes.push('TRIPLE')
+        if (singleBetsObj && Object.keys(singleBetsObj).length > 0) activeModes.push('SINGLE')
+        if (doubleBetsObj && Object.keys(doubleBetsObj).length > 0) activeModes.push('DOUBLE')
+        if (tripleBetsObj && Object.keys(tripleBetsObj).length > 0) activeModes.push('TRIPLE')
         const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : (p.mode || 'single').toUpperCase()
+
+        const resStr = (p.result_number !== null && p.result_number !== undefined)
+          ? p.result_number.toString().padStart(3, '0')
+          : '000'
+        const red = p.red_digit !== null ? p.red_digit : parseInt(resStr[0], 10)
+        const green = p.green_digit !== null ? p.green_digit : parseInt(resStr[1], 10)
+        const black = p.black_digit !== null ? p.black_digit : parseInt(resStr[2], 10)
 
         return {
           id: p.id.substring(0, 8),
@@ -226,12 +244,12 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
             hour: '2-digit',
             minute: '2-digit'
           }),
-          singleBets: p.single_bets || {},
-          doubleBets: p.double_bets || {},
-          tripleBets: p.triple_bets || {},
-          redDigit: p.red_digit,
-          greenDigit: p.green_digit,
-          blackDigit: p.black_digit
+          singleBets: singleBetsObj,
+          doubleBets: doubleBetsObj,
+          tripleBets: tripleBetsObj,
+          redDigit: red,
+          greenDigit: green,
+          blackDigit: black
         }
       })
     }
