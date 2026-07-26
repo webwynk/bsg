@@ -222,9 +222,10 @@ export default function PlayersPage() {
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
-  const loadPlayers = React.useCallback((currentSelectedId?: string, isSilent: boolean = false) => {
-    if (!isSilent) setIsLoadingPlayers(true)
+  const loadPlayers = React.useCallback((currentSelectedId?: string) => {
+    setIsRefreshing(true)
     getPlayersAction().then((res) => {
+      setIsRefreshing(false)
       setIsLoadingPlayers(false)
       if (res.players) {
         setPlayers(res.players)
@@ -233,30 +234,29 @@ export default function PlayersPage() {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
+            loadPlayerHistory(updated.id)
           }
         } else if (res.players.length > 0) {
           setSelectedPlayer(res.players[0])
           loadPlayerHistory(res.players[0].id)
         }
       }
-    }).catch(() => setIsLoadingPlayers(false))
+    }).catch(() => {
+      setIsRefreshing(false)
+      setIsLoadingPlayers(false)
+    })
   }, [selectedPlayer?.id, loadPlayerHistory])
 
   React.useEffect(() => {
     loadPlayers()
     const interval = setInterval(() => {
-      loadPlayers(undefined, true)
+      loadPlayers()
     }, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [loadPlayers])
 
   const handleManualRefresh = async () => {
-    setIsRefreshing(true)
-    loadPlayers(selectedPlayer?.id, false)
-    if (selectedPlayer?.id) {
-      loadPlayerHistory(selectedPlayer.id)
-    }
-    setTimeout(() => setIsRefreshing(false), 600)
+    loadPlayers(selectedPlayer?.id)
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
@@ -571,7 +571,11 @@ export default function PlayersPage() {
 
                     <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
                       <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
-                      <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
+                      {isRefreshing || isLoadingPlayers ? (
+                        <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
+                      ) : (
+                        <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
+                      )}
                     </div>
                   </button>
                 )
@@ -645,9 +649,13 @@ export default function PlayersPage() {
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
                         Coins Balance
                       </span>
-                      <span className="text-base font-mono font-black text-foreground">
-                        {formatCurrency(selectedPlayer.balance)}
-                      </span>
+                      {isRefreshing || isLoadingPlayers ? (
+                        <div className="h-5 w-16 bg-secondary/80 rounded animate-pulse mt-0.5" />
+                      ) : (
+                        <span className="text-base font-mono font-black text-foreground">
+                          {formatCurrency(selectedPlayer.balance)}
+                        </span>
+                      )}
                     </div>
                     <div className="p-1 rounded-lg bg-primary/10 text-primary">
                       <Coins className="h-3.5 w-3.5" />
@@ -896,7 +904,7 @@ export default function PlayersPage() {
                   </div>
                 </div>
 
-                {isLoadingHistory ? (
+                {isLoadingHistory || isRefreshing ? (
                   /* Skeleton Loader for Performance Cards */
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[1, 2, 3, 4].map(i => (

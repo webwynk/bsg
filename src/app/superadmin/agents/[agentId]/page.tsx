@@ -25,7 +25,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
@@ -42,6 +42,7 @@ export default function AgentDetailPage({ params }: Props) {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; isOnline?: boolean; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   const [gamePlays, setGamePlays] = React.useState<Array<{
     id: string
@@ -195,23 +196,34 @@ export default function AgentDetailPage({ params }: Props) {
   }, [])
 
   const loadAgentDetails = React.useCallback(() => {
+    setIsRefreshing(true)
     getAgentDetailAction(agentId).then((res) => {
+      setIsRefreshing(false)
       if (res.agent) {
         setAgentInfo(res.agent)
       }
       if (res.players) {
         setPlayers(res.players)
-        if (res.players.length > 0 && !selectedPlayer) {
-          setSelectedPlayer(res.players[0])
-          loadPlayerHistory(res.players[0].id)
+        const targetPlayer = res.players.find(p => p.id === selectedPlayer?.id) || (res.players.length > 0 ? res.players[0] : null)
+        if (targetPlayer) {
+          setSelectedPlayer(targetPlayer)
+          loadPlayerHistory(targetPlayer.id)
         }
       }
-    })
-  }, [agentId, selectedPlayer, loadPlayerHistory])
+    }).catch(() => setIsRefreshing(false))
+  }, [agentId, selectedPlayer?.id, loadPlayerHistory])
 
   React.useEffect(() => {
     loadAgentDetails()
-  }, [])
+    const interval = setInterval(() => {
+      loadAgentDetails()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [loadAgentDetails])
+
+  const handleManualRefresh = async () => {
+    loadAgentDetails()
+  }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
     if (selectedPlayer?.id === player.id) {
@@ -312,8 +324,15 @@ export default function AgentDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* High-Contrast Quick Action Controls */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full sm:w-auto">
+        {/* High-Contrast Quick Action Controls & Refresh Bar */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Sync (30s)
+          </span>
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-10 px-3 text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Data
+          </Button>
           {/* Deposit Modal */}
           <Dialog
             open={activeTransferModal === 'deposit'}
@@ -508,9 +527,13 @@ export default function AgentDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
-              {formatCurrency(agentInfo?.balance || 0)}
-            </div>
+            {isRefreshing ? (
+              <div className="h-7 w-24 bg-secondary/80 rounded animate-pulse my-0.5" />
+            ) : (
+              <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
+                {formatCurrency(agentInfo?.balance || 0)}
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Available for allocation</p>
           </div>
         </Card>
@@ -525,9 +548,13 @@ export default function AgentDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
-              {players.length}
-            </div>
+            {isRefreshing ? (
+              <div className="h-7 w-12 bg-secondary/80 rounded animate-pulse my-0.5" />
+            ) : (
+              <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
+                {players.length}
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Sub-registered network</p>
           </div>
         </Card>
@@ -608,7 +635,11 @@ export default function AgentDetailPage({ params }: Props) {
 
                       <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
                         <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
-                        <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
+                        {isRefreshing ? (
+                          <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
+                        ) : (
+                          <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
+                        )}
                       </div>
                     </button>
                   )
@@ -657,7 +688,7 @@ export default function AgentDetailPage({ params }: Props) {
                   </div>
                 </div>
 
-                {isLoadingHistory ? (
+                {isLoadingHistory || isRefreshing ? (
                   /* Skeleton Loader for Performance Cards */
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[1, 2, 3, 4].map(i => (
