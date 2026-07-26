@@ -213,7 +213,7 @@ export default function AgentDetailPage({ params }: Props) {
     setIsRefreshing(true)
     Promise.all([
       getAgentDetailAction(agentId),
-      getAgentProfitReportAction({ targetAgentId: agentId, filterDate: filterDate ? filterDate.toISOString() : undefined })
+      getAgentProfitReportAction({ targetAgentId: agentId, datePreset: statsScope, filterDate: filterDate ? filterDate.toISOString() : undefined })
     ]).then(([res, resProf]) => {
       setIsRefreshing(false)
       if (res.agent) {
@@ -232,7 +232,7 @@ export default function AgentDetailPage({ params }: Props) {
         setProfitPlayers(resProf.players)
       }
     }).catch(() => setIsRefreshing(false))
-  }, [agentId, selectedPlayer?.id, loadPlayerHistory, filterDate])
+  }, [agentId, selectedPlayer?.id, loadPlayerHistory, filterDate, statsScope])
 
   React.useEffect(() => {
     loadAgentDetails()
