@@ -412,27 +412,43 @@ export default function PlayersPage() {
           <div className="flex border-b border-border/60 bg-secondary/30">
             <button
               onClick={() => setActiveTab('games')}
-              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all ${
+              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all flex items-center justify-center space-x-1.5 ${
                 activeTab === 'games' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              Game Plays ({gamePlays.length})
+              <span>Game Plays</span>
+              {isLoadingHistory ? (
+                <span className="inline-block h-4 w-6 rounded bg-secondary/80 animate-pulse" />
+              ) : (
+                <span>({gamePlays.length})</span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('points')}
-              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all ${
+              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-all flex items-center justify-center space-x-1.5 ${
                 activeTab === 'points' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              Coins History ({pointsHistory.length})
+              <span>Coins History</span>
+              {isLoadingHistory ? (
+                <span className="inline-block h-4 w-6 rounded bg-secondary/80 animate-pulse" />
+              ) : (
+                <span>({pointsHistory.length})</span>
+              )}
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto bg-card text-foreground">
             {isLoadingHistory ? (
-              <div className="p-12 text-center text-xs text-muted-foreground font-medium flex items-center justify-center space-x-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span>Loading player audit records...</span>
+              <div className="p-6 space-y-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-lg bg-secondary/20 animate-pulse border border-border/40">
+                    <div className="h-4 bg-secondary/80 rounded w-1/4" />
+                    <div className="h-4 bg-secondary/60 rounded w-1/3" />
+                    <div className="h-4 bg-secondary/70 rounded w-1/6" />
+                    <div className="h-4 bg-secondary/80 rounded w-1/5" />
+                  </div>
+                ))}
               </div>
             ) : activeTab === 'games' ? (
               gamePlays.length > 0 ? (

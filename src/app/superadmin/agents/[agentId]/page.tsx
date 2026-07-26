@@ -510,24 +510,45 @@ export default function AgentDetailPage({ params }: Props) {
           <div className="px-4 py-2 border-b border-border/60 bg-secondary/20 flex space-x-2">
             <button
               onClick={() => setActiveTab('games')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1 ${
                 activeTab === 'games' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Game Plays (0)
+              <span>Game Plays</span>
+              {isLoadingHistory ? (
+                <span className="inline-block h-3.5 w-5 rounded bg-secondary/80 animate-pulse" />
+              ) : (
+                <span>({gamePlays.length})</span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('points')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1 ${
                 activeTab === 'points' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Coins History (0)
+              <span>Coins History</span>
+              {isLoadingHistory ? (
+                <span className="inline-block h-3.5 w-5 rounded bg-secondary/80 animate-pulse" />
+              ) : (
+                <span>({pointsHistory.length})</span>
+              )}
             </button>
           </div>
 
           <div className="flex-1 overflow-hidden flex flex-col justify-between">
-            {activeTab === 'games' ? (
+            {isLoadingHistory ? (
+              <div className="p-6 space-y-4 flex-1">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-lg bg-secondary/20 animate-pulse border border-border/40">
+                    <div className="h-4 bg-secondary/80 rounded w-1/4" />
+                    <div className="h-4 bg-secondary/60 rounded w-1/3" />
+                    <div className="h-4 bg-secondary/70 rounded w-1/6" />
+                    <div className="h-4 bg-secondary/80 rounded w-1/5" />
+                  </div>
+                ))}
+              </div>
+            ) : activeTab === 'games' ? (
               <>
                 <div className="overflow-x-auto table-scroll flex-1">
                   {paginatedGames.length > 0 ? (
