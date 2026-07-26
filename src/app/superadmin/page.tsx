@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight, Search } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight, Search, Gamepad2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,18 @@ export default function SuperAdminDashboard() {
   const [todaysCoins, setTodaysCoins] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [activePlayers, setActivePlayers] = React.useState(0)
-  const [totalBets24h, setTotalBets24h] = React.useState(0)
+
+  // Gameplay & Bet Volume Metrics State
+  const [gameplayScope, setGameplayScope] = React.useState<'today' | 'lifetime'>('today')
+  const [totalBetsCount, setTotalBetsCount] = React.useState(0)
+  const [totalBetCoins, setTotalBetCoins] = React.useState(0)
+  const [totalWinCoins, setTotalWinCoins] = React.useState(0)
+  const [totalLostCoins, setTotalLostCoins] = React.useState(0)
+  const [todayBetsCount, setTodayBetsCount] = React.useState(0)
+  const [todayBetCoins, setTodayBetCoins] = React.useState(0)
+  const [todayWinCoins, setTodayWinCoins] = React.useState(0)
+  const [todayLostCoins, setTodayLostCoins] = React.useState(0)
+
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -43,7 +54,14 @@ export default function SuperAdminDashboard() {
         setTodaysCoins(resMetrics.todaysCoinsIssued || 0)
         setActiveAgents(resMetrics.activeAgents || 0)
         setActivePlayers(resMetrics.activePlayers || 0)
-        setTotalBets24h(resMetrics.totalBets24h || 0)
+        setTotalBetsCount(resMetrics.totalBetsCount || 0)
+        setTotalBetCoins(resMetrics.totalBetCoins || 0)
+        setTotalWinCoins(resMetrics.totalWinCoins || 0)
+        setTotalLostCoins(resMetrics.totalLostCoins || 0)
+        setTodayBetsCount(resMetrics.todayBetsCount || 0)
+        setTodayBetCoins(resMetrics.todayBetCoins || 0)
+        setTodayWinCoins(resMetrics.todayWinCoins || 0)
+        setTodayLostCoins(resMetrics.todayLostCoins || 0)
       }
       if (resRtp?.rtp) {
         setRtpValue(resRtp.rtp)
@@ -134,14 +152,14 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* 2x2 Mobile / 4-Column Desktop High-Density Metric Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        {/* Card 1: Today's Coins Issued */}
+      {/* Top 3 Overview Micro Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+        {/* Card 1: Today's Coins Issued (Asia/Kolkata IST 00:00 reset) */}
         <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
           <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
             <div className="flex items-center justify-between">
               <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
-                Today&apos;s Issued
+                Today&apos;s Issued (IST)
               </span>
               <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
                 <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -158,7 +176,7 @@ export default function SuperAdminDashboard() {
               )}
               <div className="flex items-center space-x-1 mt-1 text-[9px] sm:text-[10px]">
                 <TrendingUp className="h-3 w-3 text-success-text shrink-0" />
-                <span className="text-success-text font-extrabold truncate">Issued Today</span>
+                <span className="text-success-text font-extrabold truncate">Resets 00:00 IST</span>
                 <span className="text-muted-foreground hidden sm:inline">(Ledger)</span>
               </div>
             </div>
@@ -182,52 +200,139 @@ export default function SuperAdminDashboard() {
               </div>
             )}
             <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 truncate">
-              <strong className="text-foreground font-bold">{activePlayers}</strong> players
+              <strong className="text-foreground font-bold">{activePlayers}</strong> registered players
             </p>
           </div>
         </Card>
 
         {/* Card 3: Global RTP Target */}
-        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 transition-all duration-200">
+        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Global RTP</span>
+            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Global RTP</span>
             <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
-              <Percent className="h-4 w-4" />
+              <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
-          <div className="mt-1.5">
+          <div className="mt-1 sm:mt-1.5">
             {isLoadingMetrics ? (
               <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
             ) : (
-              <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-amber-500">{rtpValue}%</div>
+              <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-amber-500">{rtpValue}%</div>
             )}
-            <div className="flex items-center space-x-1 mt-1 text-[10px] text-muted-foreground">
+            <div className="flex items-center space-x-1 mt-1 text-[9px] sm:text-[10px] text-muted-foreground">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <span className="truncate">Optimization Active</span>
             </div>
           </div>
         </Card>
+      </div>
 
-        {/* Card 4: Total Bets (24h) */}
-        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Total Bets (24h)</span>
-            <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-500 shrink-0">
-              <Activity className="h-4 w-4" />
+      {/* 📊 Unified Gameplay & Bets Audit Widget (Separated Multi-Metric Compact Grid) */}
+      <Card className="bg-card border-border/80 shadow-xs rounded-2xl p-3 sm:p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+          <div className="flex items-center space-x-2">
+            <div className="p-1.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
+              <Gamepad2 className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-black tracking-tight text-foreground">
+                Gameplay & Bets Audit
+              </h2>
+              <p className="text-[10px] text-muted-foreground font-semibold">
+                Network-wide bet counts, total wagered coins, payouts, and net house profit.
+              </p>
             </div>
           </div>
-          <div className="mt-1.5">
-            {isLoadingMetrics ? (
+
+          {/* Scope Toggle Pills: Today (IST) vs Lifetime */}
+          <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold self-start sm:self-auto">
+            <button
+              onClick={() => setGameplayScope('today')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                gameplayScope === 'today'
+                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Today (IST)
+            </button>
+            <button
+              onClick={() => setGameplayScope('lifetime')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                gameplayScope === 'lifetime'
+                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Lifetime
+            </button>
+          </div>
+        </div>
+
+        {/* 4-Metric Separated Grid (Compact & Mobile Optimized) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 divide-y sm:divide-y-0 sm:divide-x divide-border/60 pt-1">
+          {/* Metric 1: Bet Count (Number of Plays) */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Bets Placed (Number)
+            </span>
+            {isLoadingMetrics || isRefreshing ? (
               <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
             ) : (
-              <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-foreground">{totalBets24h}</div>
+              <div className="text-sm sm:text-xl font-black font-mono text-foreground">
+                {gameplayScope === 'today' ? todayBetsCount : totalBetsCount} <span className="text-[11px] text-muted-foreground font-normal">Plays</span>
+              </div>
             )}
-            <p className="text-[10px] text-muted-foreground mt-1 truncate">
-              Coins wagered (24h)
-            </p>
+            <p className="text-[9px] text-muted-foreground/70">Total bets placed by players</p>
           </div>
-        </Card>
-      </div>
+
+          {/* Metric 2: Coins Wagered (In) */}
+          <div className="space-y-1 pt-2 sm:pt-0 sm:pl-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Coins Wagered (In)
+            </span>
+            {isLoadingMetrics || isRefreshing ? (
+              <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+            ) : (
+              <div className="text-sm sm:text-xl font-black font-mono text-foreground">
+                {formatCurrency(gameplayScope === 'today' ? todayBetCoins : totalBetCoins)}
+              </div>
+            )}
+            <p className="text-[9px] text-muted-foreground/70">Total wagered coins</p>
+          </div>
+
+          {/* Metric 3: Coins Won (Out) */}
+          <div className="space-y-1 pt-2 sm:pt-0 sm:pl-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Coins Won (Out)
+            </span>
+            {isLoadingMetrics || isRefreshing ? (
+              <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+            ) : (
+              <div className="text-sm sm:text-xl font-black font-mono text-amber-500">
+                {formatCurrency(gameplayScope === 'today' ? todayWinCoins : totalWinCoins)}
+              </div>
+            )}
+            <p className="text-[9px] text-muted-foreground/70">Returned to winning players</p>
+          </div>
+
+          {/* Metric 4: Net Lost Coins (House P/L) */}
+          <div className="space-y-1 pt-2 sm:pt-0 sm:pl-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Net Lost (House P/L)
+            </span>
+            {isLoadingMetrics || isRefreshing ? (
+              <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+            ) : (
+              <div className={`text-sm sm:text-xl font-black font-mono ${(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                {(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? '+' : ''}
+                {formatCurrency(gameplayScope === 'today' ? todayLostCoins : totalLostCoins)}
+              </div>
+            )}
+            <p className="text-[9px] text-muted-foreground/70">Net lost coins by players</p>
+          </div>
+        </div>
+      </Card>
 
       {/* Main Widgets: RTP Configuration & Recent System Logs */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
