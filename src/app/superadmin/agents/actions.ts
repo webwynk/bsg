@@ -48,10 +48,10 @@ export async function getAgentDetailAction(agentId: string) {
       if (!error && userData?.user) {
         const u = userData.user
         
-        // Fetch all players belonging to this agent (or unassigned legacy players)
+        // Fetch all players belonging strictly to this agent
         const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
         const agentPlayers = (usersData?.users || [])
-          .filter(p => p.user_metadata?.role === 'player' && (p.user_metadata?.agent_id === agentId || !p.user_metadata?.agent_id))
+          .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
           .map(p => ({
             id: p.id,
             name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
