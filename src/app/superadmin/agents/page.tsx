@@ -23,7 +23,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Eye, EyeOff, Loader2, Search, Users, ShieldCheck, ArrowRight, User } from "lucide-react"
+import { Plus, Eye, EyeOff, Loader2, Search, Users, ShieldCheck, ArrowRight, Coins, CheckCircle2, XCircle, Filter } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
@@ -33,6 +33,7 @@ export default function AgentsPage() {
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Blocked'>('all')
   
   // Create Agent modal state
   const [isOpen, setIsOpen] = React.useState(false)
@@ -81,91 +82,102 @@ export default function AgentsPage() {
     }
   }
 
-  const filteredAgents = agents.filter(agent =>
-    agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    agent.username.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredAgents = agents.filter(agent => {
+    const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      agent.username.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || agent.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
 
   const totalPages = Math.ceil(filteredAgents.length / itemsPerPage) || 1
   const paginatedAgents = filteredAgents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
+  const activeCount = agents.filter(a => a.status === 'Active').length
+  const totalCirculation = agents.reduce((acc, a) => acc + Number(a.balance || 0), 0)
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-0 pb-12">
-      {/* Top Title & Add Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center space-x-2">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-              <Users className="h-5 w-5" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-              Agent Directory
-            </h1>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-primary/10 text-primary border border-primary/20">
-              {agents.length} Total
-            </span>
+    <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      {/* Top Title & Action Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card border border-border/80 rounded-2xl shadow-xs">
+        <div className="flex items-center space-x-2.5">
+          <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+            <Users className="h-4 w-4" />
           </div>
-          <p className="text-muted-foreground mt-1 text-xs sm:text-sm">
-            Manage your agent network, issue cashier points, and monitor real-time activity.
-          </p>
+          <div>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground">
+                Agent Directory
+              </h1>
+              {isLoadingAgents ? (
+                <div className="h-5 w-14 bg-secondary/80 animate-pulse rounded-full" />
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-primary/10 text-primary border border-primary/20">
+                  {agents.length} Total
+                </span>
+              )}
+            </div>
+            <p className="text-muted-foreground text-xs leading-tight hidden sm:block">
+              Manage your agent network, issue cashier points, and monitor real-time activity.
+            </p>
+          </div>
         </div>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger className={buttonVariants({ variant: "default", size: "lg", className: "w-full sm:w-auto h-11 px-5 font-extrabold shadow-lg shadow-primary/20 cursor-pointer rounded-xl text-sm" })}>
-            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Add New Agent
+          <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "w-full sm:w-auto h-9 px-4 font-extrabold shadow-sm cursor-pointer rounded-xl text-xs" })}>
+            <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Agent
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-6">
+          <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
             <DialogHeader className="space-y-1">
-              <DialogTitle className="text-xl font-black">Register New Agent</DialogTitle>
+              <DialogTitle className="text-lg font-black">Register New Agent</DialogTitle>
               <DialogDescription className="text-muted-foreground text-xs">
                 Create a new agent back-office account. They will need these credentials to sign in.
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleCreateAgent} className="space-y-4 pt-2">
+            <form onSubmit={handleCreateAgent} className="space-y-3.5 pt-2">
               {errorMessage && (
-                <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
+                <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 shrink-0 animate-ping" />
                   {errorMessage}
                 </div>
               )}
               {successMessage && (
-                <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
                   {successMessage}
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="name" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Full Name
                 </Label>
                 <Input
                   id="name"
                   name="name"
                   placeholder="e.g. John Doe"
-                  className="h-11 bg-background/60 border-border text-foreground text-sm rounded-lg"
+                  className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                   required
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="username" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Username
                 </Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-sm text-muted-foreground/70 font-mono">@</span>
+                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground/70 font-mono">@</span>
                   <Input
                     id="username"
                     name="username"
                     placeholder="agent_john"
-                    className="pl-8 h-11 bg-background/60 border-border text-foreground text-sm rounded-lg"
+                    className="pl-7 h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                     required
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="password" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   Password
                 </Label>
                 <div className="relative">
@@ -174,7 +186,7 @@ export default function AgentsPage() {
                     name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="h-11 bg-background/60 border-border text-foreground pr-10 text-sm rounded-lg"
+                    className="h-10 bg-background/60 border-border text-foreground pr-9 text-xs rounded-lg"
                     required
                   />
                   <button
@@ -183,14 +195,14 @@ export default function AgentsPage() {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               </div>
 
               <DialogFooter className="pt-2">
-                <Button type="submit" disabled={isLoading} className="w-full h-11 font-extrabold text-sm rounded-lg shadow-md shadow-primary/10 cursor-pointer">
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <Button type="submit" disabled={isLoading} className="w-full h-10 font-extrabold text-xs rounded-lg shadow-sm cursor-pointer">
+                  {isLoading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                   {isLoading ? 'Registering Agent...' : 'Create Agent Account'}
                 </Button>
               </DialogFooter>
@@ -200,87 +212,165 @@ export default function AgentsPage() {
       </div>
 
       {/* Sub-Navigation Tabs */}
-      <div className="flex border-b border-border/60 space-x-2">
+      <div className="flex border-b border-border/60 space-x-1">
         <Link
           href="/superadmin/agents"
-          className="py-2.5 px-4 font-extrabold text-sm text-primary border-b-2 border-primary flex items-center space-x-2"
+          className="py-2 px-3 font-extrabold text-xs text-primary border-b-2 border-primary flex items-center space-x-1.5"
         >
-          <ShieldCheck className="h-4 w-4" />
+          <ShieldCheck className="h-3.5 w-3.5" />
           <span>Agent Directory</span>
+          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-primary/20 text-primary">
+            {agents.length}
+          </span>
         </Link>
         <Link
           href="/superadmin/agents/issued"
-          className="py-2.5 px-4 font-semibold text-sm text-muted-foreground hover:text-foreground border-b-2 border-transparent hover:border-border transition-all flex items-center space-x-2"
+          className="py-2 px-3 font-semibold text-xs text-muted-foreground hover:text-foreground border-b-2 border-transparent hover:border-border transition-all flex items-center space-x-1.5"
         >
+          <Coins className="h-3.5 w-3.5" />
           <span>Coins Issued Ledger</span>
         </Link>
       </div>
 
-      {/* Search Input Bar */}
-      <div className="relative max-w-md w-full">
-        <Search className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground/70" />
-        <Input 
-          placeholder="Search agents by name or @username..." 
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value)
-            setCurrentPage(1)
-          }}
-          className="pl-10 h-11 bg-card border-border/80 text-foreground text-sm rounded-xl focus:border-primary/50 shadow-xs" 
-        />
-        {searchQuery && (
-          <button 
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-3 text-xs text-muted-foreground hover:text-foreground font-bold"
-          >
-            Clear
-          </button>
-        )}
+      {/* Overview Metrics Strip (3 Compact Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        <Card className="bg-card border-border/80 shadow-2xs p-3 rounded-xl">
+          <div className="flex items-center justify-between text-xs text-muted-foreground font-bold">
+            <span>Total Agents</span>
+            <Users className="h-3.5 w-3.5 text-primary" />
+          </div>
+          {isLoadingAgents ? (
+            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
+          ) : (
+            <div className="text-lg font-black font-mono text-foreground mt-0.5">{agents.length}</div>
+          )}
+        </Card>
+
+        <Card className="bg-card border-border/80 shadow-2xs p-3 rounded-xl">
+          <div className="flex items-center justify-between text-xs text-muted-foreground font-bold">
+            <span>Active Network</span>
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          </div>
+          {isLoadingAgents ? (
+            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
+          ) : (
+            <div className="text-lg font-black font-mono text-emerald-500 mt-0.5">{activeCount}</div>
+          )}
+        </Card>
+
+        <Card className="bg-card border-border/80 shadow-2xs p-3 rounded-xl col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground font-bold">
+            <span>Agent Coin Circulation</span>
+            <Coins className="h-3.5 w-3.5 text-amber-500" />
+          </div>
+          {isLoadingAgents ? (
+            <div className="h-5 w-20 bg-secondary/80 animate-pulse rounded my-1" />
+          ) : (
+            <div className="text-lg font-black font-mono text-amber-500 mt-0.5">{formatCurrency(totalCirculation)}</div>
+          )}
+        </Card>
       </div>
 
-      {/* --- DESKTOP VIEW (hidden on mobile, visible md+) --- */}
-      <div className="hidden md:block rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xl">
+      {/* Search & Status Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-card p-2.5 border border-border/80 rounded-xl shadow-xs">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
+          <Input 
+            placeholder="Search agents by name or @username..." 
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="pl-8 h-8 bg-background border-border text-foreground text-xs rounded-lg focus:border-primary/50" 
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2 text-[11px] text-muted-foreground hover:text-foreground font-bold cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-2 shrink-0">
+          <div className="flex items-center space-x-1.5 text-xs text-muted-foreground font-semibold">
+            <Filter className="h-3.5 w-3.5" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as any)
+                setCurrentPage(1)
+              }}
+              className="h-8 px-2.5 rounded-lg border border-border bg-background text-foreground text-xs font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Statuses</option>
+              <option value="Active">Active Only</option>
+              <option value="Blocked">Blocked Only</option>
+            </select>
+          </div>
+
+          {(searchQuery || statusFilter !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery('')
+                setStatusFilter('all')
+                setCurrentPage(1)
+              }}
+              className="h-8 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer font-bold"
+            >
+              Reset
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* --- DESKTOP TABLE VIEW (hidden on mobile < sm, visible sm+) --- */}
+      <div className="hidden sm:block rounded-xl border border-border/80 bg-card overflow-hidden shadow-xs">
         <div className="overflow-x-auto table-scroll">
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent bg-secondary/20">
-                <TableHead className="text-muted-foreground text-xs uppercase tracking-wider sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] min-w-[160px]">Agent Name</TableHead>
-                <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Username</TableHead>
-                <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Coins Balance</TableHead>
-                <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[110px]">Status</TableHead>
-                <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Actions</TableHead>
+                <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider sticky left-0 bg-card z-10 py-2.5">Agent Name</TableHead>
+                <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Username</TableHead>
+                <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Coins Balance</TableHead>
+                <TableHead className="text-center text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Status</TableHead>
+                <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoadingAgents ? (
                 [1, 2, 3, 4, 5].map((i) => (
                   <TableRow key={i} className="border-border">
-                    <TableCell className="sticky left-0 bg-card z-10">
-                      <div className="h-5 bg-secondary/80 rounded-md animate-pulse w-32" />
+                    <TableCell className="sticky left-0 bg-card z-10 py-2.5">
+                      <div className="h-4 bg-secondary/80 rounded-md animate-pulse w-32" />
                     </TableCell>
-                    <TableCell><div className="h-4 bg-secondary/60 rounded-md animate-pulse w-24" /></TableCell>
-                    <TableCell className="text-right"><div className="h-5 bg-secondary/70 rounded-md animate-pulse w-20 ml-auto" /></TableCell>
-                    <TableCell className="text-center"><div className="h-5 bg-secondary/80 rounded-full animate-pulse w-16 mx-auto" /></TableCell>
-                    <TableCell className="text-right"><div className="h-8 bg-secondary/60 rounded-lg animate-pulse w-20 ml-auto" /></TableCell>
+                    <TableCell className="py-2.5"><div className="h-4 bg-secondary/60 rounded-md animate-pulse w-24" /></TableCell>
+                    <TableCell className="text-right py-2.5"><div className="h-4 bg-secondary/70 rounded-md animate-pulse w-20 ml-auto" /></TableCell>
+                    <TableCell className="text-center py-2.5"><div className="h-4 bg-secondary/80 rounded-full animate-pulse w-16 mx-auto" /></TableCell>
+                    <TableCell className="text-right py-2.5"><div className="h-7 bg-secondary/60 rounded-lg animate-pulse w-16 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : paginatedAgents.length > 0 ? (
                 paginatedAgents.map((agent) => (
-                  <TableRow key={agent.id} className="border-border hover:bg-secondary/40 transition-colors">
-                    <TableCell className="font-bold text-foreground text-sm sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
+                  <TableRow key={agent.id} className="border-border hover:bg-secondary/30 transition-colors">
+                    <TableCell className="font-bold text-foreground text-xs sticky left-0 bg-card z-10 py-2">
                       <Link href={`/superadmin/agents/${agent.id}`} className="hover:text-primary transition-colors flex items-center space-x-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 text-xs font-black">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 text-xs font-black">
                           {agent.name[0]?.toUpperCase()}
                         </div>
                         <span>{agent.name}</span>
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-xs">@{agent.username}</TableCell>
-                    <TableCell className="text-right text-foreground font-mono font-black text-sm">
+                    <TableCell className="text-muted-foreground font-mono text-xs py-2">@{agent.username}</TableCell>
+                    <TableCell className="text-right text-foreground font-mono font-black text-xs py-2">
                       {formatCurrency(agent.balance)}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-black ${
+                    <TableCell className="text-center py-2">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
                         agent.status === 'Active' 
                           ? 'bg-success-bg text-success-text border border-emerald-500/20' 
                           : 'bg-danger-bg text-danger-text border border-red-500/20'
@@ -288,20 +378,20 @@ export default function AgentsPage() {
                         {agent.status}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right space-x-2 whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap py-2">
                       <Link
                         href={`/superadmin/agents/${agent.id}`}
-                        className={buttonVariants({ variant: "outline", size: "sm", className: "border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-bold rounded-lg text-xs" })}
+                        className={buttonVariants({ variant: "outline", size: "sm", className: "h-7 px-2.5 border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-bold rounded-lg text-xs" })}
                       >
-                        <Eye className="mr-1.5 h-3.5 w-3.5" /> View
+                        <Eye className="mr-1 h-3 w-3" /> View
                       </Link>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-36 text-center text-muted-foreground text-xs font-medium">
-                    No agents found matching &quot;{searchQuery}&quot;.
+                  <TableCell colSpan={5} className="h-28 text-center text-muted-foreground text-xs font-medium">
+                    No agents found matching current filter criteria.
                   </TableCell>
                 </TableRow>
               )}
@@ -320,36 +410,36 @@ export default function AgentsPage() {
         )}
       </div>
 
-      {/* --- MOBILE VIEW CARDS (visible on mobile < md, hidden on md+) --- */}
-      <div className="md:hidden space-y-3">
+      {/* --- MOBILE VIEW CARDS (visible on mobile < sm, hidden on sm+) --- */}
+      <div className="sm:hidden space-y-2.5">
         {isLoadingAgents ? (
           [1, 2, 3, 4].map((i) => (
-            <Card key={i} className="border-border/80 bg-card p-4 rounded-xl space-y-3 animate-pulse">
+            <Card key={i} className="border-border/80 bg-card p-3 rounded-xl space-y-2.5 animate-pulse">
               <div className="flex items-center justify-between">
-                <div className="h-5 bg-secondary/80 rounded w-1/3" />
-                <div className="h-5 bg-secondary/60 rounded-full w-16" />
+                <div className="h-4 bg-secondary/80 rounded w-1/3" />
+                <div className="h-4 bg-secondary/60 rounded-full w-14" />
               </div>
               <div className="flex items-center justify-between pt-1">
-                <div className="h-4 bg-secondary/60 rounded w-1/4" />
-                <div className="h-6 bg-secondary/80 rounded w-24" />
+                <div className="h-3 bg-secondary/60 rounded w-1/4" />
+                <div className="h-5 bg-secondary/80 rounded w-20" />
               </div>
-              <div className="h-10 bg-secondary/50 rounded-lg w-full pt-2" />
+              <div className="h-8 bg-secondary/50 rounded-lg w-full" />
             </Card>
           ))
         ) : paginatedAgents.length > 0 ? (
           paginatedAgents.map((agent) => (
-            <Card key={agent.id} className="border-border/80 bg-card/90 backdrop-blur-xs p-4 rounded-2xl space-y-3 shadow-md relative overflow-hidden">
+            <Card key={agent.id} className="border-border/80 bg-card p-3 rounded-xl space-y-2.5 shadow-2xs relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm shrink-0">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-xs shrink-0">
                     {agent.name[0]?.toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-foreground text-sm leading-tight">{agent.name}</h3>
-                    <p className="text-muted-foreground font-mono text-xs">@{agent.username}</p>
+                    <h3 className="font-extrabold text-foreground text-xs leading-tight">{agent.name}</h3>
+                    <p className="text-muted-foreground font-mono text-[11px]">@{agent.username}</p>
                   </div>
                 </div>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-black ${
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
                   agent.status === 'Active' 
                     ? 'bg-success-bg text-success-text border border-emerald-500/20' 
                     : 'bg-danger-bg text-danger-text border border-red-500/20'
@@ -359,27 +449,27 @@ export default function AgentsPage() {
               </div>
 
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
-                <span className="text-muted-foreground font-semibold">Coins Balance</span>
-                <span className="font-mono font-black text-foreground text-base">{formatCurrency(agent.balance)}</span>
+                <span className="text-muted-foreground font-semibold text-[11px]">Coins Balance</span>
+                <span className="font-mono font-black text-foreground text-sm">{formatCurrency(agent.balance)}</span>
               </div>
 
               <Link
                 href={`/superadmin/agents/${agent.id}`}
-                className={buttonVariants({ variant: "outline", size: "sm", className: "w-full h-10 border-primary/30 text-primary hover:bg-primary/10 font-bold justify-center rounded-xl text-xs" })}
+                className={buttonVariants({ variant: "outline", size: "sm", className: "w-full h-8 border-primary/30 text-primary hover:bg-primary/10 font-bold justify-center rounded-lg text-xs" })}
               >
                 <span>View Agent Dashboard</span>
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                <ArrowRight className="ml-1 h-3 w-3" />
               </Link>
             </Card>
           ))
         ) : (
-          <div className="p-8 text-center text-muted-foreground text-xs font-medium bg-card rounded-2xl border border-border">
+          <div className="p-6 text-center text-muted-foreground text-xs font-medium bg-card rounded-xl border border-border">
             No agents found.
           </div>
         )}
 
         {filteredAgents.length > itemsPerPage && (
-          <div className="pt-2">
+          <div className="pt-1">
             <ResponsivePagination 
               currentPage={currentPage}
               totalPages={totalPages}
