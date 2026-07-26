@@ -4,7 +4,7 @@ import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { LayoutDashboard, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, LogOut, ShieldAlert } from 'lucide-react'
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -24,43 +24,51 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 border-r border-border bg-card flex-col shrink-0">
-        <div className="p-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground">God Mode</h2>
-            <p className="text-sm text-muted-foreground">Super Admin Portal</p>
+      {/* Desktop Sidebar (Compact w-52) */}
+      <aside className="hidden md:flex w-52 border-r border-border bg-card flex-col shrink-0">
+        <div className="p-4 flex items-center justify-between border-b border-border/50">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+              <ShieldAlert className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-extrabold tracking-tight text-foreground leading-tight">God Mode</h2>
+              <p className="text-[10px] text-muted-foreground font-semibold">Super Admin</p>
+            </div>
           </div>
           <ThemeToggle />
         </div>
-        <nav className="flex-1 px-4 space-y-2">
+        <nav className="flex-1 p-2 space-y-1">
           <Link 
             href="/superadmin" 
-            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+            className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
               isDashboardActive 
-                ? 'bg-secondary text-primary font-bold shadow-xs' 
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+                ? 'bg-primary text-primary-foreground shadow-sm' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
             }`}
           >
-            Dashboard
+            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            <span>Dashboard</span>
           </Link>
           <Link 
             href="/superadmin/agents" 
-            className={`block px-4 py-2 rounded-md transition-all text-sm ${
+            className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
               isAgentsActive 
-                ? 'bg-secondary text-primary font-bold shadow-xs' 
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 font-medium'
+                ? 'bg-primary text-primary-foreground shadow-sm' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
             }`}
           >
-            Agents
+            <Users className="h-4 w-4 shrink-0" />
+            <span>Agents</span>
           </Link>
         </nav>
-        <div className="p-4 border-t border-border">
+        <div className="p-3 border-t border-border/60">
           <button 
             onClick={handleSignOut} 
-            className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-md transition-colors font-semibold cursor-pointer text-left"
+            className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-red-500 hover:bg-red-500/10 rounded-xl transition-colors font-extrabold cursor-pointer text-left"
           >
-            Sign Out
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -69,9 +77,14 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Mobile Header Bar */}
         <header className="flex md:hidden items-center justify-between h-14 px-4 bg-card border-b border-border z-20 shrink-0">
-          <div>
-            <h2 className="text-base font-extrabold tracking-tight">God Mode</h2>
-            <p className="text-[10px] text-muted-foreground">Super Admin</p>
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+              <ShieldAlert className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-extrabold tracking-tight">God Mode</h2>
+              <p className="text-[10px] text-muted-foreground">Super Admin</p>
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             <ThemeToggle />
@@ -86,29 +99,29 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
         </header>
 
         {/* Scrollable Main Content Pane */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-background pb-20 md:pb-8">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 bg-background pb-20 md:pb-6">
           {children}
         </main>
 
         {/* Mobile Bottom Navigation Bar */}
-        <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border z-20 items-center justify-around">
+        <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-md border-t border-border z-20 items-center justify-around">
           <Link 
             href="/superadmin" 
             className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isDashboardActive ? 'text-primary font-bold' : 'text-muted-foreground'
+              isDashboardActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
             }`}
           >
             <LayoutDashboard className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">Overview</span>
+            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Overview</span>
           </Link>
           <Link 
             href="/superadmin/agents" 
             className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${
-              isAgentsActive ? 'text-primary font-bold' : 'text-muted-foreground'
+              isAgentsActive ? 'text-primary font-extrabold' : 'text-muted-foreground'
             }`}
           >
             <Users className="h-5 w-5" />
-            <span className="text-[10px] mt-1 tracking-wider uppercase font-semibold">Agents</span>
+            <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Agents</span>
           </Link>
         </nav>
       </div>

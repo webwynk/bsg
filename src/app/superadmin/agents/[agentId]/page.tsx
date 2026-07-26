@@ -589,130 +589,151 @@ export default function AgentDetailPage({ params }: Props) {
                   {paginatedGames.length > 0 ? (
                     <Table>
                       <TableHeader>
-                        <TableRow className="border-border hover:bg-transparent">
-                          <TableHead className="w-10 bg-card sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]"></TableHead>
-                          <TableHead className="text-muted-foreground text-xs uppercase tracking-wider sticky left-10 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] min-w-[100px]">Spin ID</TableHead>
-                          <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[120px]">Game</TableHead>
-                          <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[140px]">Mode</TableHead>
-                          <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Date</TableHead>
-                          <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win Result</TableHead>
-                          <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Bet</TableHead>
-                          <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Win</TableHead>
+                        <TableRow className="border-border hover:bg-transparent bg-secondary/20">
+                          <TableHead className="w-8 bg-card sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]"></TableHead>
+                          <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider sticky left-8 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] min-w-[80px]">Spin ID</TableHead>
+                          <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[100px]">Game</TableHead>
+                          <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[120px]">Mode</TableHead>
+                          <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
+                          <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win Result</TableHead>
+                          <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Bet</TableHead>
+                          <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {paginatedGames.map((spin) => {
                           const isExpanded = !!expandedSpins[spin.id]
+                          const singleCount = Object.keys(spin.singleBets || {}).length
+                          const doubleCount = Object.keys(spin.doubleBets || {}).length
+                          const tripleCount = Object.keys(spin.tripleBets || {}).length
+
                           return (
                             <React.Fragment key={spin.id}>
-                              <TableRow className="border-border hover:bg-secondary/30">
-                                <TableCell className="sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
+                              <TableRow className="border-border hover:bg-secondary/30 transition-colors">
+                                <TableCell className="p-2 sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
                                   <button
                                     onClick={() => toggleSpinExpand(spin.id)}
-                                    className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
+                                    className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
                                     style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
                                     aria-label={isExpanded ? "Collapse details" : "Expand details"}
                                   >
-                                    <ChevronRight className="h-4 w-4" />
+                                    <ChevronRight className="h-3.5 w-3.5" />
                                   </button>
                                 </TableCell>
-                                <TableCell className="font-semibold text-foreground text-xs sticky left-10 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">{spin.id}</TableCell>
-                                <TableCell className="text-foreground text-xs font-medium">{spin.game}</TableCell>
-                                <TableCell className="text-foreground text-xs font-bold text-primary">{spin.mode}</TableCell>
-                                <TableCell className="text-muted-foreground text-xs">{spin.date}</TableCell>
-                                <TableCell className="text-center font-mono font-extrabold text-xs text-primary bg-primary/5 rounded">
-                                  {spin.resultNumber.toString().padStart(3, '0')}
+                                <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5 sticky left-8 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">{spin.id}</TableCell>
+                                <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{spin.game}</TableCell>
+                                <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
+                                <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.date}</TableCell>
+                                <TableCell className="text-center p-2.5">
+                                  <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
+                                    {spin.resultNumber.toString().padStart(3, '0')}
+                                  </span>
                                 </TableCell>
-                                <TableCell className="text-right text-foreground font-mono text-xs font-medium">
+                                <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
                                   {formatCurrency(spin.bet)}
                                 </TableCell>
-                                <TableCell className={`text-right font-mono font-bold text-xs ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
                                   {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
                                 </TableCell>
                               </TableRow>
 
                               {isExpanded && (
-                                <TableRow className="border-border bg-secondary/5 hover:bg-secondary/5">
-                                  <TableCell colSpan={8} className="p-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                                <TableRow className="border-border bg-secondary/10 hover:bg-secondary/10">
+                                  <TableCell colSpan={8} className="p-3 sm:p-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                       {/* Single Digit Picks (Black) */}
-                                      <div className="p-3 rounded-lg bg-card border border-border/50">
-                                        <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                                          <span className="w-2 h-2 rounded-full bg-zinc-950 border border-zinc-700 inline-block shrink-0" />
-                                          Single Picks (Black)
-                                        </h4>
-                                        {Object.keys(spin.singleBets || {}).length > 0 ? (
-                                          <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                      <div className="p-3 rounded-xl bg-card border border-border/70 shadow-xs">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <h4 className="font-black text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-zinc-950 border border-zinc-600 shrink-0" />
+                                            Single Picks (Black)
+                                          </h4>
+                                          <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/60 px-1.5 py-0.2 rounded">
+                                            {singleCount} {singleCount === 1 ? 'pick' : 'picks'}
+                                          </span>
+                                        </div>
+                                        {singleCount > 0 ? (
+                                          <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                                             {Object.entries(spin.singleBets).map(([num, val]) => {
                                               const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
                                               return (
-                                                <div key={num} className={`flex items-center justify-between p-1.5 rounded text-[11px] ${
-                                                  isWinning ? 'bg-zinc-950 text-zinc-50 border border-zinc-700 font-extrabold' : 'text-muted-foreground/90'
+                                                <div key={num} className={`flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
+                                                  isWinning ? 'bg-zinc-950 text-white border border-zinc-700 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
                                                 }`}>
-                                                  <span>Digit: <strong className="text-foreground">{num}</strong></span>
-                                                  <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                                  <span>Digit: <strong className="font-black text-primary">{num}</strong></span>
+                                                  <span className="font-mono font-bold">{formatCurrency(val)} Coins</span>
                                                 </div>
                                               )
                                             })}
                                           </div>
                                         ) : (
-                                          <p className="text-[10px] text-muted-foreground italic">No Single bets placed.</p>
+                                          <p className="text-[10px] text-muted-foreground italic py-1">No Single bets placed.</p>
                                         )}
                                       </div>
 
                                       {/* Double Digit Picks (Green) */}
-                                      <div className="p-3 rounded-lg bg-card border border-border/50">
-                                        <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
-                                          Double Picks (Green)
-                                        </h4>
-                                        {Object.keys(spin.doubleBets || {}).length > 0 ? (
-                                          <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                      <div className="p-3 rounded-xl bg-card border border-border/70 shadow-xs">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <h4 className="font-black text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                            Double Picks (Green)
+                                          </h4>
+                                          <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/60 px-1.5 py-0.2 rounded">
+                                            {doubleCount} {doubleCount === 1 ? 'pick' : 'picks'}
+                                          </span>
+                                        </div>
+                                        {doubleCount > 0 ? (
+                                          <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                                             {Object.entries(spin.doubleBets).map(([num, val]) => {
                                               const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
                                                 ? `${spin.greenDigit}${spin.blackDigit}` 
                                                 : null
                                               const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
                                               return (
-                                                <div key={num} className={`flex items-center justify-between p-1.5 rounded text-[11px] ${
-                                                  isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-extrabold' : 'text-muted-foreground/90'
+                                                <div key={num} className={`flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
+                                                  isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
                                                 }`}>
-                                                  <span>Picks: <strong className="text-foreground">{num.padStart(2, '0')}</strong></span>
-                                                  <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                                  <span>Picks: <strong className="font-black text-primary">{num.padStart(2, '0')}</strong></span>
+                                                  <span className="font-mono font-bold">{formatCurrency(val)} Coins</span>
                                                 </div>
                                               )
                                             })}
                                           </div>
                                         ) : (
-                                          <p className="text-[10px] text-muted-foreground italic">No Double bets placed.</p>
+                                          <p className="text-[10px] text-muted-foreground italic py-1">No Double bets placed.</p>
                                         )}
                                       </div>
 
                                       {/* Triple Digit Picks (Red) */}
-                                      <div className="p-3 rounded-lg bg-card border border-border/50">
-                                        <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                                          <span className="w-2 h-2 rounded-full bg-red-500 inline-block shrink-0" />
-                                          Triple Picks (Red)
-                                        </h4>
-                                        {Object.keys(spin.tripleBets || {}).length > 0 ? (
-                                          <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                      <div className="p-3 rounded-xl bg-card border border-border/70 shadow-xs">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <h4 className="font-black text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                                            Triple Picks (Red)
+                                          </h4>
+                                          <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/60 px-1.5 py-0.2 rounded">
+                                            {tripleCount} {tripleCount === 1 ? 'pick' : 'picks'}
+                                          </span>
+                                        </div>
+                                        {tripleCount > 0 ? (
+                                          <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                                             {Object.entries(spin.tripleBets).map(([num, val]) => {
                                               const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
                                                 ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
                                                 : null
                                               const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
                                               return (
-                                                <div key={num} className={`flex items-center justify-between p-1.5 rounded text-[11px] ${
-                                                  isWinning ? 'bg-red-500/20 text-red-400 border border-red-500/30 font-extrabold' : 'text-muted-foreground/90'
+                                                <div key={num} className={`flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
+                                                  isWinning ? 'bg-red-500/20 text-red-400 border border-red-500/40 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
                                                 }`}>
-                                                  <span>Picks: <strong className="text-foreground">{num.padStart(3, '0')}</strong></span>
-                                                  <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                                  <span>Picks: <strong className="font-black text-primary">{num.padStart(3, '0')}</strong></span>
+                                                  <span className="font-mono font-bold">{formatCurrency(val)} Coins</span>
                                                 </div>
                                               )
                                             })}
                                           </div>
                                         ) : (
-                                          <p className="text-[10px] text-muted-foreground italic">No Triple bets placed.</p>
+                                          <p className="text-[10px] text-muted-foreground italic py-1">No Triple bets placed.</p>
                                         )}
                                       </div>
                                     </div>

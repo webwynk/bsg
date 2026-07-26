@@ -11,10 +11,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Card } from "@/components/ui/card"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins } from "lucide-react"
+import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins, Calendar } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
@@ -243,83 +243,83 @@ export default function PlayersPage() {
   )
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto px-4 md:px-0 pb-12">
+    <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center space-x-2">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-              <Users className="h-5 w-5" />
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+              <Users className="h-4 w-4" />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
               Player Accounts
             </h1>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-primary/10 text-primary border border-primary/20">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
               {players.length} Total
             </span>
           </div>
-          <p className="text-muted-foreground mt-1 text-xs sm:text-sm">
+          <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs">
             Manage player balances, reset passwords, track gameplay history and cashier points.
           </p>
         </div>
 
         {/* Add Player Modal */}
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger className={buttonVariants({ variant: "default", size: "lg", className: "w-full sm:w-auto h-11 px-5 font-extrabold shadow-lg shadow-primary/20 cursor-pointer rounded-xl text-sm" })}>
-            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Add New Player
+          <DialogTrigger className="w-full sm:w-auto h-10 px-4 font-extrabold bg-primary text-primary-foreground hover:bg-primary/95 shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center">
+            <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Player
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-6">
+          <DialogContent className="sm:max-w-[400px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
             <DialogHeader className="space-y-1">
-              <DialogTitle className="text-xl font-black">Register New Player</DialogTitle>
+              <DialogTitle className="text-lg font-black">Register New Player</DialogTitle>
               <DialogDescription className="text-muted-foreground text-xs">
                 Create a new player account for your agent sub-network.
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleCreatePlayer} className="space-y-4 pt-2">
+            <form onSubmit={handleCreatePlayer} className="space-y-3 pt-2">
               {errorMessage && (
-                <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
+                <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 shrink-0 animate-ping" />
                   {errorMessage}
                 </div>
               )}
               {successMessage && (
-                <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
                   {successMessage}
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="name" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Player Name
                 </Label>
                 <Input
                   id="name"
                   name="name"
                   placeholder="e.g. Rahul Sharma"
-                  className="h-11 bg-background/60 border-border text-foreground text-sm rounded-lg"
+                  className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                   required
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="username" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Username
                 </Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-sm text-muted-foreground/70 font-mono">@</span>
+                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground/70 font-mono">@</span>
                   <Input
                     id="username"
                     name="username"
                     placeholder="player_rahul"
-                    className="pl-8 h-11 bg-background/60 border-border text-foreground text-sm rounded-lg"
+                    className="pl-8 h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                     required
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="password" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Password
                 </Label>
                 <div className="relative">
@@ -328,7 +328,7 @@ export default function PlayersPage() {
                     name="password"
                     type={showCreatePassword ? "text" : "password"}
                     placeholder="At least 6 characters"
-                    className="h-11 bg-background/60 border-border text-foreground pr-10 text-sm rounded-lg"
+                    className="h-10 bg-background/60 border-border text-foreground pr-10 text-xs rounded-lg"
                     required
                   />
                   <button
@@ -343,7 +343,7 @@ export default function PlayersPage() {
               </div>
 
               <DialogFooter className="pt-2">
-                <Button type="submit" disabled={isLoading} className="w-full h-11 font-extrabold text-sm rounded-lg shadow-md shadow-primary/10 cursor-pointer">
+                <Button type="submit" disabled={isLoading} className="w-full h-10 font-extrabold text-xs rounded-lg shadow-md cursor-pointer">
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {isLoading ? 'Registering Player...' : 'Create Player Account'}
                 </Button>
@@ -353,41 +353,41 @@ export default function PlayersPage() {
         </Dialog>
       </div>
 
-      {/* Grid Container */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 min-h-[640px]">
-        {/* --- LEFT SIDE: PLAYERS LIST --- */}
-        <div className={`md:col-span-4 space-y-3 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
+      {/* Compact Grid Layout (3 cols left vs 9 cols right) */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 min-h-[600px]">
+        {/* --- LEFT SIDE: COMPACT PLAYERS LIST (md:col-span-3) --- */}
+        <div className={`md:col-span-3 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
           {/* Search Box */}
           <div className="relative">
-            <Search className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground/70" />
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
             <Input 
               placeholder="Search players..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-11 bg-card border-border/80 text-foreground text-sm rounded-xl focus:border-primary/50 shadow-xs" 
+              className="pl-9 h-9 bg-card border-border/80 text-foreground text-xs rounded-xl focus:border-primary/50 shadow-xs" 
             />
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-3 text-xs text-muted-foreground hover:text-foreground font-bold"
+                className="absolute right-3 top-2.5 text-[10px] text-muted-foreground hover:text-foreground font-bold"
               >
                 Clear
               </button>
             )}
           </div>
 
-          {/* Player Cards List Container */}
-          <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+          {/* Compact Player Cards List Container */}
+          <div className="space-y-1.5 max-h-[620px] overflow-y-auto pr-0.5 custom-scrollbar">
             {isLoadingPlayers ? (
               [1, 2, 3, 4, 5].map((i) => (
-                <Card key={i} className="p-3.5 border-border/60 bg-card/60 animate-pulse space-y-2 rounded-xl">
+                <Card key={i} className="p-2.5 border-border/60 bg-card/60 animate-pulse space-y-1.5 rounded-xl">
                   <div className="flex justify-between items-center">
-                    <div className="h-4 bg-secondary/80 rounded w-1/3" />
-                    <div className="h-4 bg-secondary/60 rounded-full w-14" />
+                    <div className="h-3.5 bg-secondary/80 rounded w-1/3" />
+                    <div className="h-3.5 bg-secondary/60 rounded-full w-12" />
                   </div>
                   <div className="flex justify-between items-center">
                     <div className="h-3 bg-secondary/60 rounded w-1/4" />
-                    <div className="h-4 bg-secondary/80 rounded w-20" />
+                    <div className="h-3.5 bg-secondary/80 rounded w-16" />
                   </div>
                 </Card>
               ))
@@ -398,22 +398,22 @@ export default function PlayersPage() {
                   <button
                     key={player.id}
                     onClick={() => handleSelectPlayer(player)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col space-y-1.5 ${
+                    className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col space-y-1 ${
                       isSelected
-                        ? 'bg-primary/10 border-primary shadow-sm text-foreground'
+                        ? 'bg-primary/10 border-primary shadow-xs text-foreground'
                         : 'bg-card border-border/70 hover:bg-secondary/40 text-foreground'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2 min-w-0">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${
                           isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
                         }`}>
                           {player.name[0]?.toUpperCase()}
                         </div>
-                        <span className="font-extrabold text-sm truncate">{player.name}</span>
+                        <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
                       </div>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black shrink-0 ${
+                      <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
                         player.status === 'Active'
                           ? 'bg-success-bg text-success-text border border-emerald-500/20'
                           : 'bg-danger-bg text-danger-text border border-red-500/20'
@@ -422,46 +422,46 @@ export default function PlayersPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
-                      <span className="text-muted-foreground font-mono truncate">@{player.username}</span>
-                      <span className="font-mono font-black text-foreground">{formatCurrency(player.balance)}</span>
+                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
+                      <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
+                      <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
                     </div>
                   </button>
                 )
               })
             ) : (
-              <div className="p-8 text-center text-xs text-muted-foreground font-medium bg-card rounded-xl border border-border">
+              <div className="p-6 text-center text-xs text-muted-foreground font-medium bg-card rounded-xl border border-border">
                 No players found.
               </div>
             )}
           </div>
         </div>
 
-        {/* --- RIGHT SIDE: PLAYER DETAILS & HISTORY --- */}
-        <div className={`md:col-span-8 space-y-4 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
+        {/* --- RIGHT SIDE: MAIN PLAYER DETAILS & HISTORY (md:col-span-9) --- */}
+        <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
           {selectedPlayer ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {/* Selected Player Header Card */}
-              <Card className="border-border/80 bg-card/95 backdrop-blur-xs p-4 sm:p-6 rounded-2xl shadow-lg relative overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <Card className="border-border/80 bg-card p-3.5 sm:p-5 rounded-2xl shadow-md relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   {/* Mobile Back Button & Player Info */}
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2.5">
                     <button
                       onClick={() => setShowMobileDetail(false)}
-                      className="md:hidden p-2 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none"
+                      className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none"
                       aria-label="Back to players list"
                     >
-                      <ArrowLeft className="h-5 w-5" />
+                      <ArrowLeft className="h-4 w-4" />
                     </button>
 
-                    <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-lg shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base shrink-0">
                       {selectedPlayer.name[0]?.toUpperCase()}
                     </div>
 
                     <div>
                       <div className="flex items-center space-x-2">
-                        <h2 className="text-lg sm:text-xl font-black text-foreground">{selectedPlayer.name}</h2>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black ${
+                        <h2 className="text-base sm:text-lg font-black text-foreground">{selectedPlayer.name}</h2>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black ${
                           selectedPlayer.status === 'Active'
                             ? 'bg-success-bg text-success-text border border-emerald-500/20'
                             : 'bg-danger-bg text-danger-text border border-red-500/20'
@@ -469,52 +469,52 @@ export default function PlayersPage() {
                           {selectedPlayer.status}
                         </span>
                       </div>
-                      <p className="text-xs font-mono text-muted-foreground">@{selectedPlayer.username}</p>
+                      <p className="text-[11px] font-mono text-muted-foreground">@{selectedPlayer.username}</p>
                     </div>
                   </div>
 
-                  {/* Player Balance Card */}
-                  <div className="bg-secondary/40 border border-border/60 p-3 rounded-xl flex items-center justify-between sm:justify-end sm:space-x-4 min-w-[200px]">
+                  {/* Player Balance Summary Pill */}
+                  <div className="bg-secondary/40 border border-border/60 p-2.5 rounded-xl flex items-center justify-between sm:justify-end sm:space-x-3 min-w-[180px]">
                     <div className="text-left sm:text-right">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
                         Coins Balance
                       </span>
-                      <span className="text-xl font-mono font-black text-foreground">
+                      <span className="text-lg font-mono font-black text-foreground">
                         {formatCurrency(selectedPlayer.balance)}
                       </span>
                     </div>
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                      <Coins className="h-5 w-5" />
+                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                      <Coins className="h-4 w-4" />
                     </div>
                   </div>
                 </div>
 
-                {/* Quick Actions Button Bar */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 border-t border-border/60 mt-4">
-                  {/* Deposit Modal */}
+                {/* Quick Actions Grid (HIGH CONTRAST & EXPLICIT VISIBILITY) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-border/60 mt-3">
+                  {/* Deposit Modal with Explicit Green High-Contrast Button */}
                   <Dialog open={activeTransferModal === 'deposit'} onOpenChange={(open) => {
                     setActiveTransferModal(open ? 'deposit' : null)
                     setTransferAmount('')
                     setTransferError(null)
                   }}>
-                    <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "w-full h-11 bg-emerald-600 hover:bg-emerald-600/90 text-white font-extrabold cursor-pointer rounded-xl text-xs" })}>
-                      <ArrowUpRight className="mr-1.5 h-4 w-4" /> Deposit Coins
+                    <DialogTrigger className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center border-0">
+                      <ArrowUpRight className="mr-1 h-4 w-4 stroke-[3]" /> Deposit Coins
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground rounded-2xl">
+                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
                       <DialogHeader>
-                        <DialogTitle className="font-black">Deposit Coins</DialogTitle>
+                        <DialogTitle className="font-black text-lg">Deposit Coins</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
                           Issue cashier coins to {selectedPlayer.name} (@{selectedPlayer.username}).
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4 py-3">
+                      <div className="space-y-3 py-2">
                         {transferError && (
-                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                             {transferError}
                           </div>
                         )}
-                        <div className="space-y-1.5">
-                          <Label htmlFor="deposit-amount" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <div className="space-y-1">
+                          <Label htmlFor="deposit-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Amount (Coins)
                           </Label>
                           <Input 
@@ -523,7 +523,7 @@ export default function PlayersPage() {
                             placeholder="e.g. 500" 
                             value={transferAmount}
                             onChange={(e) => setTransferAmount(e.target.value)}
-                            className="h-11 bg-background border-border text-foreground text-sm rounded-lg" 
+                            className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
                           />
                         </div>
                       </div>
@@ -531,7 +531,7 @@ export default function PlayersPage() {
                         <Button 
                           onClick={() => handleTransferPoints('deposit')} 
                           disabled={isTransferring}
-                          className="w-full h-11 bg-emerald-600 text-white font-extrabold cursor-pointer rounded-lg text-sm"
+                          className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold cursor-pointer rounded-lg text-xs"
                         >
                           {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                           {isTransferring ? 'Processing...' : 'Confirm Deposit'}
@@ -546,24 +546,24 @@ export default function PlayersPage() {
                     setTransferAmount('')
                     setTransferError(null)
                   }}>
-                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "w-full h-11 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-xl text-xs" })}>
-                      <ArrowDownRight className="mr-1.5 h-4 w-4" /> Withdraw
+                    <DialogTrigger className="w-full h-10 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-xl text-xs flex items-center justify-center bg-transparent">
+                      <ArrowDownRight className="mr-1 h-4 w-4 stroke-[3]" /> Withdraw
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground rounded-2xl">
+                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
                       <DialogHeader>
-                        <DialogTitle className="font-black">Withdraw Coins</DialogTitle>
+                        <DialogTitle className="font-black text-lg">Withdraw Coins</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
                           Deduct cashier coins from {selectedPlayer.name} (@{selectedPlayer.username}).
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4 py-3">
+                      <div className="space-y-3 py-2">
                         {transferError && (
-                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                             {transferError}
                           </div>
                         )}
-                        <div className="space-y-1.5">
-                          <Label htmlFor="withdraw-amount" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <div className="space-y-1">
+                          <Label htmlFor="withdraw-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Amount (Coins)
                           </Label>
                           <Input 
@@ -572,7 +572,7 @@ export default function PlayersPage() {
                             placeholder="e.g. 200" 
                             value={transferAmount}
                             onChange={(e) => setTransferAmount(e.target.value)}
-                            className="h-11 bg-background border-border text-foreground text-sm rounded-lg" 
+                            className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
                           />
                         </div>
                       </div>
@@ -580,7 +580,7 @@ export default function PlayersPage() {
                         <Button 
                           onClick={() => handleTransferPoints('withdraw')} 
                           disabled={isTransferring}
-                          className="w-full h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-extrabold cursor-pointer rounded-lg text-sm"
+                          className="w-full h-10 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-extrabold cursor-pointer rounded-lg text-xs"
                         >
                           {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                           {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
@@ -602,29 +602,29 @@ export default function PlayersPage() {
                       setShowConfirmPassword(false)
                     }}
                   >
-                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "w-full h-11 border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-xs font-extrabold rounded-xl" })}>
-                      <KeyRound className="mr-1.5 h-4 w-4" /> Password
+                    <DialogTrigger className="w-full h-10 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-xs font-extrabold rounded-xl flex items-center justify-center bg-transparent">
+                      <KeyRound className="mr-1 h-3.5 w-3.5" /> Password
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground rounded-2xl">
+                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
                       <DialogHeader>
-                        <DialogTitle className="font-black">Reset Player Password</DialogTitle>
+                        <DialogTitle className="font-black text-lg">Reset Player Password</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
                           Set a new password for {selectedPlayer.name}.
                         </DialogDescription>
                       </DialogHeader>
-                      <form onSubmit={handleResetPassword} className="space-y-4 py-2">
+                      <form onSubmit={handleResetPassword} className="space-y-3 py-2">
                         {resetPasswordError && (
-                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                             {resetPasswordError}
                           </div>
                         )}
                         {resetPasswordSuccess && (
-                          <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                          <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
                             {resetPasswordSuccess}
                           </div>
                         )}
-                        <div className="space-y-1.5">
-                          <Label htmlFor="new-password">New Password</Label>
+                        <div className="space-y-1">
+                          <Label htmlFor="new-password text-[10px]">New Password</Label>
                           <div className="relative">
                             <Input 
                               id="new-password" 
@@ -632,7 +632,7 @@ export default function PlayersPage() {
                               placeholder="At least 6 characters" 
                               value={newPassword}
                               onChange={(e) => setNewPassword(e.target.value)}
-                              className="h-11 w-full bg-background border-border text-foreground pr-10 text-sm rounded-lg" 
+                              className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg" 
                               required
                             />
                             <button
@@ -640,12 +640,12 @@ export default function PlayersPage() {
                               onClick={() => setShowNewPassword(!showNewPassword)}
                               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
                             >
-                              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                             </button>
                           </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="confirm-password">Confirm Password</Label>
+                        <div className="space-y-1">
+                          <Label htmlFor="confirm-password text-[10px]">Confirm Password</Label>
                           <div className="relative">
                             <Input 
                               id="confirm-password" 
@@ -653,7 +653,7 @@ export default function PlayersPage() {
                               placeholder="Confirm new password" 
                               value={confirmPassword}
                               onChange={(e) => setConfirmPassword(e.target.value)}
-                              className="h-11 w-full bg-background border-border text-foreground pr-10 text-sm rounded-lg" 
+                              className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg" 
                               required
                             />
                             <button
@@ -661,7 +661,7 @@ export default function PlayersPage() {
                               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
                             >
-                              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              {showConfirmPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                             </button>
                           </div>
                         </div>
@@ -670,7 +670,7 @@ export default function PlayersPage() {
                           <Button 
                             type="submit" 
                             disabled={isResettingPassword}
-                            className="w-full h-11 font-extrabold cursor-pointer text-sm rounded-lg"
+                            className="w-full h-10 font-extrabold cursor-pointer text-xs rounded-lg"
                           >
                             {isResettingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             {isResettingPassword ? 'Updating Password...' : 'Save New Password'}
@@ -685,15 +685,14 @@ export default function PlayersPage() {
                     onClick={handleToggleStatus}
                     disabled={isTogglingStatus}
                     variant="outline"
-                    size="sm"
-                    className={`w-full h-11 font-extrabold cursor-pointer rounded-xl text-xs ${
+                    className={`w-full h-10 font-extrabold cursor-pointer rounded-xl text-xs flex items-center justify-center ${
                       selectedPlayer.status === 'Active'
                         ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
                         : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
                     }`}
                   >
-                    {isTogglingStatus ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : (
-                      selectedPlayer.status === 'Active' ? <UserX className="mr-1.5 h-4 w-4" /> : <UserCheck className="mr-1.5 h-4 w-4" />
+                    {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
+                      selectedPlayer.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
                     )}
                     {selectedPlayer.status === 'Active' ? 'Disable Player' : 'Activate Player'}
                   </Button>
@@ -701,35 +700,35 @@ export default function PlayersPage() {
               </Card>
 
               {/* History Section Container */}
-              <Card className="border-border/80 bg-card/95 rounded-2xl overflow-hidden shadow-lg">
+              <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
                 {/* Tab Controls */}
                 <div className="flex border-b border-border/60 bg-secondary/20">
                   <button
                     onClick={() => setActiveTab('games')}
-                    className={`flex-1 py-3 text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center space-x-2 border-b-2 ${
+                    className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
                       activeTab === 'games' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <Gamepad2 className="h-4 w-4 text-primary" />
+                    <Gamepad2 className="h-3.5 w-3.5 text-primary" />
                     <span>Game Plays</span>
                     {isLoadingHistory ? (
-                      <span className="inline-block h-3.5 w-5 rounded bg-secondary/80 animate-pulse" />
+                      <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
                     ) : (
-                      <span className="text-xs text-muted-foreground">({gamePlays.length})</span>
+                      <span className="text-[10px] text-muted-foreground">({gamePlays.length})</span>
                     )}
                   </button>
                   <button
                     onClick={() => setActiveTab('points')}
-                    className={`flex-1 py-3 text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center space-x-2 border-b-2 ${
+                    className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
                       activeTab === 'points' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <Coins className="h-4 w-4 text-amber-400" />
+                    <Coins className="h-3.5 w-3.5 text-amber-400" />
                     <span>Coins History</span>
                     {isLoadingHistory ? (
-                      <span className="inline-block h-3.5 w-5 rounded bg-secondary/80 animate-pulse" />
+                      <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
                     ) : (
-                      <span className="text-xs text-muted-foreground">({pointsHistory.length})</span>
+                      <span className="text-[10px] text-muted-foreground">({pointsHistory.length})</span>
                     )}
                   </button>
                 </div>
@@ -737,13 +736,13 @@ export default function PlayersPage() {
                 {/* Tab Content Display */}
                 <div className="overflow-x-auto table-scroll">
                   {isLoadingHistory ? (
-                    <div className="p-6 space-y-3">
+                    <div className="p-4 space-y-2.5">
                       {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="flex items-center justify-between gap-4 p-3.5 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
-                          <div className="h-4 bg-secondary/80 rounded w-1/4" />
-                          <div className="h-4 bg-secondary/60 rounded w-1/3" />
-                          <div className="h-4 bg-secondary/70 rounded w-1/6" />
-                          <div className="h-4 bg-secondary/80 rounded w-1/5" />
+                        <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
+                          <div className="h-3.5 bg-secondary/80 rounded w-1/4" />
+                          <div className="h-3.5 bg-secondary/60 rounded w-1/3" />
+                          <div className="h-3.5 bg-secondary/70 rounded w-1/6" />
+                          <div className="h-3.5 bg-secondary/80 rounded w-1/5" />
                         </div>
                       ))}
                     </div>
@@ -752,46 +751,54 @@ export default function PlayersPage() {
                       <Table>
                         <TableHeader>
                           <TableRow className="border-border hover:bg-transparent bg-secondary/20">
-                            <TableHead className="w-10"></TableHead>
-                            <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Spin ID</TableHead>
-                            <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[110px]">Game</TableHead>
-                            <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Mode</TableHead>
-                            <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win Result</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Bet</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win</TableHead>
-                            <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[80px]">Status</TableHead>
+                            <TableHead className="w-8"></TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Spin ID</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[100px]">Game</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[120px]">Mode</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
+                            <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win Result</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Bet</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win</TableHead>
+                            <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[70px]">Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {gamePlays.map((spin) => {
                             const isExpanded = !!expandedSpins[spin.id]
+                            const singleCount = Object.keys(spin.singleBets || {}).length
+                            const doubleCount = Object.keys(spin.doubleBets || {}).length
+                            const tripleCount = Object.keys(spin.tripleBets || {}).length
+
                             return (
                               <React.Fragment key={spin.id}>
                                 <TableRow className="border-border hover:bg-secondary/30 transition-colors">
-                                  <TableCell>
+                                  <TableCell className="p-2">
                                     <button
                                       onClick={() => toggleSpinExpand(spin.id)}
                                       className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
                                       style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
                                       aria-label={isExpanded ? "Collapse details" : "Expand details"}
                                     >
-                                      <ChevronRight className="h-4 w-4" />
+                                      <ChevronRight className="h-3.5 w-3.5" />
                                     </button>
                                   </TableCell>
-                                  <TableCell className="font-mono text-xs font-bold text-foreground">{spin.id}</TableCell>
-                                  <TableCell className="text-xs font-semibold text-foreground">{spin.game}</TableCell>
-                                  <TableCell className="text-xs font-bold text-primary">{spin.mode}</TableCell>
-                                  <TableCell className="text-center font-mono font-extrabold text-xs text-primary bg-primary/10 rounded-lg px-2 py-0.5">
-                                    {spin.resultNumber.toString().padStart(3, '0')}
+                                  <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{spin.id}</TableCell>
+                                  <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{spin.game}</TableCell>
+                                  <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
+                                  <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.date}</TableCell>
+                                  <TableCell className="text-center p-2.5">
+                                    <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
+                                      {spin.resultNumber.toString().padStart(3, '0')}
+                                    </span>
                                   </TableCell>
-                                  <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                                  <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
                                     {formatCurrency(spin.bet)}
                                   </TableCell>
-                                  <TableCell className={`text-right font-mono text-xs font-bold ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                  <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
                                     {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
                                   </TableCell>
-                                  <TableCell className="text-center">
-                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
+                                  <TableCell className="text-center p-2.5">
+                                    <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
                                       spin.status === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
                                     }`}>
                                       {spin.status}
@@ -799,43 +806,54 @@ export default function PlayersPage() {
                                   </TableCell>
                                 </TableRow>
 
+                                {/* --- EXPANDED DETAILS PANEL (OPTIMIZED ACROSS ALL DEVICES) --- */}
                                 {isExpanded && (
-                                  <TableRow className="border-border bg-secondary/5 hover:bg-secondary/5">
-                                    <TableCell colSpan={8} className="p-4">
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                                  <TableRow className="border-border bg-secondary/10 hover:bg-secondary/10">
+                                    <TableCell colSpan={9} className="p-3 sm:p-4">
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         {/* Single Digit Picks (Black) */}
-                                        <div className="p-3.5 rounded-xl bg-card border border-border/60">
-                                          <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">
-                                            <span className="w-2.5 h-2.5 rounded-full bg-zinc-950 border border-zinc-700 inline-block shrink-0" />
-                                            Single Picks (Black)
-                                          </h4>
-                                          {Object.keys(spin.singleBets || {}).length > 0 ? (
-                                            <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                        <div className="p-3 rounded-xl bg-card border border-border/70 shadow-xs">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-black text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                              <span className="w-2 h-2 rounded-full bg-zinc-950 border border-zinc-600 shrink-0" />
+                                              Single Picks (Black)
+                                            </h4>
+                                            <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/60 px-1.5 py-0.2 rounded">
+                                              {singleCount} {singleCount === 1 ? 'pick' : 'picks'}
+                                            </span>
+                                          </div>
+                                          {singleCount > 0 ? (
+                                            <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                                               {Object.entries(spin.singleBets).map(([num, val]) => {
                                                 const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
                                                 return (
                                                   <div key={num} className={`flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
-                                                    isWinning ? 'bg-zinc-950 text-zinc-50 border border-zinc-700 font-extrabold shadow-sm' : 'text-muted-foreground/90'
+                                                    isWinning ? 'bg-zinc-950 text-white border border-zinc-700 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
                                                   }`}>
-                                                    <span>Digit: <strong className="text-foreground">{num}</strong></span>
-                                                    <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                                    <span>Digit: <strong className="font-black text-primary">{num}</strong></span>
+                                                    <span className="font-mono font-bold">{formatCurrency(val)} Coins</span>
                                                   </div>
                                                 )
                                               })}
                                             </div>
                                           ) : (
-                                            <p className="text-[10px] text-muted-foreground italic">No Single bets placed.</p>
+                                            <p className="text-[10px] text-muted-foreground italic py-1">No Single bets placed.</p>
                                           )}
                                         </div>
 
                                         {/* Double Digit Picks (Green) */}
-                                        <div className="p-3.5 rounded-xl bg-card border border-border/60">
-                                          <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">
-                                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shrink-0" />
-                                            Double Picks (Green)
-                                          </h4>
-                                          {Object.keys(spin.doubleBets || {}).length > 0 ? (
-                                            <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                        <div className="p-3 rounded-xl bg-card border border-border/70 shadow-xs">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-black text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                              Double Picks (Green)
+                                            </h4>
+                                            <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/60 px-1.5 py-0.2 rounded">
+                                              {doubleCount} {doubleCount === 1 ? 'pick' : 'picks'}
+                                            </span>
+                                          </div>
+                                          {doubleCount > 0 ? (
+                                            <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                                               {Object.entries(spin.doubleBets).map(([num, val]) => {
                                                 const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
                                                   ? `${spin.greenDigit}${spin.blackDigit}` 
@@ -843,27 +861,32 @@ export default function PlayersPage() {
                                                 const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
                                                 return (
                                                   <div key={num} className={`flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
-                                                    isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-extrabold shadow-sm' : 'text-muted-foreground/90'
+                                                    isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
                                                   }`}>
-                                                    <span>Picks: <strong className="text-foreground">{num.padStart(2, '0')}</strong></span>
-                                                    <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                                    <span>Picks: <strong className="font-black text-primary">{num.padStart(2, '0')}</strong></span>
+                                                    <span className="font-mono font-bold">{formatCurrency(val)} Coins</span>
                                                   </div>
                                                 )
                                               })}
                                             </div>
                                           ) : (
-                                            <p className="text-[10px] text-muted-foreground italic">No Double bets placed.</p>
+                                            <p className="text-[10px] text-muted-foreground italic py-1">No Double bets placed.</p>
                                           )}
                                         </div>
 
                                         {/* Triple Digit Picks (Red) */}
-                                        <div className="p-3.5 rounded-xl bg-card border border-border/60">
-                                          <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">
-                                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shrink-0" />
-                                            Triple Picks (Red)
-                                          </h4>
-                                          {Object.keys(spin.tripleBets || {}).length > 0 ? (
-                                            <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                        <div className="p-3 rounded-xl bg-card border border-border/70 shadow-xs">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-black text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                                              Triple Picks (Red)
+                                            </h4>
+                                            <span className="text-[10px] font-mono font-bold text-muted-foreground bg-secondary/60 px-1.5 py-0.2 rounded">
+                                              {tripleCount} {tripleCount === 1 ? 'pick' : 'picks'}
+                                            </span>
+                                          </div>
+                                          {tripleCount > 0 ? (
+                                            <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                                               {Object.entries(spin.tripleBets).map(([num, val]) => {
                                                 const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
                                                   ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
@@ -871,16 +894,16 @@ export default function PlayersPage() {
                                                 const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
                                                 return (
                                                   <div key={num} className={`flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
-                                                    isWinning ? 'bg-red-500/20 text-red-400 border border-red-500/30 font-extrabold shadow-sm' : 'text-muted-foreground/90'
+                                                    isWinning ? 'bg-red-500/20 text-red-400 border border-red-500/40 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
                                                   }`}>
-                                                    <span>Picks: <strong className="text-foreground">{num.padStart(3, '0')}</strong></span>
-                                                    <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                                    <span>Picks: <strong className="font-black text-primary">{num.padStart(3, '0')}</strong></span>
+                                                    <span className="font-mono font-bold">{formatCurrency(val)} Coins</span>
                                                   </div>
                                                 )
                                               })}
                                             </div>
                                           ) : (
-                                            <p className="text-[10px] text-muted-foreground italic">No Triple bets placed.</p>
+                                            <p className="text-[10px] text-muted-foreground italic py-1">No Triple bets placed.</p>
                                           )}
                                         </div>
                                       </div>
@@ -893,7 +916,7 @@ export default function PlayersPage() {
                         </TableBody>
                       </Table>
                     ) : (
-                      <div className="p-12 text-center text-xs text-muted-foreground font-medium">
+                      <div className="p-10 text-center text-xs text-muted-foreground font-medium">
                         No game play history recorded yet for this player.
                       </div>
                     )
@@ -902,20 +925,20 @@ export default function PlayersPage() {
                       <Table>
                         <TableHeader>
                           <TableRow className="border-border hover:bg-transparent bg-secondary/20">
-                            <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[120px]">Transaction ID</TableHead>
-                            <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[140px]">Date & Time</TableHead>
-                            <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Type</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Amount</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[120px]">Balance After</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Transaction ID</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Type</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Amount</TableHead>
+                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Balance After</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {pointsHistory.map((tx) => (
                             <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
-                              <TableCell className="font-mono text-xs font-bold text-foreground">{tx.id}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">{tx.date}</TableCell>
-                              <TableCell className="text-xs">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
+                              <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
+                              <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
+                              <TableCell className="text-[11px] p-2.5">
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
                                   tx.type === 'deposit'
                                     ? 'bg-success-bg text-success-text border border-emerald-500/20'
                                     : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
@@ -923,12 +946,12 @@ export default function PlayersPage() {
                                   {tx.type}
                                 </span>
                               </TableCell>
-                              <TableCell className={`text-right font-mono text-xs font-extrabold ${
+                              <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
                                 tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
                               }`}>
                                 {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
                               </TableCell>
-                              <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                              <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
                                 {formatCurrency(tx.balanceAfter)}
                               </TableCell>
                             </TableRow>
@@ -936,7 +959,7 @@ export default function PlayersPage() {
                         </TableBody>
                       </Table>
                     ) : (
-                      <div className="p-12 text-center text-xs text-muted-foreground font-medium">
+                      <div className="p-10 text-center text-xs text-muted-foreground font-medium">
                         No coin transactions recorded yet for this player.
                       </div>
                     )
