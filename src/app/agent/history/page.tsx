@@ -67,7 +67,26 @@ export default function HistoryPage() {
       txn.target.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesType = typeFilter === 'all' || txn.type === typeFilter
 
-    return matchesSearch && matchesType
+    let matchesDate = true
+    if (datePreset !== 'all') {
+      const now = new Date()
+      const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      const istTodayStart = new Date(`${todayIST}T00:00:00+05:30`).getTime()
+
+      const txnTime = new Date(txn.date).getTime()
+
+      if (datePreset === 'today') {
+        matchesDate = txnTime >= istTodayStart
+      } else if (datePreset === '7days') {
+        const d7 = now.getTime() - 7 * 24 * 60 * 60 * 1000
+        matchesDate = txnTime >= d7
+      } else if (datePreset === '30days') {
+        const d30 = now.getTime() - 30 * 24 * 60 * 60 * 1000
+        matchesDate = txnTime >= d30
+      }
+    }
+
+    return matchesSearch && matchesType && matchesDate
   })
 
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1
