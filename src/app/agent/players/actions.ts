@@ -177,6 +177,12 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
     win: number
     status: 'WON' | 'LOST'
     date: string
+    singleBets: Record<string, number>
+    doubleBets: Record<string, number>
+    tripleBets: Record<string, number>
+    redDigit: number | null
+    greenDigit: number | null
+    blackDigit: number | null
   }> = []
 
   try {
@@ -198,10 +204,16 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
           }
         }
 
+        const activeModes = []
+        if (p.single_bets && Object.keys(p.single_bets).length > 0) activeModes.push('SINGLE')
+        if (p.double_bets && Object.keys(p.double_bets).length > 0) activeModes.push('DOUBLE')
+        if (p.triple_bets && Object.keys(p.triple_bets).length > 0) activeModes.push('TRIPLE')
+        const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : (p.mode || 'single').toUpperCase()
+
         return {
           id: p.id.substring(0, 8),
           game: p.game_name || 'Triple Chance',
-          mode: (p.mode || 'single').toUpperCase(),
+          mode: modeLabel,
           selections: selText,
           resultNumber: p.result_number,
           bet: Number(p.bet_amount || 0),
@@ -213,7 +225,13 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
-          })
+          }),
+          singleBets: p.single_bets || {},
+          doubleBets: p.double_bets || {},
+          tripleBets: p.triple_bets || {},
+          redDigit: p.red_digit,
+          greenDigit: p.green_digit,
+          blackDigit: p.black_digit
         }
       })
     }

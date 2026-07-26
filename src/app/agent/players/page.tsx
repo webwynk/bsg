@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff } from "lucide-react"
+import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff, ChevronRight } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
@@ -46,7 +46,18 @@ export default function PlayersPage() {
     win: number
     status: 'WON' | 'LOST'
     date: string
+    singleBets: Record<string, number>
+    doubleBets: Record<string, number>
+    tripleBets: Record<string, number>
+    redDigit: number | null
+    greenDigit: number | null
+    blackDigit: number | null
   }>>([])
+  const [expandedSpins, setExpandedSpins] = React.useState<Record<string, boolean>>({})
+
+  const toggleSpinExpand = (spinId: string) => {
+    setExpandedSpins(prev => ({ ...prev, [spinId]: !prev[spinId] }))
+  }
   const [pointsHistory, setPointsHistory] = React.useState<Array<{
     id: string
     type: 'deposit' | 'withdraw'
@@ -626,13 +637,14 @@ export default function PlayersPage() {
                 ))}
               </div>
             ) : activeTab === 'games' ? (
-              gamePlays.length > 0 ? (
+               gamePlays.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border hover:bg-transparent">
+                      <TableHead className="w-10"></TableHead>
                       <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Spin ID</TableHead>
                       <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[110px]">Game</TableHead>
-                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[160px]">Selections Bet</TableHead>
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[140px]">Mode</TableHead>
                       <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win Result</TableHead>
                       <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Bet</TableHead>
                       <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win</TableHead>
@@ -640,31 +652,133 @@ export default function PlayersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {gamePlays.map((spin) => (
-                      <TableRow key={spin.id} className="border-border hover:bg-secondary/30">
-                        <TableCell className="font-mono text-xs font-bold text-foreground">{spin.id}</TableCell>
-                        <TableCell className="text-xs font-semibold text-foreground">{spin.game}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={spin.selections}>
-                          {spin.selections}
-                        </TableCell>
-                        <TableCell className="text-center font-mono font-extrabold text-xs text-primary bg-primary/5 rounded">
-                          {spin.resultNumber.toString().padStart(3, '0')}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold text-foreground">
-                          {formatCurrency(spin.bet)}
-                        </TableCell>
-                        <TableCell className={`text-right font-mono text-xs font-bold ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                          {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                            spin.status === 'WON' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'
-                          }`}>
-                            {spin.status}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {gamePlays.map((spin) => {
+                      const isExpanded = !!expandedSpins[spin.id]
+                      return (
+                        <React.Fragment key={spin.id}>
+                          <TableRow className="border-border hover:bg-secondary/30">
+                            <TableCell>
+                              <button
+                                onClick={() => toggleSpinExpand(spin.id)}
+                                className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
+                                style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                                aria-label={isExpanded ? "Collapse details" : "Expand details"}
+                              >
+                                <ChevronRight className="h-4 w-4" />
+                              </button>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs font-bold text-foreground">{spin.id}</TableCell>
+                            <TableCell className="text-xs font-semibold text-foreground">{spin.game}</TableCell>
+                            <TableCell className="text-xs font-bold text-primary">{spin.mode}</TableCell>
+                            <TableCell className="text-center font-mono font-extrabold text-xs text-primary bg-primary/5 rounded">
+                              {spin.resultNumber.toString().padStart(3, '0')}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                              {formatCurrency(spin.bet)}
+                            </TableCell>
+                            <TableCell className={`text-right font-mono text-xs font-bold ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                              {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                                spin.status === 'WON' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'
+                              }`}>
+                                {spin.status}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+
+                          {isExpanded && (
+                            <TableRow className="border-border bg-secondary/5 hover:bg-secondary/5">
+                              <TableCell colSpan={8} className="p-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                                  {/* Single Digit Picks (Black) */}
+                                  <div className="p-3 rounded-lg bg-card border border-border/50">
+                                    <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-zinc-950 border border-zinc-700 inline-block shrink-0" />
+                                      Single Picks (Black)
+                                    </h4>
+                                    {Object.keys(spin.singleBets || {}).length > 0 ? (
+                                      <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                        {Object.entries(spin.singleBets).map(([num, val]) => {
+                                          const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
+                                          return (
+                                            <div key={num} className={`flex items-center justify-between p-1.5 rounded text-[11px] ${
+                                              isWinning ? 'bg-zinc-950 text-zinc-50 border border-zinc-700 font-extrabold' : 'text-muted-foreground/90'
+                                            }`}>
+                                              <span>Digit: <strong className="text-foreground">{num}</strong></span>
+                                              <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] text-muted-foreground italic">No Single bets placed.</p>
+                                    )}
+                                  </div>
+
+                                  {/* Double Digit Picks (Green) */}
+                                  <div className="p-3 rounded-lg bg-card border border-border/50">
+                                    <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+                                      Double Picks (Green)
+                                    </h4>
+                                    {Object.keys(spin.doubleBets || {}).length > 0 ? (
+                                      <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                        {Object.entries(spin.doubleBets).map(([num, val]) => {
+                                          const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
+                                            ? `${spin.greenDigit}${spin.blackDigit}` 
+                                            : null
+                                          const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
+                                          return (
+                                            <div key={num} className={`flex items-center justify-between p-1.5 rounded text-[11px] ${
+                                              isWinning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-extrabold' : 'text-muted-foreground/90'
+                                            }`}>
+                                              <span>Picks: <strong className="text-foreground">{num.padStart(2, '0')}</strong></span>
+                                              <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] text-muted-foreground italic">No Double bets placed.</p>
+                                    )}
+                                  </div>
+
+                                  {/* Triple Digit Picks (Red) */}
+                                  <div className="p-3 rounded-lg bg-card border border-border/50">
+                                    <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-red-500 inline-block shrink-0" />
+                                      Triple Picks (Red)
+                                    </h4>
+                                    {Object.keys(spin.tripleBets || {}).length > 0 ? (
+                                      <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                        {Object.entries(spin.tripleBets).map(([num, val]) => {
+                                          const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
+                                            ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
+                                            : null
+                                          const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
+                                          return (
+                                            <div key={num} className={`flex items-center justify-between p-1.5 rounded text-[11px] ${
+                                              isWinning ? 'bg-red-500/20 text-red-400 border border-red-500/30 font-extrabold' : 'text-muted-foreground/90'
+                                            }`}>
+                                              <span>Picks: <strong className="text-foreground">{num.padStart(3, '0')}</strong></span>
+                                              <span className="font-mono">{formatCurrency(val)} Coins</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] text-muted-foreground italic">No Triple bets placed.</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               ) : (
