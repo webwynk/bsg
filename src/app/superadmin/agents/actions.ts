@@ -232,9 +232,23 @@ export async function transferPointsAction(targetId: string, amount: number, typ
           }
         })
 
+        // Insert transaction record into public.transactions table
+        try {
+          await supabaseAdmin.from('transactions').insert({
+            user_id: targetId,
+            agent_id: agentId,
+            user_name: targetUser.user_metadata?.full_name || targetUsername,
+            user_username: targetUsername,
+            type: 'agent_credit',
+            amount: sanitizedAmount,
+            balance_after: newPlayerBalance
+          })
+        } catch (_) {}
+
         await logAuditEventAction('Transaction', `Agent @${agentUsername} deposited ${sanitizedAmount.toLocaleString()} Coins to Player @${targetUsername}`)
         revalidatePath('/agent')
         revalidatePath('/agent/players')
+        revalidatePath('/agent/history')
         revalidatePath('/superadmin/agents')
         revalidatePath(`/superadmin/agents/${agentId}`)
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
@@ -261,9 +275,23 @@ export async function transferPointsAction(targetId: string, amount: number, typ
           user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
         })
 
+        // Insert transaction record into public.transactions table
+        try {
+          await supabaseAdmin.from('transactions').insert({
+            user_id: targetId,
+            agent_id: agentId,
+            user_name: targetUser.user_metadata?.full_name || targetUsername,
+            user_username: targetUsername,
+            type: 'agent_debit',
+            amount: -sanitizedAmount,
+            balance_after: newPlayerBalance
+          })
+        } catch (_) {}
+
         await logAuditEventAction('Transaction', `Agent @${agentUsername} withdrew ${sanitizedAmount.toLocaleString()} Coins from Player @${targetUsername}`)
         revalidatePath('/agent')
         revalidatePath('/agent/players')
+        revalidatePath('/agent/history')
         revalidatePath('/superadmin/agents')
         revalidatePath(`/superadmin/agents/${agentId}`)
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }

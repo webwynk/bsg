@@ -16,13 +16,42 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
-import { createPlayerAction, getPlayersAction, togglePlayerStatusAction } from './actions'
+import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction } from './actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 export default function PlayersPage() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
+
+  // History data states
+  const [gamePlays, setGamePlays] = React.useState<Array<{
+    id: string
+    game: string
+    mode: string
+    selections: string
+    resultNumber: number
+    bet: number
+    win: number
+    status: 'WON' | 'LOST'
+    date: string
+  }>>([])
+  const [pointsHistory, setPointsHistory] = React.useState<Array<{
+    id: string
+    type: 'deposit' | 'withdraw'
+    amount: number
+    balanceAfter: number
+    date: string
+  }>>([])
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
 
   // Create Player modal state
   const [isOpen, setIsOpen] = React.useState(false)
@@ -39,24 +68,44 @@ export default function PlayersPage() {
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
 
+  const loadPlayerHistory = React.useCallback((playerId: string) => {
+    setIsLoadingHistory(true)
+    getPlayerDetailHistoryAction(playerId).then((res) => {
+      setIsLoadingHistory(false)
+      if (res) {
+        setGamePlays(res.gamePlays)
+        setPointsHistory(res.pointsHistory)
+      }
+    })
+  }, [])
+
   const loadPlayers = React.useCallback((currentSelectedId?: string) => {
     getPlayersAction().then((res) => {
       if (res.players) {
         setPlayers(res.players)
         const targetId = currentSelectedId || selectedPlayer?.id
         if (targetId) {
-          const match = res.players.find(p => p.id === targetId)
-          if (match) setSelectedPlayer(match)
+          const updated = res.players.find(p => p.id === targetId)
+          if (updated) {
+            setSelectedPlayer(updated)
+            loadPlayerHistory(updated.id)
+          }
         } else if (res.players.length > 0) {
           setSelectedPlayer(res.players[0])
+          loadPlayerHistory(res.players[0].id)
         }
       }
     })
-  }, [selectedPlayer?.id])
+  }, [selectedPlayer?.id, loadPlayerHistory])
 
   React.useEffect(() => {
     loadPlayers()
-  }, [loadPlayers])
+  }, [])
+
+  const handleSelectPlayer = (player: typeof players[0]) => {
+    setSelectedPlayer(player)
+    loadPlayerHistory(player.id)
+  }
 
   const handleCreatePlayer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -367,7 +416,7 @@ export default function PlayersPage() {
                 activeTab === 'games' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              Game Plays (0)
+              Game Plays ({gamePlays.length})
             </button>
             <button
               onClick={() => setActiveTab('points')}
@@ -375,12 +424,106 @@ export default function PlayersPage() {
                 activeTab === 'points' ? 'border-primary text-foreground bg-secondary/50' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              Coins History (0)
+              Coins History ({pointsHistory.length})
             </button>
           </div>
 
-          <div className="flex-1 overflow-hidden flex flex-col justify-center items-center bg-card text-foreground p-8 text-center text-xs text-muted-foreground">
-            {selectedPlayer ? 'No activity recorded yet for this player.' : 'Select a player to view full history and audit logs.'}
+          <div className="flex-1 overflow-y-auto bg-card text-foreground">
+            {isLoadingHistory ? (
+              <div className="p-12 text-center text-xs text-muted-foreground font-medium flex items-center justify-center space-x-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span>Loading player audit records...</span>
+              </div>
+            ) : activeTab === 'games' ? (
+              gamePlays.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border hover:bg-transparent">
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Spin ID</TableHead>
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[110px]">Game</TableHead>
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[160px]">Selections Bet</TableHead>
+                      <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win Result</TableHead>
+                      <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Bet</TableHead>
+                      <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[90px]">Win</TableHead>
+                      <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[80px]">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {gamePlays.map((spin) => (
+                      <TableRow key={spin.id} className="border-border hover:bg-secondary/30">
+                        <TableCell className="font-mono text-xs font-bold text-foreground">{spin.id}</TableCell>
+                        <TableCell className="text-xs font-semibold text-foreground">{spin.game}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={spin.selections}>
+                          {spin.selections}
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-extrabold text-xs text-primary bg-primary/5 rounded">
+                          {spin.resultNumber.toString().padStart(3, '0')}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                          {formatCurrency(spin.bet)}
+                        </TableCell>
+                        <TableCell className={`text-right font-mono text-xs font-bold ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                          {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                            spin.status === 'WON' ? 'bg-success-bg text-success-text' : 'bg-danger-bg text-danger-text'
+                          }`}>
+                            {spin.status}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-12 text-center text-xs text-muted-foreground font-medium">
+                  {selectedPlayer ? 'No game play history recorded yet for this player.' : 'Select a player to view game play history.'}
+                </div>
+              )
+            ) : (
+              pointsHistory.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border hover:bg-transparent">
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[120px]">Transaction ID</TableHead>
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[140px]">Date & Time</TableHead>
+                      <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Type</TableHead>
+                      <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[100px]">Amount</TableHead>
+                      <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[120px]">Balance After</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pointsHistory.map((tx) => (
+                      <TableRow key={tx.id} className="border-border hover:bg-secondary/30">
+                        <TableCell className="font-mono text-xs font-bold text-foreground">{tx.id}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{tx.date}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center text-xs font-bold ${
+                            tx.type === 'deposit' ? 'text-success-text' : 'text-danger-text'
+                          }`}>
+                            {tx.type === 'deposit' ? <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> : <ArrowDownRight className="mr-1 h-3.5 w-3.5" />}
+                            {tx.type === 'deposit' ? 'Deposit (+)' : 'Withdrawal (-)'}
+                          </span>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono text-xs font-bold ${
+                          tx.type === 'deposit' ? 'text-success-text' : 'text-danger-text'
+                        }`}>
+                          {tx.type === 'deposit' ? '+' : '-'}{formatCurrency(tx.amount)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                          {formatCurrency(tx.balanceAfter)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-12 text-center text-xs text-muted-foreground font-medium">
+                  {selectedPlayer ? 'No cashier transactions recorded yet for this player.' : 'Select a player to view cashier history.'}
+                </div>
+              )
+            )}
           </div>
         </Card>
       </div>

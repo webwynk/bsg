@@ -19,8 +19,9 @@ import { getAgentDashboardDataAction } from './actions'
 
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
-  const [recentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
+  const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
   const [balance, setBalance] = React.useState(0)
+  const [todaysProfitLoss, setTodaysProfitLoss] = React.useState(0)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   // Quick Transfer widget state
@@ -34,6 +35,10 @@ export default function AgentDashboard() {
     getAgentDashboardDataAction().then((res) => {
       if (res) {
         setBalance(res.balance || 0)
+        setTodaysProfitLoss(res.todaysProfitLoss || 0)
+        if (res.recentTransactions) {
+          setRecentTransactions(res.recentTransactions)
+        }
       }
     })
     getPlayersAction().then((res) => {
@@ -124,8 +129,10 @@ export default function AgentDashboard() {
             <ArrowUpRight className="h-4 w-4 text-success-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success-text font-mono">{formatCurrency(0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Based on player win/loss records</p>
+            <div className={`text-2xl font-bold font-mono ${todaysProfitLoss >= 0 ? 'text-success-text' : 'text-danger-text'}`}>
+              {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Based on player win/loss records today</p>
           </CardContent>
         </Card>
       </div>

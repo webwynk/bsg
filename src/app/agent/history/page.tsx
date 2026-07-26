@@ -13,12 +13,21 @@ import { Input } from "@/components/ui/input"
 import { formatCurrency } from "@/lib/utils"
 import { ArrowDownRight, ArrowUpRight, Check } from "lucide-react"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { getAgentTransactionHistoryAction } from '../actions'
 
 export default function HistoryPage() {
-  const [transactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string; status: string }>>([])
+  const [transactions, setTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string; status: string }>>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const itemsPerPage = 10
+
+  React.useEffect(() => {
+    getAgentTransactionHistoryAction().then((res) => {
+      if (res.transactions) {
+        setTransactions(res.transactions)
+      }
+    })
+  }, [])
 
   const filteredTransactions = transactions.filter(txn =>
     txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||

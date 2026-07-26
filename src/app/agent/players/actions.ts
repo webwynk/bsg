@@ -153,3 +153,105 @@ export async function togglePlayerStatusAction(playerId: string, currentStatus: 
 
   return { error: 'Service Role Key not configured.' }
 }
+
+export async function getPlayerDetailHistoryAction(playerId: string) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (!serviceRoleKey || !supabaseUrl || !playerId) {
+    return { gamePlays: [], pointsHistory: [] }
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
+
+  // 1. Fetch game plays from public.game_history
+  let gamePlays: Array<{
+    id: string
+    game: string
+    mode: string
+    selections: string
+    resultNumber: number
+    bet: number
+    win: number
+    status: 'WON' | 'LOST'
+    date: string
+  }> = []
+
+  try {
+    const { data: plays } = await supabaseAdmin
+      .from('game_history')
+      .select('*')
+      .eq('user_id', playerId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (plays) {
+      gamePlays = plays.map(p => {
+        let selText = 'No selection'
+        if (p.numbers_picked && typeof p.numbers_picked === 'object') {
+          const modeObj = p.numbers_picked[p.mode] || p.numbers_picked
+          if (typeof modeObj === 'object') {
+            const parts = Object.entries(modeObj).map(([num, val]) => `${(p.mode || 'single').toUpperCase()}: ${num} (${val} Coins)`)
+            if (parts.length > 0) selText = parts.join(', ')
+          }
+        }
+
+        return {
+          id: p.id.substring(0, 8),
+          game: p.game_name || 'Triple Chance',
+          mode: (p.mode || 'single').toUpperCase(),
+          selections: selText,
+          resultNumber: p.result_number,
+          bet: Number(p.bet_amount || 0),
+          win: Number(p.win_amount || 0),
+          status: (p.status || (Number(p.win_amount || 0) > 0 ? 'WON' : 'LOST')) as 'WON' | 'LOST',
+          date: new Date(p.created_at).toLocaleString([], {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }
+      })
+    }
+  } catch (_) {}
+
+  // 2. Fetch cashier points history from public.transactions
+  let pointsHistory: Array<{
+    id: string
+    type: 'deposit' | 'withdraw'
+    amount: number
+    balanceAfter: number
+    date: string
+  }> = []
+
+  try {
+    const { data: txns } = await supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('user_id', playerId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (txns) {
+      pointsHistory = txns.map(tx => ({
+        id: tx.id.substring(0, 8),
+        type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
+        amount: Math.abs(Number(tx.amount || 0)),
+        balanceAfter: Number(tx.balance_after || 0),
+        date: new Date(tx.created_at).toLocaleString([], {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }))
+    }
+  } catch (_) {}
+
+  return { gamePlays, pointsHistory }
+}
