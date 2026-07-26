@@ -20,58 +20,52 @@ export async function getAgentDashboardDataAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(authUser.id)
-      const freshUser = userData?.user || authUser
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+
+      // Execute all sub-queries in parallel via Promise.all
+      const [userRes, profilesRes, spinsRes, txnsRes] = await Promise.all([
+        supabaseAdmin.auth.admin.getUserById(authUser.id),
+        supabaseAdmin.from('profiles').select('id').eq('agent_id', authUser.id),
+        supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStart.toISOString()),
+        supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id).order('created_at', { ascending: false }).limit(5)
+      ])
+
+      const freshUser = userRes.data?.user || authUser
       const balance = freshUser.user_metadata?.balance || 0
 
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      const players = (usersData?.users || []).filter(
-        u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === authUser.id
-      )
+      // Players count from indexed profiles table (or fallback to listUsers if profiles is empty)
+      let playersCount = profilesRes.data ? profilesRes.data.length : 0
+      if (!profilesRes.data || profilesRes.data.length === 0) {
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        playersCount = (usersData?.users || []).filter(
+          u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === authUser.id
+        ).length
+      }
 
-      // Calculate today's profit/loss from game_history for this agent's players
+      // Calculate today's profit/loss from game_history
       let todaysProfitLoss = 0
-      try {
-        const todayStart = new Date()
-        todayStart.setHours(0, 0, 0, 0)
+      if (spinsRes.data && spinsRes.data.length > 0) {
+        const totalBets = spinsRes.data.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
+        const totalWins = spinsRes.data.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+        todaysProfitLoss = totalBets - totalWins
+      }
 
-        const { data: spinsToday } = await supabaseAdmin
-          .from('game_history')
-          .select('bet_amount, win_amount')
-          .eq('agent_id', authUser.id)
-          .gte('created_at', todayStart.toISOString())
-
-        if (spinsToday) {
-          const totalBets = spinsToday.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
-          const totalWins = spinsToday.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
-          todaysProfitLoss = totalBets - totalWins
-        }
-      } catch (_) {}
-
-      // Fetch last 5 cashier transactions from transactions table
+      // Format last 5 cashier transactions
       let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }> = []
-      try {
-        const { data: txns } = await supabaseAdmin
-          .from('transactions')
-          .select('*')
-          .eq('agent_id', authUser.id)
-          .order('created_at', { ascending: false })
-          .limit(5)
-
-        if (txns) {
-          recentTransactions = txns.map(tx => ({
-            id: tx.id,
-            type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
-            amount: Math.abs(Number(tx.amount)),
-            target: tx.user_username || 'player',
-            date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
-          }))
-        }
-      } catch (_) {}
+      if (txnsRes.data && txnsRes.data.length > 0) {
+        recentTransactions = txnsRes.data.map(tx => ({
+          id: tx.id,
+          type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
+          amount: Math.abs(Number(tx.amount)),
+          target: tx.user_username || 'player',
+          date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+        }))
+      }
 
       return {
         balance,
-        playersCount: players.length,
+        playersCount,
         username: freshUser.user_metadata?.username || freshUser.email?.split('@')[0] || 'agent',
         todaysProfitLoss,
         recentTransactions

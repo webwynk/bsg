@@ -51,51 +51,46 @@ export async function getSystemOverviewMetricsAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      const allUsers = usersData?.users || []
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-      const agents = allUsers.filter(u => u.user_metadata?.role === 'agent')
-      const players = allUsers.filter(u => u.user_metadata?.role === 'player')
+      // Execute all 3 database queries in parallel via Promise.all
+      const [profilesRes, txnsRes, betsRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('role, balance'),
+        supabaseAdmin.from('agent_coin_transactions').select('amount').eq('type', 'deposit').gte('created_at', todayStart.toISOString()),
+        supabaseAdmin.from('game_history').select('bet_amount').gte('created_at', twentyFourHoursAgo)
+      ])
 
-      const agentCoins = agents.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
-      const playerCoins = players.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
-      const totalCoins = agentCoins + playerCoins
+      let totalCoins = 0
+      let activeAgents = 0
+      let activePlayers = 0
 
-      // Today's Coins Issued (since 00:00:00 today)
-      let todaysCoinsIssued = 0
-      try {
-        const todayStart = new Date()
-        todayStart.setHours(0, 0, 0, 0)
-
-        const { data: txnsToday } = await supabaseAdmin
-          .from('agent_coin_transactions')
-          .select('amount')
-          .eq('type', 'deposit')
-          .gte('created_at', todayStart.toISOString())
-
-        if (txnsToday) {
-          todaysCoinsIssued = txnsToday.reduce((acc, tx) => acc + Number(tx.amount || 0), 0)
+      if (profilesRes.data && profilesRes.data.length > 0) {
+        for (const p of profilesRes.data) {
+          totalCoins += Number(p.balance || 0)
+          if (p.role === 'agent') activeAgents++
+          if (p.role === 'player') activePlayers++
         }
-      } catch (_) {}
+      } else {
+        // Fallback to Auth listUsers if profiles table query returns empty
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        const allUsers = usersData?.users || []
+        const agents = allUsers.filter(u => u.user_metadata?.role === 'agent')
+        const players = allUsers.filter(u => u.user_metadata?.role === 'player')
+        activeAgents = agents.length
+        activePlayers = players.length
+        totalCoins = allUsers.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
+      }
 
-      // Total bets (Sum of bet_amount in 24h) from game_history table
-      let totalBets24h = 0
-      try {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        const { data: betsData } = await supabaseAdmin
-          .from('game_history')
-          .select('bet_amount')
-          .gte('created_at', twentyFourHoursAgo)
-        if (betsData) {
-          totalBets24h = betsData.reduce((acc, row) => acc + Number(row.bet_amount || 0), 0)
-        }
-      } catch (_) {}
+      const todaysCoinsIssued = txnsRes.data ? txnsRes.data.reduce((acc, tx) => acc + Number(tx.amount || 0), 0) : 0
+      const totalBets24h = betsRes.data ? betsRes.data.reduce((acc, row) => acc + Number(row.bet_amount || 0), 0) : 0
 
       return {
         totalCoins,
         todaysCoinsIssued,
-        activeAgents: agents.length,
-        activePlayers: players.length,
+        activeAgents,
+        activePlayers,
         totalBets24h
       }
     } catch (_) {}

@@ -15,6 +15,23 @@ export async function getAgentsAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
+      const { data: profiles, error: profErr } = await supabaseAdmin
+        .from('profiles')
+        .select('id, username, balance, is_active')
+        .eq('role', 'agent')
+
+      if (!profErr && profiles && profiles.length > 0) {
+        const agents = profiles.map(p => ({
+          id: p.id,
+          name: p.username || 'Agent',
+          username: p.username || '',
+          balance: Number(p.balance || 0),
+          status: p.is_active ? 'Active' : 'Blocked'
+        }))
+        return { agents }
+      }
+
+      // Fallback to Auth listUsers if profiles table is empty
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
         const agents = data.users
@@ -44,33 +61,52 @@ export async function getAgentDetailAction(agentId: string) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      const { data: userData, error } = await supabaseAdmin.auth.admin.getUserById(agentId)
-      if (!error && userData?.user) {
-        const u = userData.user
-        
-        let sessions: Array<{ user_id: string; last_seen_at: string }> | null = null
-        try {
-          const { data: sessData } = await supabaseAdmin.from('active_sessions').select('user_id, last_seen_at')
-          sessions = sessData
-        } catch (_) {}
+      // Run sub-queries in parallel via Promise.all
+      const [agentRes, sessRes, playersRes] = await Promise.all([
+        supabaseAdmin.auth.admin.getUserById(agentId),
+        supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', agentId)
+      ])
 
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      if (agentRes.data?.user) {
+        const u = agentRes.data.user
+        const sessions = sessRes.data || null
         const now = new Date().getTime()
-        const agentPlayers = (usersData?.users || [])
-          .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
-          .map(p => {
+
+        let agentPlayers: Array<any> = []
+        if (playersRes.data && playersRes.data.length > 0) {
+          agentPlayers = playersRes.data.map(p => {
             const activeSess = sessions?.find(s => s.user_id === p.id)
             const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
             return {
               id: p.id,
-              name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
-              username: p.user_metadata?.username || p.email?.split('@')[0] || '',
-              balance: p.user_metadata?.balance || 0,
-              status: p.user_metadata?.status || 'Active',
+              name: p.username || 'Player',
+              username: p.username || '',
+              balance: Number(p.balance || 0),
+              status: p.is_active ? 'Active' : 'Blocked',
               isOnline,
               gamePlays: 0
             }
           })
+        } else {
+          // Fallback to Auth listUsers if profiles table returns empty
+          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+          agentPlayers = (usersData?.users || [])
+            .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
+            .map(p => {
+              const activeSess = sessions?.find(s => s.user_id === p.id)
+              const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
+              return {
+                id: p.id,
+                name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
+                username: p.user_metadata?.username || p.email?.split('@')[0] || '',
+                balance: p.user_metadata?.balance || 0,
+                status: p.user_metadata?.status || 'Active',
+                isOnline,
+                gamePlays: 0
+              }
+            })
+        }
 
         return {
           agent: {

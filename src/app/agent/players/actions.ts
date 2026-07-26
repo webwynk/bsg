@@ -18,15 +18,35 @@ export async function getPlayersAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      let sessions: Array<{ user_id: string; last_seen_at: string }> | null = null
-      try {
-        const { data: sessData } = await supabaseAdmin.from('active_sessions').select('user_id, last_seen_at')
-        sessions = sessData
-      } catch (_) {}
+      // Query active_sessions and profiles in parallel using Promise.all
+      const [sessRes, profRes] = await Promise.all([
+        supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', agentId)
+      ])
 
+      const sessions = sessRes.data || null
+      const now = new Date().getTime()
+
+      if (profRes.data && profRes.data.length > 0) {
+        const players = profRes.data.map(p => {
+          const activeSess = sessions?.find(s => s.user_id === p.id)
+          const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
+          return {
+            id: p.id,
+            name: p.username || 'Player',
+            username: p.username || '',
+            balance: Number(p.balance || 0),
+            status: p.is_active ? 'Active' : 'Blocked',
+            isOnline,
+            gamePlays: 0
+          }
+        })
+        return { players }
+      }
+
+      // Fallback to auth listUsers if profiles table query returns empty
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
-        const now = new Date().getTime()
         const players = data.users
           .filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
           .map(u => {
