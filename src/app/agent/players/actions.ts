@@ -18,18 +18,30 @@ export async function getPlayersAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
+      let sessions: Array<{ user_id: string; last_seen_at: string }> | null = null
+      try {
+        const { data: sessData } = await supabaseAdmin.from('active_sessions').select('user_id, last_seen_at')
+        sessions = sessData
+      } catch (_) {}
+
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
+        const now = new Date().getTime()
         const players = data.users
           .filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
-          .map(u => ({
-            id: u.id,
-            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
-            username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-            balance: u.user_metadata?.balance || 0,
-            status: u.user_metadata?.status || 'Active',
-            gamePlays: 0
-          }))
+          .map(u => {
+            const activeSess = sessions?.find(s => s.user_id === u.id)
+            const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
+            return {
+              id: u.id,
+              name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
+              username: u.user_metadata?.username || u.email?.split('@')[0] || '',
+              balance: u.user_metadata?.balance || 0,
+              status: u.user_metadata?.status || 'Active',
+              isOnline,
+              gamePlays: 0
+            }
+          })
         return { players }
       }
     } catch (_) {}

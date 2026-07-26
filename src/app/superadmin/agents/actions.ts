@@ -48,18 +48,29 @@ export async function getAgentDetailAction(agentId: string) {
       if (!error && userData?.user) {
         const u = userData.user
         
-        // Fetch all players belonging strictly to this agent
+        let sessions: Array<{ user_id: string; last_seen_at: string }> | null = null
+        try {
+          const { data: sessData } = await supabaseAdmin.from('active_sessions').select('user_id, last_seen_at')
+          sessions = sessData
+        } catch (_) {}
+
         const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        const now = new Date().getTime()
         const agentPlayers = (usersData?.users || [])
           .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
-          .map(p => ({
-            id: p.id,
-            name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
-            username: p.user_metadata?.username || p.email?.split('@')[0] || '',
-            balance: p.user_metadata?.balance || 0,
-            status: p.user_metadata?.status || 'Active',
-            gamePlays: 0
-          }))
+          .map(p => {
+            const activeSess = sessions?.find(s => s.user_id === p.id)
+            const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
+            return {
+              id: p.id,
+              name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
+              username: p.user_metadata?.username || p.email?.split('@')[0] || '',
+              balance: p.user_metadata?.balance || 0,
+              status: p.user_metadata?.status || 'Active',
+              isOnline,
+              gamePlays: 0
+            }
+          })
 
         return {
           agent: {

@@ -25,7 +25,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2 } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
@@ -39,7 +39,7 @@ export default function AgentDetailPage({ params }: Props) {
   const { agentId } = React.use(params)
   
   const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string } | null>(null)
-  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
+  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; isOnline?: boolean; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
 
@@ -68,7 +68,12 @@ export default function AgentDetailPage({ params }: Props) {
   const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; balanceAfter: number; date: string }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
+  
+  // Filter & Scope States
+  const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
+  const [filterOutcome, setFilterOutcome] = React.useState<'all' | 'WON' | 'LOST'>('all')
+  const [filterMode, setFilterMode] = React.useState<'all' | 'SINGLE' | 'DOUBLE' | 'TRIPLE'>('all')
 
   // Point transfer modal state
   const [activeTransferModal, setActiveTransferModal] = React.useState<'deposit' | 'withdraw' | null>(null)
@@ -90,6 +95,91 @@ export default function AgentDetailPage({ params }: Props) {
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 5
+
+  // Reset pagination when filters change
+  React.useEffect(() => {
+    setGamesPage(1)
+    setPointsPage(1)
+  }, [filterDate, filterOutcome, filterMode])
+
+  // Compute performance metrics
+  const performanceStats = React.useMemo(() => {
+    const todayStr = new Date().toLocaleDateString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+
+    const targetPlays = gamePlays.filter(spin => {
+      if (statsScope === 'today') {
+        return spin.date.includes(todayStr)
+      }
+      return true
+    })
+
+    const totalPlays = targetPlays.length
+    const totalBet = targetPlays.reduce((sum, p) => sum + p.bet, 0)
+    const totalWin = targetPlays.reduce((sum, p) => sum + p.win, 0)
+    const netGgr = totalBet - totalWin
+    const marginPct = totalBet > 0 ? (netGgr / totalBet) * 100 : 0
+
+    return { totalPlays, totalBet, totalWin, netGgr, marginPct }
+  }, [gamePlays, statsScope])
+
+  // Filtered games list
+  const filteredGames = React.useMemo(() => {
+    return gamePlays.filter(spin => {
+      // Date Filter
+      if (filterDate) {
+        const filterDateStr = filterDate.toLocaleDateString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+        if (!spin.date.includes(filterDateStr)) return false
+      }
+
+      // Outcome Filter
+      if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
+        return false
+      }
+
+      // Mode Filter
+      if (filterMode !== 'all' && !spin.mode.toUpperCase().includes(filterMode)) {
+        return false
+      }
+
+      return true
+    })
+  }, [gamePlays, filterDate, filterOutcome, filterMode])
+
+  // Filtered points history list
+  const filteredPoints = React.useMemo(() => {
+    return pointsHistory.filter(tx => {
+      if (filterDate) {
+        const filterDateStr = filterDate.toLocaleDateString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+        if (!tx.date.includes(filterDateStr)) return false
+      }
+      return true
+    })
+  }, [pointsHistory, filterDate])
+
+  const paginatedGames = React.useMemo(() => {
+    const start = (gamesPage - 1) * itemsPerPage
+    return filteredGames.slice(start, start + itemsPerPage)
+  }, [filteredGames, gamesPage])
+
+  const paginatedPoints = React.useMemo(() => {
+    const start = (pointsPage - 1) * itemsPerPage
+    return filteredPoints.slice(start, start + itemsPerPage)
+  }, [filteredPoints, pointsPage])
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
@@ -191,24 +281,6 @@ export default function AgentDetailPage({ params }: Props) {
       loadAgentDetails()
     }
   }
-
-  const filteredGames = React.useMemo(() => {
-    if (!filterDate) return gamePlays
-    return gamePlays.filter(g => {
-      const gDate = new Date(g.date)
-      return gDate.toDateString() === filterDate.toDateString()
-    })
-  }, [gamePlays, filterDate])
-
-  const paginatedGames = React.useMemo(() => {
-    const start = (gamesPage - 1) * itemsPerPage
-    return filteredGames.slice(start, start + itemsPerPage)
-  }, [filteredGames, gamesPage])
-
-  const paginatedPoints = React.useMemo(() => {
-    const start = (pointsPage - 1) * itemsPerPage
-    return pointsHistory.slice(start, start + itemsPerPage)
-  }, [pointsHistory, pointsPage])
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -500,6 +572,7 @@ export default function AgentDetailPage({ params }: Props) {
               {players.length > 0 ? (
                 players.map((player) => {
                   const isSelected = selectedPlayer?.id === player.id
+                  const isPlayerOnline = player.isOnline && player.status === 'Active'
                   return (
                     <button
                       key={player.id}
@@ -512,10 +585,15 @@ export default function AgentDetailPage({ params }: Props) {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2 min-w-0">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${
-                            isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
-                          }`}>
-                            {player.name[0]?.toUpperCase()}
+                          <div className="relative shrink-0">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] ${
+                              isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
+                            }`}>
+                              {player.name[0]?.toUpperCase()}
+                            </div>
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
+                              isPlayerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                            }`} />
                           </div>
                           <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
                         </div>
@@ -547,61 +625,205 @@ export default function AgentDetailPage({ params }: Props) {
         {/* --- RIGHT SIDE: PLAYER HISTORY (md:col-span-9) --- */}
         <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
           {selectedPlayer ? (
-            <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
-              {/* Header Bar */}
-              <div className="p-3 sm:p-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-secondary/10">
-                <div className="flex items-center space-x-2.5">
-                  <button
-                    onClick={() => setShowMobileDetail(false)}
-                    className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none"
-                    aria-label="Back to players list"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
-
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm shrink-0">
-                    {selectedPlayer.name[0]?.toUpperCase()}
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-black text-foreground leading-tight">
-                      History of {selectedPlayer.name}
+            <div className="space-y-3">
+              {/* 📊 PLAYER PERFORMANCE & PROFIT SUMMARY BAR */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center space-x-1.5">
+                    <Activity className="h-4 w-4 text-primary" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
+                      Player Performance Summary
                     </h3>
-                    <p className="text-[10px] font-mono text-muted-foreground">
-                      @{selectedPlayer.username} &bull; Coins: <strong className="text-foreground">{formatCurrency(selectedPlayer.balance)}</strong>
-                    </p>
+                  </div>
+
+                  {/* Scope Toggle: Today vs Lifetime */}
+                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                    <button
+                      onClick={() => setStatsScope('today')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        statsScope === 'today' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setStatsScope('lifetime')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        statsScope === 'lifetime' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Lifetime
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <Popover>
-                    <PopoverTrigger className="h-8 px-3 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-lg flex items-center justify-center">
-                      <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                      {filterDate ? filterDate.toLocaleDateString() : 'Filter Date'}
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
-                      <Calendar
-                        mode="single"
-                        selected={filterDate}
-                        onSelect={setFilterDate}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                {isLoadingHistory ? (
+                  /* Skeleton Loader for Performance Cards */
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[1, 2, 3, 4].map(i => (
+                      <Card key={i} className="p-3 bg-card border-border/60 animate-pulse space-y-2 rounded-xl">
+                        <div className="h-3 bg-secondary/80 rounded w-1/2" />
+                        <div className="h-5 bg-secondary/60 rounded w-3/4" />
+                        <div className="h-2.5 bg-secondary/40 rounded w-1/3" />
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {/* Card 1: Total Plays */}
+                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Plays</span>
+                      <span className="text-lg font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">Spins recorded</p>
+                    </Card>
 
-                  {filterDate && (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => setFilterDate(undefined)} 
-                      className="h-8 text-[10px] text-muted-foreground hover:text-foreground font-bold"
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </div>
+                    {/* Card 2: Bet Volume */}
+                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Bet Volume</span>
+                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">Total wagered</p>
+                    </Card>
+
+                    {/* Card 3: Win Payout */}
+                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Win Payout</span>
+                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">Player earnings</p>
+                    </Card>
+
+                    {/* Card 4: Net House GGR / Agent Profit */}
+                    <Card className={`border p-3 rounded-xl shadow-xs ${
+                      performanceStats.netGgr >= 0 
+                        ? 'bg-emerald-500/10 border-emerald-500/30' 
+                        : 'bg-red-500/10 border-red-500/30'
+                    }`}>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Net House GGR</span>
+                      <div className="flex items-center space-x-1">
+                        <span className={`text-lg font-mono font-black ${
+                          performanceStats.netGgr >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {performanceStats.netGgr >= 0 ? `+${formatCurrency(performanceStats.netGgr)}` : formatCurrency(performanceStats.netGgr)}
+                        </span>
+                      </div>
+                      <p className={`text-[9px] font-bold mt-0.5 ${
+                        performanceStats.netGgr >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
+                      }`}>
+                        {performanceStats.marginPct.toFixed(1)}% House Margin
+                      </p>
+                    </Card>
+                  </div>
+                )}
               </div>
 
-              {/* Tab Controls */}
-              <div className="flex border-b border-border/60 bg-secondary/20">
+              <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
+                {/* Header Bar with Live Sync Indicator */}
+                <div className="p-3 sm:p-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-secondary/10">
+                  <div className="flex items-center space-x-2.5">
+                    <button
+                      onClick={() => setShowMobileDetail(false)}
+                      className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none"
+                      aria-label="Back to players list"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm">
+                        {selectedPlayer.name[0]?.toUpperCase()}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
+                        selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                      }`} />
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-black text-foreground leading-tight">
+                        History of {selectedPlayer.name}
+                      </h3>
+                      <div className="flex items-center space-x-2 text-[10px] font-mono">
+                        <span className="text-muted-foreground">@{selectedPlayer.username}</span>
+                        <span>&bull;</span>
+                        <span className="text-muted-foreground">Coins: <strong className="text-foreground">{formatCurrency(selectedPlayer.balance)}</strong></span>
+                        <span>&bull;</span>
+                        {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
+                          <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
+                            Real-Time Sync Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center text-red-400/80 font-bold text-[9px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1" />
+                            Player Offline
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Date Filter & Quick Filter Pills */}
+                  <div className="flex items-center flex-wrap gap-2">
+                    <Popover>
+                      <PopoverTrigger className="h-8 px-3 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-lg flex items-center justify-center cursor-pointer">
+                        <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                        {filterDate ? filterDate.toLocaleDateString() : 'Filter Date'}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
+                        <Calendar
+                          mode="single"
+                          selected={filterDate}
+                          onSelect={setFilterDate}
+                        />
+                      </PopoverContent>
+                    </Popover>
+
+                    {filterDate && (
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => setFilterDate(undefined)} 
+                        className="h-8 text-[10px] text-muted-foreground hover:text-foreground font-bold"
+                      >
+                        <X className="mr-1 h-3 w-3" /> Clear
+                      </Button>
+                    )}
+
+                    {/* Outcome Quick Filter Pills */}
+                    {activeTab === 'games' && (
+                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                        {(['all', 'WON', 'LOST'] as const).map((outcome) => (
+                          <button
+                            key={outcome}
+                            onClick={() => setFilterOutcome(outcome)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
+                              filterOutcome === outcome ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {outcome}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Mode Quick Filter Pills */}
+                    {activeTab === 'games' && (
+                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                        {(['all', 'SINGLE', 'DOUBLE', 'TRIPLE'] as const).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setFilterMode(m)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
+                              filterMode === m ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tab Controls */}
+                <div className="flex border-b border-border/60 bg-secondary/20">
                 <button
                   onClick={() => setActiveTab('games')}
                   className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
@@ -646,9 +868,8 @@ export default function AgentDetailPage({ params }: Props) {
                     ))}
                   </div>
                 ) : activeTab === 'games' ? (
-                  <>
-                    {paginatedGames.length > 0 ? (
-                      <>
+                  filteredGames.length > 0 ? (
+                    <>
                         {/* --- MOBILE CARDS VIEW (< sm) --- */}
                         <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
                           {paginatedGames.map((spin) => {
@@ -984,85 +1205,86 @@ export default function AgentDetailPage({ params }: Props) {
                             </TableBody>
                           </Table>
                         </div>
+
+                        {/* Pagination Bar for Game Plays */}
+                        {filteredGames.length > itemsPerPage && (
+                          <div className="p-3 border-t border-border/60">
+                            <ResponsivePagination 
+                              currentPage={gamesPage}
+                              totalPages={Math.ceil(filteredGames.length / itemsPerPage)}
+                              onPageChange={setGamesPage}
+                              totalItems={filteredGames.length}
+                              itemsPerPage={itemsPerPage}
+                            />
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
                         No game play history recorded for the selected filter.
                       </div>
-                    )}
-
-                    {filteredGames.length > itemsPerPage && (
-                      <div className="p-3 border-t border-border/60">
-                        <ResponsivePagination 
-                          currentPage={gamesPage}
-                          totalPages={Math.ceil(filteredGames.length / itemsPerPage)}
-                          onPageChange={setGamesPage}
-                          totalItems={filteredGames.length}
-                          itemsPerPage={itemsPerPage}
-                        />
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {paginatedPoints.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-border hover:bg-transparent bg-secondary/20">
-                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Transaction ID</TableHead>
-                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
-                            <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Type</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Amount</TableHead>
-                            <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Balance After</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedPoints.map((tx) => (
-                            <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
-                              <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
-                              <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
-                              <TableCell className="text-[11px] p-2.5">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
-                                  tx.type === 'deposit'
-                                    ? 'bg-success-bg text-success-text border border-emerald-500/20'
-                                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
-                                }`}>
-                                  {tx.type}
-                                </span>
-                              </TableCell>
-                              <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
-                                tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
-                              }`}>
-                                {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                {formatCurrency(tx.balanceAfter)}
-                              </TableCell>
+                    )
+                  ) : (
+                    filteredPoints.length > 0 ? (
+                      <>
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-border hover:bg-transparent bg-secondary/20">
+                              <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Transaction ID</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Type</TableHead>
+                              <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Amount</TableHead>
+                              <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[110px]">Balance After</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedPoints.map((tx) => (
+                              <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
+                                <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
+                                <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
+                                <TableCell className="text-[11px] p-2.5">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
+                                    tx.type === 'deposit'
+                                      ? 'bg-success-bg text-success-text border border-emerald-500/20'
+                                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                    {tx.type}
+                                  </span>
+                                </TableCell>
+                                <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
+                                  tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
+                                }`}>
+                                  {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
+                                  {formatCurrency(tx.balanceAfter)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+
+                        {filteredPoints.length > itemsPerPage && (
+                          <div className="p-3 border-t border-border/60">
+                            <ResponsivePagination 
+                              currentPage={pointsPage}
+                              totalPages={Math.ceil(filteredPoints.length / itemsPerPage)}
+                              onPageChange={setPointsPage}
+                              totalItems={filteredPoints.length}
+                              itemsPerPage={itemsPerPage}
+                            />
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
                         No coin transactions recorded for this player.
                       </div>
-                    )}
-
-                    {pointsHistory.length > itemsPerPage && (
-                      <div className="p-3 border-t border-border/60">
-                        <ResponsivePagination 
-                          currentPage={pointsPage}
-                          totalPages={Math.ceil(pointsHistory.length / itemsPerPage)}
-                          onPageChange={setPointsPage}
-                          totalItems={pointsHistory.length}
-                          itemsPerPage={itemsPerPage}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </Card>
+                    )
+                  )}
+                </div>
+              </Card>
+            </div>
           ) : (
             <div className="h-full flex items-center justify-center p-12 text-center border border-border/60 bg-card rounded-2xl">
               <p className="text-xs text-muted-foreground font-medium">Select a player from the list to view details.</p>

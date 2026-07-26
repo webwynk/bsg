@@ -10,11 +10,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins, Calendar } from "lucide-react"
+import { 
+  Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, 
+  ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins, 
+  Calendar as CalendarIcon, Filter, Activity, TrendingUp, TrendingDown, RefreshCw, X 
+} from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
@@ -29,7 +35,15 @@ import {
 } from "@/components/ui/table"
 
 export default function PlayersPage() {
-  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
+  const [players, setPlayers] = React.useState<Array<{ 
+    id: string; 
+    name: string; 
+    username: string; 
+    balance: number; 
+    status: string; 
+    isOnline?: boolean;
+    gamePlays: number 
+  }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -71,20 +85,103 @@ export default function PlayersPage() {
   }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
 
+  // Scope state for Performance Summary Bar: 'today' | 'lifetime'
+  const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
+
+  // Filter states
+  const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
+  const [filterOutcome, setFilterOutcome] = React.useState<'all' | 'WON' | 'LOST'>('all')
+  const [filterMode, setFilterMode] = React.useState<'all' | 'SINGLE' | 'DOUBLE' | 'TRIPLE'>('all')
+
   // Pagination states
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 5
 
+  // Reset pagination when filters change
+  React.useEffect(() => {
+    setGamesPage(1)
+    setPointsPage(1)
+  }, [filterDate, filterOutcome, filterMode])
+
+  // Compute performance metrics
+  const performanceStats = React.useMemo(() => {
+    const todayStr = new Date().toLocaleDateString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+
+    const targetPlays = gamePlays.filter(spin => {
+      if (statsScope === 'today') {
+        return spin.date.includes(todayStr)
+      }
+      return true
+    })
+
+    const totalPlays = targetPlays.length
+    const totalBet = targetPlays.reduce((sum, p) => sum + p.bet, 0)
+    const totalWin = targetPlays.reduce((sum, p) => sum + p.win, 0)
+    const netGgr = totalBet - totalWin
+    const marginPct = totalBet > 0 ? (netGgr / totalBet) * 100 : 0
+
+    return { totalPlays, totalBet, totalWin, netGgr, marginPct }
+  }, [gamePlays, statsScope])
+
+  // Filtered games list
+  const filteredGames = React.useMemo(() => {
+    return gamePlays.filter(spin => {
+      // Date Filter
+      if (filterDate) {
+        const filterDateStr = filterDate.toLocaleDateString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+        if (!spin.date.includes(filterDateStr)) return false
+      }
+
+      // Outcome Filter
+      if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
+        return false
+      }
+
+      // Mode Filter
+      if (filterMode !== 'all' && !spin.mode.toUpperCase().includes(filterMode)) {
+        return false
+      }
+
+      return true
+    })
+  }, [gamePlays, filterDate, filterOutcome, filterMode])
+
+  // Filtered points history list
+  const filteredPoints = React.useMemo(() => {
+    return pointsHistory.filter(tx => {
+      if (filterDate) {
+        const filterDateStr = filterDate.toLocaleDateString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+        if (!tx.date.includes(filterDateStr)) return false
+      }
+      return true
+    })
+  }, [pointsHistory, filterDate])
+
   const paginatedGames = React.useMemo(() => {
     const start = (gamesPage - 1) * itemsPerPage
-    return gamePlays.slice(start, start + itemsPerPage)
-  }, [gamePlays, gamesPage])
+    return filteredGames.slice(start, start + itemsPerPage)
+  }, [filteredGames, gamesPage])
 
   const paginatedPoints = React.useMemo(() => {
     const start = (pointsPage - 1) * itemsPerPage
-    return pointsHistory.slice(start, start + itemsPerPage)
-  }, [pointsHistory, pointsPage])
+    return filteredPoints.slice(start, start + itemsPerPage)
+  }, [filteredPoints, pointsPage])
 
   // Create Player modal state
   const [isOpen, setIsOpen] = React.useState(false)
@@ -161,6 +258,9 @@ export default function PlayersPage() {
     setIsLoadingHistory(true)
     setGamePlays([])
     setPointsHistory([])
+    setFilterDate(undefined)
+    setFilterOutcome('all')
+    setFilterMode('all')
     setGamesPage(1)
     setPointsPage(1)
     loadPlayerHistory(player.id)
@@ -414,6 +514,7 @@ export default function PlayersPage() {
             ) : filteredPlayers.length > 0 ? (
               filteredPlayers.map((player) => {
                 const isSelected = selectedPlayer?.id === player.id
+                const isPlayerOnline = player.isOnline && player.status === 'Active'
                 return (
                   <button
                     key={player.id}
@@ -426,10 +527,15 @@ export default function PlayersPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2 min-w-0">
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${
-                          isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
-                        }`}>
-                          {player.name[0]?.toUpperCase()}
+                        <div className="relative shrink-0">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] ${
+                            isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
+                          }`}>
+                            {player.name[0]?.toUpperCase()}
+                          </div>
+                          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
+                            isPlayerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                          }`} />
                         </div>
                         <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
                       </div>
@@ -462,7 +568,7 @@ export default function PlayersPage() {
           {selectedPlayer ? (
             <div className="space-y-3">
               {/* Selected Player Header Card */}
-              <Card className="border-border/80 bg-card p-3.5 sm:p-5 rounded-2xl shadow-md relative overflow-hidden">
+              <Card className="border-border/80 bg-card p-3.5 sm:p-4 rounded-2xl shadow-md relative overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   {/* Mobile Back Button & Player Info */}
                   <div className="flex items-center space-x-2.5">
@@ -474,8 +580,13 @@ export default function PlayersPage() {
                       <ArrowLeft className="h-4 w-4" />
                     </button>
 
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base shrink-0">
-                      {selectedPlayer.name[0]?.toUpperCase()}
+                    <div className="relative shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base">
+                        {selectedPlayer.name[0]?.toUpperCase()}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${
+                        selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                      }`} />
                     </div>
 
                     <div>
@@ -489,7 +600,22 @@ export default function PlayersPage() {
                           {selectedPlayer.status}
                         </span>
                       </div>
-                      <p className="text-[11px] font-mono text-muted-foreground">@{selectedPlayer.username}</p>
+                      <div className="flex items-center space-x-2 text-[11px] font-mono">
+                        <span className="text-muted-foreground">@{selectedPlayer.username}</span>
+                        <span>&bull;</span>
+                        {/* Live Sync Status Indicator */}
+                        {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
+                          <span className="inline-flex items-center text-emerald-400 font-extrabold text-[10px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
+                            Real-Time Sync Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center text-red-400/80 font-bold text-[10px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1" />
+                            Player Offline
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -511,7 +637,7 @@ export default function PlayersPage() {
 
                 {/* Quick Actions Grid (HIGH CONTRAST & EXPLICIT VISIBILITY) */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-border/60 mt-3">
-                  {/* Deposit Modal with Explicit Green High-Contrast Button */}
+                  {/* Deposit Modal */}
                   <Dialog open={activeTransferModal === 'deposit'} onOpenChange={(open) => {
                     setActiveTransferModal(open ? 'deposit' : null)
                     setTransferAmount('')
@@ -719,38 +845,185 @@ export default function PlayersPage() {
                 </div>
               </Card>
 
-              {/* History Section Container */}
+              {/* 📊 PLAYER PERFORMANCE & PROFIT SUMMARY BAR */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center space-x-1.5">
+                    <Activity className="h-4 w-4 text-primary" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
+                      Player Performance Summary
+                    </h3>
+                  </div>
+
+                  {/* Scope Toggle: Today vs Lifetime */}
+                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                    <button
+                      onClick={() => setStatsScope('today')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        statsScope === 'today' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setStatsScope('lifetime')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        statsScope === 'lifetime' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Lifetime
+                    </button>
+                  </div>
+                </div>
+
+                {isLoadingHistory ? (
+                  /* Skeleton Loader for Performance Cards */
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[1, 2, 3, 4].map(i => (
+                      <Card key={i} className="p-3 bg-card border-border/60 animate-pulse space-y-2 rounded-xl">
+                        <div className="h-3 bg-secondary/80 rounded w-1/2" />
+                        <div className="h-5 bg-secondary/60 rounded w-3/4" />
+                        <div className="h-2.5 bg-secondary/40 rounded w-1/3" />
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {/* Card 1: Total Plays */}
+                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Plays</span>
+                      <span className="text-lg font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">Spins recorded</p>
+                    </Card>
+
+                    {/* Card 2: Bet Volume */}
+                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Bet Volume</span>
+                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">Total wagered</p>
+                    </Card>
+
+                    {/* Card 3: Win Payout */}
+                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Win Payout</span>
+                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">Player earnings</p>
+                    </Card>
+
+                    {/* Card 4: Net House GGR / Agent Profit */}
+                    <Card className={`border p-3 rounded-xl shadow-xs ${
+                      performanceStats.netGgr >= 0 
+                        ? 'bg-emerald-500/10 border-emerald-500/30' 
+                        : 'bg-red-500/10 border-red-500/30'
+                    }`}>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Net House GGR</span>
+                      <div className="flex items-center space-x-1">
+                        <span className={`text-lg font-mono font-black ${
+                          performanceStats.netGgr >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {performanceStats.netGgr >= 0 ? `+${formatCurrency(performanceStats.netGgr)}` : formatCurrency(performanceStats.netGgr)}
+                        </span>
+                      </div>
+                      <p className={`text-[9px] font-bold mt-0.5 ${
+                        performanceStats.netGgr >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
+                      }`}>
+                        {performanceStats.marginPct.toFixed(1)}% House Margin
+                      </p>
+                    </Card>
+                  </div>
+                )}
+              </div>
+
+              {/* History Section Container with Filter Toolbar */}
               <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
-                {/* Tab Controls */}
-                <div className="flex border-b border-border/60 bg-secondary/20">
-                  <button
-                    onClick={() => setActiveTab('games')}
-                    className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
-                      activeTab === 'games' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Gamepad2 className="h-3.5 w-3.5 text-primary" />
-                    <span>Game Plays</span>
-                    {isLoadingHistory ? (
-                      <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">({gamePlays.length})</span>
+                {/* Filter Toolbar (Date Picker + Quick Filters) */}
+                <div className="p-3 border-b border-border/60 bg-secondary/10 flex flex-wrap items-center justify-between gap-2.5">
+                  {/* Left Side: Tabs */}
+                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5">
+                    <button
+                      onClick={() => setActiveTab('games')}
+                      className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
+                        activeTab === 'games' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Gamepad2 className="h-3.5 w-3.5 text-primary" />
+                      <span>Game Plays</span>
+                      <span className="text-[10px] text-muted-foreground">({filteredGames.length})</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('points')}
+                      className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
+                        activeTab === 'points' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Coins className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Coins History</span>
+                      <span className="text-[10px] text-muted-foreground">({filteredPoints.length})</span>
+                    </button>
+                  </div>
+
+                  {/* Right Side: Date Picker & Quick Filter Pills */}
+                  <div className="flex items-center flex-wrap gap-2">
+                    {/* Date Picker Popover */}
+                    <Popover>
+                      <PopoverTrigger className="h-8 px-2.5 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-xl flex items-center justify-center cursor-pointer">
+                        <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                        {filterDate ? filterDate.toLocaleDateString() : 'Filter Date'}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
+                        <Calendar
+                          mode="single"
+                          selected={filterDate}
+                          onSelect={setFilterDate}
+                        />
+                      </PopoverContent>
+                    </Popover>
+
+                    {filterDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFilterDate(undefined)}
+                        className="h-8 px-2 text-[10px] font-bold text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="mr-1 h-3 w-3" /> Clear Date
+                      </Button>
                     )}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('points')}
-                    className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
-                      activeTab === 'points' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Coins className="h-3.5 w-3.5 text-amber-400" />
-                    <span>Coins History</span>
-                    {isLoadingHistory ? (
-                      <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">({pointsHistory.length})</span>
+
+                    {/* Outcome Quick Filter Pills */}
+                    {activeTab === 'games' && (
+                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                        {(['all', 'WON', 'LOST'] as const).map((outcome) => (
+                          <button
+                            key={outcome}
+                            onClick={() => setFilterOutcome(outcome)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
+                              filterOutcome === outcome ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {outcome}
+                          </button>
+                        ))}
+                      </div>
                     )}
-                  </button>
+
+                    {/* Mode Quick Filter Pills */}
+                    {activeTab === 'games' && (
+                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                        {(['all', 'SINGLE', 'DOUBLE', 'TRIPLE'] as const).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setFilterMode(m)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
+                              filterMode === m ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Tab Content Display */}
@@ -767,7 +1040,7 @@ export default function PlayersPage() {
                       ))}
                     </div>
                   ) : activeTab === 'games' ? (
-                    gamePlays.length > 0 ? (
+                    filteredGames.length > 0 ? (
                       <>
                         {/* --- MOBILE CARDS VIEW (< sm) --- */}
                         <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
@@ -1105,13 +1378,13 @@ export default function PlayersPage() {
                         </div>
 
                         {/* Pagination Bar for Game Plays */}
-                        {gamePlays.length > itemsPerPage && (
+                        {filteredGames.length > itemsPerPage && (
                           <div className="p-3 border-t border-border/60">
                             <ResponsivePagination 
                               currentPage={gamesPage}
-                              totalPages={Math.ceil(gamePlays.length / itemsPerPage)}
+                              totalPages={Math.ceil(filteredGames.length / itemsPerPage)}
                               onPageChange={setGamesPage}
-                              totalItems={gamePlays.length}
+                              totalItems={filteredGames.length}
                               itemsPerPage={itemsPerPage}
                             />
                           </div>
@@ -1119,11 +1392,11 @@ export default function PlayersPage() {
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
-                        No game play history recorded yet for this player.
+                        No game play history recorded for the selected filter.
                       </div>
                     )
                   ) : (
-                    pointsHistory.length > 0 ? (
+                    filteredPoints.length > 0 ? (
                       <>
                         <Table>
                           <TableHeader>
@@ -1163,13 +1436,13 @@ export default function PlayersPage() {
                         </Table>
 
                         {/* Pagination Bar for Coins History */}
-                        {pointsHistory.length > itemsPerPage && (
+                        {filteredPoints.length > itemsPerPage && (
                           <div className="p-3 border-t border-border/60">
                             <ResponsivePagination 
                               currentPage={pointsPage}
-                              totalPages={Math.ceil(pointsHistory.length / itemsPerPage)}
+                              totalPages={Math.ceil(filteredPoints.length / itemsPerPage)}
                               onPageChange={setPointsPage}
-                              totalItems={pointsHistory.length}
+                              totalItems={filteredPoints.length}
                               itemsPerPage={itemsPerPage}
                             />
                           </div>
@@ -1177,7 +1450,7 @@ export default function PlayersPage() {
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
-                        No coin transactions recorded yet for this player.
+                        No coin transactions recorded for the selected filter.
                       </div>
                     )
                   )}
