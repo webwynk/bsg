@@ -422,40 +422,56 @@ export default function AgentDetailPage({ params }: Props) {
 
       {/* Stats Metric Strip */}
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-        <Card className="bg-card border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">Coins Balance</span>
-            <span className="text-xl font-mono font-black text-foreground">{formatCurrency(agentInfo?.balance || 0)}</span>
-            <p className="text-[10px] text-muted-foreground">Available for allocation</p>
+        <Card className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm hover:border-emerald-500/30 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Coins Balance
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+              <Coins className="h-4 w-4" />
+            </div>
           </div>
-          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <Coins className="h-5 w-5" />
-          </div>
-        </Card>
-
-        <Card className="bg-card border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">Active Players</span>
-            <span className="text-xl font-mono font-black text-foreground">{players.length}</span>
-            <p className="text-[10px] text-muted-foreground">Sub-registered network</p>
-          </div>
-          <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-            <Users className="h-5 w-5" />
+          <div className="mt-2">
+            <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
+              {formatCurrency(agentInfo?.balance || 0)}
+            </div>
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Available for allocation</p>
           </div>
         </Card>
 
-        <Card className="bg-card border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">Agent Status</span>
-            <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black uppercase mt-1 ${
+        <Card className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm hover:border-primary/30 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Active Players
+            </span>
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+              <Users className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
+              {players.length}
+            </div>
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Sub-registered network</p>
+          </div>
+        </Card>
+
+        <Card className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm hover:border-amber-500/30 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+              Agent Status
+            </span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+              <Activity className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
               agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
             }`}>
               {agentInfo?.status || 'Active'}
             </span>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Operational status</p>
-          </div>
-          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <Activity className="h-5 w-5" />
+            <p className="text-[10px] text-muted-foreground font-medium mt-1">Operational status</p>
           </div>
         </Card>
       </div>
