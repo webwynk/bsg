@@ -42,10 +42,7 @@ export default function AgentDashboard() {
 
   const fetchDashboardData = React.useCallback(() => {
     setIsLoadingDashboard(true)
-    Promise.all([
-      getAgentDashboardDataAction(),
-      getPlayersAction()
-    ]).then(([resDash, resPlayers]) => {
+    getAgentDashboardDataAction().then((resDash) => {
       setIsLoadingDashboard(false)
       if (resDash) {
         setBalance(resDash.balance || 0)
@@ -53,9 +50,9 @@ export default function AgentDashboard() {
         if (resDash.recentTransactions) {
           setRecentTransactions(resDash.recentTransactions)
         }
-      }
-      if (resPlayers?.players) {
-        setPlayers(resPlayers.players)
+        if (resDash.players) {
+          setPlayers(resDash.players)
+        }
       }
     }).catch(() => setIsLoadingDashboard(false))
   }, [])

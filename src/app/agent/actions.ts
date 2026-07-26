@@ -8,7 +8,7 @@ export async function getAgentDashboardDataAction() {
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
   if (!authUser) {
-    return { balance: 0, playersCount: 0 }
+    return { balance: 0, playersCount: 0, players: [] }
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -23,24 +23,37 @@ export async function getAgentDashboardDataAction() {
       const todayStart = new Date()
       todayStart.setHours(0, 0, 0, 0)
 
-      // Execute all sub-queries in parallel via Promise.all
-      const [userRes, profilesRes, spinsRes, txnsRes] = await Promise.all([
-        supabaseAdmin.auth.admin.getUserById(authUser.id),
-        supabaseAdmin.from('profiles').select('id').eq('agent_id', authUser.id),
+      // Execute all 4 sub-queries in parallel via Promise.all
+      const [agentProfRes, playersProfRes, spinsRes, txnsRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('username, balance').eq('id', authUser.id).maybeSingle(),
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', authUser.id),
         supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStart.toISOString()),
         supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id).order('created_at', { ascending: false }).limit(5)
       ])
 
-      const freshUser = userRes.data?.user || authUser
-      const balance = freshUser.user_metadata?.balance || 0
+      const balance = agentProfRes.data ? Number(agentProfRes.data.balance || 0) : (authUser.user_metadata?.balance || 0)
+      const username = agentProfRes.data?.username || authUser.user_metadata?.username || authUser.email?.split('@')[0] || 'agent'
 
-      // Players count from indexed profiles table (or fallback to listUsers if profiles is empty)
-      let playersCount = profilesRes.data ? profilesRes.data.length : 0
-      if (!profilesRes.data || profilesRes.data.length === 0) {
+      // Player list for dropdown and count
+      let players: Array<{ id: string; name: string; username: string; balance: number }> = []
+      if (playersProfRes.data && playersProfRes.data.length > 0) {
+        players = playersProfRes.data.map(p => ({
+          id: p.id,
+          name: p.username || 'Player',
+          username: p.username || '',
+          balance: Number(p.balance || 0)
+        }))
+      } else {
+        // Fallback to Auth listUsers if profiles table is empty
         const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        playersCount = (usersData?.users || []).filter(
-          u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === authUser.id
-        ).length
+        players = (usersData?.users || [])
+          .filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === authUser.id)
+          .map(u => ({
+            id: u.id,
+            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
+            username: u.user_metadata?.username || u.email?.split('@')[0] || '',
+            balance: u.user_metadata?.balance || 0
+          }))
       }
 
       // Calculate today's profit/loss from game_history
@@ -65,8 +78,9 @@ export async function getAgentDashboardDataAction() {
 
       return {
         balance,
-        playersCount,
-        username: freshUser.user_metadata?.username || freshUser.email?.split('@')[0] || 'agent',
+        playersCount: players.length,
+        players,
+        username,
         todaysProfitLoss,
         recentTransactions
       }
@@ -76,6 +90,7 @@ export async function getAgentDashboardDataAction() {
   return {
     balance: authUser.user_metadata?.balance || 0,
     playersCount: 0,
+    players: [],
     username: authUser.user_metadata?.username || 'agent',
     todaysProfitLoss: 0,
     recentTransactions: []
