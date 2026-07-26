@@ -48,6 +48,10 @@ export default function HistoryPage() {
 
   React.useEffect(() => {
     loadHistory()
+    const interval = setInterval(() => {
+      loadHistory()
+    }, 30000)
+    return () => clearInterval(interval)
   }, [loadHistory])
 
   const handleResetFilters = () => {
@@ -84,7 +88,7 @@ export default function HistoryPage() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground">Transaction History</h1>
-              {isLoading ? (
+              {isLoading || isRefreshing ? (
                 <div className="h-5 w-14 bg-secondary/80 animate-pulse rounded-full" />
               ) : (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-primary/10 text-primary border border-primary/20">
@@ -98,50 +102,56 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-9 px-3 text-xs font-bold cursor-pointer rounded-xl border-border">
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh History
-        </Button>
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Sync (30s)
+          </span>
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary KPI Cards (3 Compact Cards) */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-muted-foreground">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Total Volume</span>
-            <Coins className="h-3.5 w-3.5 text-primary shrink-0" />
+            <Coins className="h-3.5 w-3.5 text-primary shrink-0 hidden sm:block" />
           </div>
-          {isLoading ? (
+          {isLoading || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-sm sm:text-base font-black font-mono text-foreground mt-0.5">
+            <div className="text-xs sm:text-base font-black font-mono text-foreground mt-0.5 truncate">
               {formatCurrency(totalVolume)}
             </div>
           )}
         </Card>
 
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-muted-foreground">
-            <span>Total Deposited</span>
-            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
+            <span>Deposited</span>
+            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading ? (
+          {isLoading || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-sm sm:text-base font-black font-mono text-emerald-500 mt-0.5">
+            <div className="text-xs sm:text-base font-black font-mono text-emerald-500 mt-0.5 truncate">
               +{formatCurrency(totalDeposited)}
             </div>
           )}
         </Card>
 
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-muted-foreground">
-            <span>Total Withdrawn</span>
-            <ArrowDownRight className="h-3.5 w-3.5 text-red-500 shrink-0" />
+        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
+            <span>Withdrawn</span>
+            <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading ? (
+          {isLoading || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-sm sm:text-base font-black font-mono text-red-500 mt-0.5">
+            <div className="text-xs sm:text-base font-black font-mono text-amber-500 mt-0.5 truncate">
               -{formatCurrency(totalWithdrawn)}
             </div>
           )}

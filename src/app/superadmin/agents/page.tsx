@@ -133,18 +133,18 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Auto-Sync (30s)
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-9 px-3 text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Data
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="flex-1 sm:flex-none h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
 
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "w-full sm:w-auto h-9 px-4 font-extrabold shadow-sm cursor-pointer rounded-xl text-xs" })}>
-              <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Agent
+            <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "flex-1 sm:flex-none h-8 sm:h-9 px-3 sm:px-4 font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs" })}>
+              <Plus className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Add Agent
             </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
             <DialogHeader className="space-y-1">
@@ -168,46 +168,41 @@ export default function AgentsPage() {
               )}
 
               <div className="space-y-1">
-                <Label htmlFor="name" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Full Name
-                </Label>
+                <Label htmlFor="name text-[10px]">Agent Full Name</Label>
                 <Input
                   id="name"
                   name="name"
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. Rahul Sharma"
                   className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="username" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Username
-                </Label>
+                <Label htmlFor="username text-[10px]">Username</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-xs text-muted-foreground/70 font-mono">@</span>
                   <Input
                     id="username"
                     name="username"
-                    placeholder="agent_john"
-                    className="pl-7 h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
+                    placeholder="agent_rahul"
+                    className="pl-8 h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="password" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Password
-                </Label>
+                <Label htmlFor="password text-[10px]">Password</Label>
                 <div className="relative">
                   <Input
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    className="h-10 bg-background/60 border-border text-foreground pr-9 text-xs rounded-lg"
+                    placeholder="At least 6 characters"
+                    className="h-10 bg-background/60 border-border text-foreground pr-10 text-xs rounded-lg"
                     required
+                    minLength={6}
                   />
                   <button
                     type="button"
@@ -215,7 +210,7 @@ export default function AgentsPage() {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -254,34 +249,22 @@ export default function AgentsPage() {
       </div>
 
       {/* Overview Metrics Strip (3 Compact Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-        <Card className="bg-card border-border/80 shadow-2xs p-3 rounded-xl">
-          <div className="flex items-center justify-between text-xs text-muted-foreground font-bold">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5">
+        <Card className="bg-card border-border/80 shadow-2xs p-2 sm:p-3 rounded-xl">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground font-bold">
             <span>Total Agents</span>
-            <Users className="h-3.5 w-3.5 text-primary" />
+            <Users className="h-3.5 w-3.5 text-primary shrink-0 hidden sm:block" />
           </div>
-          {isLoadingAgents ? (
+          {isLoadingAgents || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-lg font-black font-mono text-foreground mt-0.5">{agents.length}</div>
+            <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5">{agents.length}</div>
           )}
         </Card>
 
-        <Card className="bg-card border-border/80 shadow-2xs p-3 rounded-xl">
-          <div className="flex items-center justify-between text-xs text-muted-foreground font-bold">
+        <Card className="bg-card border-border/80 shadow-2xs p-2 sm:p-3 rounded-xl">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground font-bold">
             <span>Active Network</span>
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-          </div>
-          {isLoadingAgents ? (
-            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
-          ) : (
-            <div className="text-lg font-black font-mono text-emerald-500 mt-0.5">{activeCount}</div>
-          )}
-        </Card>
-
-        <Card className="bg-card border-border/80 shadow-2xs p-3 rounded-xl col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground font-bold">
-            <span>Agent Coin Circulation</span>
             <Coins className="h-3.5 w-3.5 text-amber-500" />
           </div>
           {isLoadingAgents ? (

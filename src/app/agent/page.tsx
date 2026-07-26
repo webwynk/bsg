@@ -59,6 +59,10 @@ export default function AgentDashboard() {
 
   React.useEffect(() => {
     fetchDashboardData()
+    const interval = setInterval(() => {
+      fetchDashboardData()
+    }, 30000)
+    return () => clearInterval(interval)
   }, [fetchDashboardData])
 
   const handleManualRefresh = async () => {
@@ -130,52 +134,58 @@ export default function AgentDashboard() {
           </div>
         </div>
 
-        <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-9 px-3 text-xs font-bold cursor-pointer rounded-xl border-border">
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Dashboard
-        </Button>
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Sync (30s)
+          </span>
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Top KPI Metric Cards (3-Column Micro Strip) */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-muted-foreground">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Available Coins</span>
-            <Coins className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <Coins className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
+          {isLoadingDashboard || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-sm sm:text-lg font-black font-mono text-emerald-500 mt-0.5">
+            <div className="text-xs sm:text-lg font-black font-mono text-emerald-500 mt-0.5 truncate">
               {formatCurrency(balance)}
             </div>
           )}
           <p className="text-[10px] text-muted-foreground/70 hidden sm:block mt-0.5">Coins available to allocate</p>
         </Card>
 
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-muted-foreground">
+        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>My Players</span>
-            <Users className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+            <Users className="h-3.5 w-3.5 text-blue-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
+          {isLoadingDashboard || isRefreshing ? (
             <div className="h-5 w-10 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-sm sm:text-lg font-black font-mono text-foreground mt-0.5">
+            <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5">
               {players.length}
             </div>
           )}
           <p className="text-[10px] text-muted-foreground/70 hidden sm:block mt-0.5">Registered players network</p>
         </Card>
 
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-muted-foreground">
+        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Today&apos;s P/L</span>
-            <ArrowUpRight className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <ArrowUpRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
+          {isLoadingDashboard || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className={`text-sm sm:text-lg font-black font-mono mt-0.5 ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
               {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
             </div>
           )}

@@ -76,6 +76,10 @@ export default function SuperAdminDashboard() {
 
   React.useEffect(() => {
     fetchMetrics()
+    const interval = setInterval(() => {
+      fetchMetrics()
+    }, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   // Filtered & Paginated Logs
@@ -114,39 +118,45 @@ export default function SuperAdminDashboard() {
             Real-time management dashboard and network controls (God Mode).
           </p>
         </div>
-        <Button 
-          onClick={handleManualRefresh} 
-          variant="outline" 
-          size="sm" 
-          className="h-8 text-xs font-extrabold px-3 rounded-xl border-border/80 hover:bg-secondary cursor-pointer shrink-0 w-fit"
-        >
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Metrics
-        </Button>
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Sync (30s)
+          </span>
+          <Button 
+            onClick={handleManualRefresh} 
+            variant="outline" 
+            size="sm" 
+            className="h-8 text-xs font-extrabold px-3 rounded-xl border-border/80 hover:bg-secondary cursor-pointer shrink-0 w-full sm:w-auto"
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* 2x2 Mobile / 4-Column Desktop High-Density Metric Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {/* Card 1: Today's Coins Issued */}
         <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
-          <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
+          <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
                 Today&apos;s Issued
               </span>
-              <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
-                <Coins className="h-4 w-4" />
+              <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
+                <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
             </div>
-            <div className="mt-1.5">
-              {isLoadingMetrics ? (
+            <div className="mt-1 sm:mt-1.5">
+              {isLoadingMetrics || isRefreshing ? (
                 <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
               ) : (
-                <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
-                  <span>{formatCurrency(todaysCoins)}</span>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                  <span className="truncate">{formatCurrency(todaysCoins)}</span>
+                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0" />
                 </div>
               )}
-              <div className="flex items-center space-x-1 mt-1 text-[10px]">
+              <div className="flex items-center space-x-1 mt-1 text-[9px] sm:text-[10px]">
                 <TrendingUp className="h-3 w-3 text-success-text shrink-0" />
                 <span className="text-success-text font-extrabold truncate">Issued Today</span>
                 <span className="text-muted-foreground hidden sm:inline">(Ledger)</span>
@@ -156,23 +166,23 @@ export default function SuperAdminDashboard() {
         </Link>
 
         {/* Card 2: Active Network */}
-        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 transition-all duration-200">
+        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Active Network</span>
-            <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
-              <Users className="h-4 w-4" />
+            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Active Network</span>
+            <div className="p-1 sm:p-1.5 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
+              <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
-          <div className="mt-1.5">
-            {isLoadingMetrics ? (
+          <div className="mt-1 sm:mt-1.5">
+            {isLoadingMetrics || isRefreshing ? (
               <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
             ) : (
-              <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-foreground">
-                {activeAgents} <span className="text-xs font-normal text-muted-foreground">Agents</span>
+              <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-foreground">
+                {activeAgents} <span className="text-[10px] font-normal text-muted-foreground">Agents</span>
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground mt-1 truncate">
-              <strong className="text-foreground font-bold">{activePlayers}</strong> players registered
+            <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 truncate">
+              <strong className="text-foreground font-bold">{activePlayers}</strong> players
             </p>
           </div>
         </Card>
