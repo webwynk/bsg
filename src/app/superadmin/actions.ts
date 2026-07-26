@@ -61,6 +61,23 @@ export async function getSystemOverviewMetricsAction() {
       const playerCoins = players.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
       const totalCoins = agentCoins + playerCoins
 
+      // Today's Coins Issued (since 00:00:00 today)
+      let todaysCoinsIssued = 0
+      try {
+        const todayStart = new Date()
+        todayStart.setHours(0, 0, 0, 0)
+
+        const { data: txnsToday } = await supabaseAdmin
+          .from('agent_coin_transactions')
+          .select('amount')
+          .eq('type', 'deposit')
+          .gte('created_at', todayStart.toISOString())
+
+        if (txnsToday) {
+          todaysCoinsIssued = txnsToday.reduce((acc, tx) => acc + Number(tx.amount || 0), 0)
+        }
+      } catch (_) {}
+
       // Total bets in 24h from game_history table
       let totalBets24h = 0
       try {
@@ -74,6 +91,7 @@ export async function getSystemOverviewMetricsAction() {
 
       return {
         totalCoins,
+        todaysCoinsIssued,
         activeAgents: agents.length,
         activePlayers: players.length,
         totalBets24h
@@ -83,6 +101,7 @@ export async function getSystemOverviewMetricsAction() {
 
   return {
     totalCoins: 0,
+    todaysCoinsIssued: 0,
     activeAgents: 0,
     activePlayers: 0,
     totalBets24h: 0

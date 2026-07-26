@@ -149,6 +149,22 @@ export default function AgentsPage() {
         </Dialog>
       </div>
 
+      {/* Navigation Sub-Tabs */}
+      <div className="flex border-b border-border/60 space-x-2">
+        <Link
+          href="/superadmin/agents"
+          className="py-2.5 px-4 font-bold text-sm text-primary border-b-2 border-primary"
+        >
+          Agent Directory
+        </Link>
+        <Link
+          href="/superadmin/agents/issued"
+          className="py-2.5 px-4 font-semibold text-sm text-muted-foreground hover:text-foreground border-b-2 border-transparent hover:border-border transition-all"
+        >
+          Coins Issued Ledger
+        </Link>
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <Input 
           placeholder="Search agents..." 

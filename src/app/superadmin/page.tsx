@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2 } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { getRtpAction, updateRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
@@ -11,6 +12,7 @@ import { formatCurrency } from '@/lib/utils'
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
   const [totalCoins, setTotalCoins] = React.useState(0)
+  const [todaysCoins, setTodaysCoins] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [activePlayers, setActivePlayers] = React.useState(0)
   const [totalBets24h, setTotalBets24h] = React.useState(0)
@@ -23,6 +25,7 @@ export default function SuperAdminDashboard() {
     getSystemOverviewMetricsAction().then((res) => {
       if (res) {
         setTotalCoins(res.totalCoins || 0)
+        setTodaysCoins(res.todaysCoinsIssued || 0)
         setActiveAgents(res.activeAgents || 0)
         setActivePlayers(res.activePlayers || 0)
         setTotalBets24h(res.totalBets24h || 0)
@@ -63,6 +66,7 @@ export default function SuperAdminDashboard() {
     getSystemOverviewMetricsAction().then((res) => {
       if (isMounted && res) {
         setTotalCoins(res.totalCoins || 0)
+        setTodaysCoins(res.todaysCoinsIssued || 0)
         setActiveAgents(res.activeAgents || 0)
         setActivePlayers(res.activePlayers || 0)
         setTotalBets24h(res.totalBets24h || 0)
@@ -102,23 +106,30 @@ export default function SuperAdminDashboard() {
 
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 auto-rows-min">
-        {/* Bento Card 1: Total Coins Issued */}
-        <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Coins Issued</span>
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
-              <Coins className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">{formatCurrency(totalCoins)}</div>
-            <div className="flex items-center space-x-1.5 mt-2">
-              <TrendingUp className="h-3.5 w-3.5 text-success-text" />
-              <span className="text-xs font-semibold text-success-text">Active</span>
-              <span className="text-xs text-muted-foreground">Agents + Players ecosystem</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Bento Card 1: Today's Coins Issued (Clickable to /superadmin/agents/issued) */}
+        <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
+          <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden group-hover:border-primary/50 group-hover:shadow-md group-hover:scale-[1.01] transition-all duration-200 h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors">
+                Today&apos;s Coins Issued
+              </span>
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <Coins className="h-5 w-5" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <div className="text-3xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                <span>{formatCurrency(todaysCoins)}</span>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+              </div>
+              <div className="flex items-center space-x-1.5 mt-2">
+                <TrendingUp className="h-3.5 w-3.5 text-success-text" />
+                <span className="text-xs font-semibold text-success-text">Given to agents today</span>
+                <span className="text-[10px] text-muted-foreground font-semibold">(Click for ledger)</span>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
         {/* Bento Card 2: Active Agent & Player Count */}
         <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">

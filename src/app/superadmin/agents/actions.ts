@@ -291,13 +291,142 @@ export async function transferPointsAction(targetId: string, amount: number, typ
       return { error: updateError.message }
     }
 
+    // Insert into agent_coin_transactions table for ledger tracking
+    try {
+      await supabaseAdmin.from('agent_coin_transactions').insert({
+        agent_id: targetId,
+        agent_name: targetUser.user_metadata?.full_name || targetUsername,
+        agent_username: targetUsername,
+        admin_id: callerUser?.id || null,
+        type: type,
+        amount: sanitizedAmount
+      })
+    } catch (_) {}
+
     await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Agent @${targetUsername}`)
     revalidatePath('/superadmin/agents')
+    revalidatePath('/superadmin/agents/issued')
     revalidatePath(`/superadmin/agents/${targetId}`)
     return { success: true, newBalance }
   }
 
   return { error: 'Service Role Key not configured in Vercel environment variables.' }
+}
+
+export async function getAgentCoinTransactionsAction(params?: {
+  agentId?: string
+  startDate?: string
+  endDate?: string
+  type?: 'deposit' | 'withdraw' | 'all'
+  page?: number
+  limit?: number
+}) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (!serviceRoleKey || !supabaseUrl) {
+    return { transactions: [], totalItems: 0, totalPages: 1, summary: { totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 } }
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
+
+  let query = supabaseAdmin
+    .from('agent_coin_transactions')
+    .select('*', { count: 'exact' })
+
+  if (params?.agentId && params.agentId !== 'all') {
+    query = query.eq('agent_id', params.agentId)
+  }
+
+  if (params?.type && params.type !== 'all') {
+    query = query.eq('type', params.type)
+  }
+
+  if (params?.startDate) {
+    const startIso = new Date(params.startDate).toISOString()
+    query = query.gte('created_at', startIso)
+  }
+
+  if (params?.endDate) {
+    const endDateObj = new Date(params.endDate)
+    endDateObj.setHours(23, 59, 59, 999)
+    query = query.lte('created_at', endDateObj.toISOString())
+  }
+
+  const page = params?.page || 1
+  const limit = params?.limit || 10
+  const from = (page - 1) * limit
+  const to = from + limit - 1
+
+  query = query.order('created_at', { ascending: false }).range(from, to)
+
+  const { data, count, error } = await query
+
+  if (error) {
+    return { transactions: [], totalItems: 0, totalPages: 1, summary: { totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 } }
+  }
+
+  // Query summary totals for full filtered dataset
+  let summaryQuery = supabaseAdmin
+    .from('agent_coin_transactions')
+    .select('type, amount')
+
+  if (params?.agentId && params.agentId !== 'all') {
+    summaryQuery = summaryQuery.eq('agent_id', params.agentId)
+  }
+  if (params?.startDate) {
+    const startIso = new Date(params.startDate).toISOString()
+    summaryQuery = summaryQuery.gte('created_at', startIso)
+  }
+  if (params?.endDate) {
+    const endDateObj = new Date(params.endDate)
+    endDateObj.setHours(23, 59, 59, 999)
+    summaryQuery = summaryQuery.lte('created_at', endDateObj.toISOString())
+  }
+
+  const { data: summaryData } = await summaryQuery
+
+  let totalDeposited = 0
+  let totalWithdrawn = 0
+  if (summaryData) {
+    summaryData.forEach(item => {
+      if (item.type === 'deposit') totalDeposited += Number(item.amount)
+      if (item.type === 'withdraw') totalWithdrawn += Number(item.amount)
+    })
+  }
+
+  const transactions = (data || []).map(tx => ({
+    id: tx.id,
+    agentId: tx.agent_id,
+    agentName: tx.agent_name,
+    agentUsername: tx.agent_username,
+    type: tx.type,
+    amount: Number(tx.amount),
+    createdAt: tx.created_at,
+    date: new Date(tx.created_at).toLocaleString([], {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }))
+
+  const totalItems = count || 0
+  const totalPages = Math.ceil(totalItems / limit) || 1
+
+  return {
+    transactions,
+    totalItems,
+    totalPages,
+    summary: {
+      totalDeposited,
+      totalWithdrawn,
+      netIssued: totalDeposited - totalWithdrawn
+    }
+  }
 }
 
 export async function toggleAgentStatusAction(agentId: string, currentStatus: string) {
