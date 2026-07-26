@@ -436,9 +436,77 @@ export default function SuperAdminDashboard() {
         {/* Tab 1: Triple Chance Active View */}
         {selectedGameTab === 'triple_chance' && (
           <div className="space-y-3">
-            {/* Featured Latest Round Box */}
-            {latestDraws.length > 0 ? (
-              (() => {
+            {(() => {
+              // 30s UTC pre-determination calculation
+              const utcSecs = Math.floor(nowTime / 1000)
+              const cycleRem = 103 - (utcSecs % 103)
+              const roundCountdown = cycleRem >= 14 ? cycleRem - 13 : 0
+              const isPreDetermined30s = roundCountdown <= 30
+
+              // PHASE 1: Loading State (90s down to 31s remaining)
+              if (!isPreDetermined30s) {
+                return (
+                  <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-secondary/40 via-card to-background border border-border/80 space-y-3 shadow-inner">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center space-x-1.5">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>Calculating Round Outcome... (Reveals at 30s remaining)</span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>{roundCountdown}s remaining in betting phase</span>
+                      </div>
+                    </div>
+
+                    {/* Animated Pulsing Digit Skeletons */}
+                    <div className="flex items-center justify-between flex-wrap gap-3 pt-1 opacity-70">
+                      <div className="flex items-center space-x-2 sm:space-x-3">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-950/20 border-2 border-red-500/40 text-red-400/50 flex items-center justify-center text-lg sm:text-2xl font-black font-mono animate-pulse">
+                            ?
+                          </div>
+                        </div>
+
+                        <span className="text-muted-foreground/30 font-black text-xl mt-4">+</span>
+
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-950/20 border-2 border-emerald-500/40 text-emerald-400/50 flex items-center justify-center text-lg sm:text-2xl font-black font-mono animate-pulse">
+                            ?
+                          </div>
+                        </div>
+
+                        <span className="text-muted-foreground/30 font-black text-xl mt-4">+</span>
+
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-900 border-2 border-neutral-700/50 text-muted-foreground/50 flex items-center justify-center text-lg sm:text-2xl font-black font-mono animate-pulse">
+                            ?
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-start sm:items-end">
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Result</span>
+                        <div className="text-2xl sm:text-4xl font-black font-mono tracking-widest text-muted-foreground/40 bg-secondary/40 px-3 py-1 rounded-xl border border-border/50 mt-0.5 animate-pulse">
+                          ???
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground font-semibold pt-1 border-t border-border/40">
+                      💡 Players are placing bets. Pre-determined winning outcome will reveal automatically on Superadmin when timer hits 30 seconds.
+                    </p>
+                  </div>
+                )
+              }
+
+              // PHASE 2: Revealed Real Winning Outcome (30s down to 0s & during spin)
+              if (latestDraws.length > 0) {
                 const latest = latestDraws[0]
                 const drawTime = latest.createdAt ? new Date(latest.createdAt).getTime() : Date.now()
                 const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
@@ -448,24 +516,14 @@ export default function SuperAdminDashboard() {
                 else if (diffSecs >= 60 && diffSecs < 3600) relativeTimeStr = `${Math.floor(diffSecs / 60)}m ago`
                 else if (diffSecs >= 3600) relativeTimeStr = `${Math.floor(diffSecs / 3600)}h ago`
 
-                // 30s UTC pre-determination indicator
-                const utcSecs = Math.floor(nowTime / 1000)
-                const cycleRem = 103 - (utcSecs % 103)
-                const roundCountdown = cycleRem >= 14 ? cycleRem - 13 : 0
-                const isPreDetermined30s = roundCountdown <= 30
-
                 return (
                   <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-purple-950/30 via-card to-background border border-purple-500/30 space-y-3 shadow-inner">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center space-x-2">
-                        <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                          Latest Draw Result
+                        <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse flex items-center space-x-1">
+                          <Sparkles className="h-3 w-3" />
+                          <span>⚡ Pre-Determined Result Revealed (30s Remaining)</span>
                         </span>
-                        {isPreDetermined30s && (
-                          <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
-                            ⚡ Pre-Determined (30s Remaining)
-                          </span>
-                        )}
                       </div>
 
                       <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
@@ -534,12 +592,14 @@ export default function SuperAdminDashboard() {
                     </div>
                   </div>
                 )
-              })()
-            ) : (
-              <div className="p-4 rounded-xl bg-secondary/30 border border-border text-center text-xs text-muted-foreground">
-                No game draw records found. Plays made on Triple Chance will automatically show here in real-time.
-              </div>
-            )}
+              }
+
+              return (
+                <div className="p-4 rounded-xl bg-secondary/30 border border-border text-center text-xs text-muted-foreground">
+                  No game draw records found. Plays made on Triple Chance will automatically show here in real-time.
+                </div>
+              )
+            })()}
 
             {/* Recent Rounds Stream (Horizontal Chips Stream) */}
             {latestDraws.length > 1 && (

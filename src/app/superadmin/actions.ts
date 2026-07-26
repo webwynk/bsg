@@ -271,84 +271,44 @@ export async function getLatestGameDrawsAction() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
+  if (!serviceRoleKey || !supabaseUrl) {
+    return { draws: [] }
+  }
+
   try {
-    let dbRows: any[] = []
-    if (serviceRoleKey && supabaseUrl) {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
-      const { data } = await supabaseAdmin
-        .from('game_history')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(20)
+    const { data: rows } = await supabaseAdmin
+      .from('game_history')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10)
 
-      dbRows = data || []
-    }
+    const draws = (rows || []).map(row => {
+      const resNum = (row.result_number !== null && row.result_number !== undefined)
+        ? Number(row.result_number)
+        : 0
+      const resStr = resNum.toString().padStart(3, '0')
+      const red = row.red_digit !== null && row.red_digit !== undefined ? row.red_digit : parseInt(resStr[0], 10)
+      const green = row.green_digit !== null && row.green_digit !== undefined ? row.green_digit : parseInt(resStr[1], 10)
+      const black = row.black_digit !== null && row.black_digit !== undefined ? row.black_digit : parseInt(resStr[2], 10)
 
-    const nowSecs = Math.floor(Date.now() / 1000)
-    const currentRoundStartSecs = nowSecs - (nowSecs % 103)
-
-    // Generate 10 continuous 24/7 rounds (current round + last 9 rounds)
-    const draws = []
-    const usedDbIds = new Set<string>()
-
-    for (let i = 0; i < 10; i++) {
-      const roundTimeSecs = currentRoundStartSecs - (i * 103)
-      const roundIsoDate = new Date(roundTimeSecs * 1000).toISOString()
-
-      // Check if DB has a real player spin near this round timestamp (within 103s)
-      const dbMatch = dbRows.find(row => {
-        if (!row.created_at || usedDbIds.has(row.id)) return false
-        const rowSecs = Math.floor(new Date(row.created_at).getTime() / 1000)
-        return Math.abs(rowSecs - roundTimeSecs) <= 51 || Math.abs(rowSecs - (roundTimeSecs + 103)) <= 51
-      })
-
-      if (dbMatch) {
-        usedDbIds.add(dbMatch.id)
-        const resNum = dbMatch.result_number !== null && dbMatch.result_number !== undefined
-          ? Number(dbMatch.result_number)
-          : Math.abs((roundTimeSecs * 137 + 42) % 1000)
-        const resStr = resNum.toString().padStart(3, '0')
-        const red = dbMatch.red_digit !== null && dbMatch.red_digit !== undefined ? dbMatch.red_digit : parseInt(resStr[0], 10)
-        const green = dbMatch.green_digit !== null && dbMatch.green_digit !== undefined ? dbMatch.green_digit : parseInt(resStr[1], 10)
-        const black = dbMatch.black_digit !== null && dbMatch.black_digit !== undefined ? dbMatch.black_digit : parseInt(resStr[2], 10)
-
-        draws.push({
-          id: dbMatch.id,
-          game: dbMatch.game_name || 'Triple Chance',
-          resultNumber: resNum,
-          redDigit: red,
-          greenDigit: green,
-          blackDigit: black,
-          betAmount: Number(dbMatch.bet_amount || 0),
-          winAmount: Number(dbMatch.win_amount || 0),
-          status: dbMatch.status || (Number(dbMatch.win_amount || 0) > 0 ? 'WON' : 'LOST'),
-          playerUsername: dbMatch.user_username || 'player',
-          createdAt: dbMatch.created_at
-        })
-      } else {
-        // Continuous 24/7 Global Round generator for rounds with no player bets
-        const roundNum = Math.floor(roundTimeSecs / 103)
-        const pseudoRes = Math.abs((roundNum * 317 + 89) % 1000)
-        const resStr = pseudoRes.toString().padStart(3, '0')
-
-        draws.push({
-          id: `round_${roundNum}`,
-          game: 'Triple Chance',
-          resultNumber: pseudoRes,
-          redDigit: parseInt(resStr[0], 10),
-          greenDigit: parseInt(resStr[1], 10),
-          blackDigit: parseInt(resStr[2], 10),
-          betAmount: 0,
-          winAmount: 0,
-          status: 'COMPLETED',
-          playerUsername: 'Global Round',
-          createdAt: roundIsoDate
-        })
+      return {
+        id: row.id,
+        game: row.game_name || 'Triple Chance',
+        resultNumber: resNum,
+        redDigit: red,
+        greenDigit: green,
+        blackDigit: black,
+        betAmount: Number(row.bet_amount || 0),
+        winAmount: Number(row.win_amount || 0),
+        status: row.status || (Number(row.win_amount || 0) > 0 ? 'WON' : 'LOST'),
+        playerUsername: row.user_username || row.user_name || 'player',
+        createdAt: row.created_at
       }
-    }
+    })
 
     return { draws }
   } catch (_) {
