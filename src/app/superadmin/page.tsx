@@ -126,17 +126,22 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
-      {/* Page Title Header (ULTRA COMPACT) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      {/* Page Title Header (Mobile First Inline Header) */}
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground">
-            System Overview
-          </h1>
-          <p className="text-muted-foreground text-[11px] sm:text-xs">
-            Real-time management dashboard and network controls (God Mode).
+          <div className="flex items-center space-x-2">
+            <h1 className="text-base sm:text-xl font-black tracking-tight text-foreground">
+              System Overview
+            </h1>
+            <span className="px-2 py-0.5 text-[9px] sm:text-[10px] font-bold rounded-full bg-primary/10 text-primary border border-primary/20">
+              God Mode
+            </span>
+          </div>
+          <p className="text-muted-foreground text-[11px] sm:text-xs hidden sm:block">
+            Real-time management dashboard and network controls.
           </p>
         </div>
-        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Auto-Sync (30s)
@@ -145,110 +150,112 @@ export default function SuperAdminDashboard() {
             onClick={handleManualRefresh} 
             variant="outline" 
             size="sm" 
-            className="h-8 text-xs font-extrabold px-3 rounded-xl border-border/80 hover:bg-secondary cursor-pointer shrink-0 w-full sm:w-auto"
+            className="h-7.5 sm:h-8 text-[11px] sm:text-xs font-extrabold px-2.5 sm:px-3 rounded-xl border-border/80 hover:bg-secondary cursor-pointer shrink-0 w-auto"
           >
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw className={`mr-1 sm:mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>
       </div>
 
-      {/* Top 3 Overview Micro Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+      {/* Top 3 Overview Micro Cards (3-Column Micro Strip Grid on Mobile) */}
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
         {/* Card 1: Today's Coins Issued (Asia/Kolkata IST 00:00 reset) */}
         <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
-          <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
+          <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
             <div className="flex items-center justify-between">
               <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
-                Today&apos;s Issued (IST)
+                Today Issued
               </span>
-              <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
+              <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0 hidden sm:block">
                 <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
             </div>
-            <div className="mt-1 sm:mt-1.5">
+            <div className="mt-0.5 sm:mt-1.5">
               {isLoadingMetrics || isRefreshing ? (
-                <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+                <div className="h-5 sm:h-6 w-14 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
               ) : (
-                <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-emerald-500 flex items-center justify-between">
                   <span className="truncate">{formatCurrency(todaysCoins)}</span>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0" />
+                  <ArrowUpRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0 hidden sm:block" />
                 </div>
               )}
-              <div className="flex items-center space-x-1 mt-1 text-[9px] sm:text-[10px]">
-                <TrendingUp className="h-3 w-3 text-success-text shrink-0" />
-                <span className="text-success-text font-extrabold truncate">Resets 00:00 IST</span>
-                <span className="text-muted-foreground hidden sm:inline">(Ledger)</span>
+              <div className="flex items-center space-x-1 mt-0.5 text-[8px] sm:text-[10px]">
+                <TrendingUp className="h-2.5 w-2.5 text-emerald-500 shrink-0 hidden sm:block" />
+                <span className="text-emerald-500 font-extrabold truncate">Resets 00:00 IST</span>
               </div>
             </div>
           </Card>
         </Link>
 
         {/* Card 2: Active Network */}
-        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 transition-all duration-200">
+        <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Active Network</span>
-            <div className="p-1 sm:p-1.5 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
+            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Network</span>
+            <div className="p-1 sm:p-1.5 rounded-lg bg-blue-500/10 text-blue-500 shrink-0 hidden sm:block">
               <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
-          <div className="mt-1 sm:mt-1.5">
+          <div className="mt-0.5 sm:mt-1.5">
             {isLoadingMetrics || isRefreshing ? (
-              <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
+              <div className="h-5 sm:h-6 w-12 sm:w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
-              <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-foreground">
-                {activeAgents} <span className="text-[10px] font-normal text-muted-foreground">Agents</span>
+              <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-foreground truncate">
+                {activeAgents} <span className="text-[9px] font-semibold text-muted-foreground sm:hidden">Ag</span><span className="text-[10px] font-normal text-muted-foreground hidden sm:inline">Agents</span> / {activePlayers} <span className="text-[9px] font-semibold text-muted-foreground sm:hidden">Pl</span>
               </div>
             )}
-            <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 truncate">
+            <p className="text-[8px] sm:text-[10px] text-muted-foreground mt-0.5 truncate hidden sm:block">
               <strong className="text-foreground font-bold">{activePlayers}</strong> registered players
+            </p>
+            <p className="text-[8px] text-muted-foreground mt-0.5 truncate sm:hidden">
+              Agents & Players
             </p>
           </div>
         </Card>
 
         {/* Card 3: Global RTP Target */}
-        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-2.5 sm:p-3 transition-all duration-200">
+        <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Global RTP</span>
-            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0 hidden sm:block">
               <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
-          <div className="mt-1 sm:mt-1.5">
+          <div className="mt-0.5 sm:mt-1.5">
             {isLoadingMetrics ? (
-              <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
+              <div className="h-5 sm:h-6 w-12 sm:w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
               <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-amber-500">{rtpValue}%</div>
             )}
-            <div className="flex items-center space-x-1 mt-1 text-[9px] sm:text-[10px] text-muted-foreground">
+            <div className="flex items-center space-x-1 mt-0.5 text-[8px] sm:text-[10px] text-muted-foreground">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <span className="truncate">Optimization Active</span>
+              <span className="truncate">Active</span>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* 📊 Unified Gameplay & Bets Audit Widget (Separated Multi-Metric Compact Grid) */}
-      <Card className="bg-card border-border/80 shadow-xs rounded-2xl p-3 sm:p-4 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-2.5">
-          <div className="flex items-center space-x-2">
-            <div className="p-1.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
-              <Gamepad2 className="h-4 w-4" />
+      {/* 📊 Unified Gameplay & Bets Audit Widget (Compact Mobile First Layout) */}
+      <Card className="bg-card border-border/80 shadow-2xs rounded-2xl p-2.5 sm:p-4 space-y-2.5">
+        <div className="flex items-center justify-between gap-1 border-b border-border/50 pb-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
+            <div className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
+              <Gamepad2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-black tracking-tight text-foreground">
+              <h2 className="text-xs sm:text-base font-black tracking-tight text-foreground leading-tight">
                 Gameplay & Bets Audit
               </h2>
-              <p className="text-[10px] text-muted-foreground font-semibold">
+              <p className="text-[10px] text-muted-foreground font-semibold hidden sm:block">
                 Network-wide bet counts, total wagered coins, payouts, and net house profit.
               </p>
             </div>
           </div>
 
           {/* Scope Toggle Pills: Today (IST) vs Lifetime */}
-          <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold self-start sm:self-auto">
+          <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[9px] sm:text-[10px] font-bold shrink-0">
             <button
               onClick={() => setGameplayScope('today')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer ${
                 gameplayScope === 'today'
                   ? 'bg-primary text-primary-foreground font-black shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -258,7 +265,7 @@ export default function SuperAdminDashboard() {
             </button>
             <button
               onClick={() => setGameplayScope('lifetime')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer ${
                 gameplayScope === 'lifetime'
                   ? 'bg-primary text-primary-foreground font-black shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -269,67 +276,67 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        {/* 4-Metric Separated Grid (Compact & Mobile Optimized) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 divide-y sm:divide-y-0 sm:divide-x divide-border/60 pt-1">
+        {/* 4-Metric High-Density Grid (2-Column Mobile / 4-Column Desktop) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 sm:divide-x divide-border/60">
           {/* Metric 1: Bet Count (Number of Plays) */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              Bets Placed (Number)
+          <div className="p-2 sm:p-0 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
+              Bets Placed
             </span>
             {isLoadingMetrics || isRefreshing ? (
-              <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
+              <div className="h-5 sm:h-6 w-14 sm:w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
-              <div className="text-sm sm:text-xl font-black font-mono text-foreground">
-                {gameplayScope === 'today' ? todayBetsCount : totalBetsCount} <span className="text-[11px] text-muted-foreground font-normal">Plays</span>
+              <div className="text-xs sm:text-xl font-black font-mono text-foreground truncate">
+                {gameplayScope === 'today' ? todayBetsCount : totalBetsCount} <span className="text-[10px] sm:text-[11px] text-muted-foreground font-normal">Plays</span>
               </div>
             )}
-            <p className="text-[9px] text-muted-foreground/70">Total bets placed by players</p>
+            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total bets placed by players</p>
           </div>
 
           {/* Metric 2: Coins Wagered (In) */}
-          <div className="space-y-1 pt-2 sm:pt-0 sm:pl-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              Coins Wagered (In)
+          <div className="p-2 sm:p-0 sm:pl-3 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
+              Coins Bet (In)
             </span>
             {isLoadingMetrics || isRefreshing ? (
-              <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+              <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
-              <div className="text-sm sm:text-xl font-black font-mono text-foreground">
+              <div className="text-xs sm:text-xl font-black font-mono text-foreground truncate">
                 {formatCurrency(gameplayScope === 'today' ? todayBetCoins : totalBetCoins)}
               </div>
             )}
-            <p className="text-[9px] text-muted-foreground/70">Total wagered coins</p>
+            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total wagered coins</p>
           </div>
 
           {/* Metric 3: Coins Won (Out) */}
-          <div className="space-y-1 pt-2 sm:pt-0 sm:pl-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+          <div className="p-2 sm:p-0 sm:pl-3 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
               Coins Won (Out)
             </span>
             {isLoadingMetrics || isRefreshing ? (
-              <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+              <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
-              <div className="text-sm sm:text-xl font-black font-mono text-amber-500">
+              <div className="text-xs sm:text-xl font-black font-mono text-amber-500 truncate">
                 {formatCurrency(gameplayScope === 'today' ? todayWinCoins : totalWinCoins)}
               </div>
             )}
-            <p className="text-[9px] text-muted-foreground/70">Returned to winning players</p>
+            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Returned to winning players</p>
           </div>
 
           {/* Metric 4: Net Lost Coins (House P/L) */}
-          <div className="space-y-1 pt-2 sm:pt-0 sm:pl-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+          <div className="p-2 sm:p-0 sm:pl-3 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
               Net Lost (House P/L)
             </span>
             {isLoadingMetrics || isRefreshing ? (
-              <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
+              <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
-              <div className={`text-sm sm:text-xl font-black font-mono ${(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              <div className={`text-xs sm:text-xl font-black font-mono truncate ${(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                 {(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? '+' : ''}
                 {formatCurrency(gameplayScope === 'today' ? todayLostCoins : totalLostCoins)}
               </div>
             )}
-            <p className="text-[9px] text-muted-foreground/70">Net lost coins by players</p>
+            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Net lost coins by players</p>
           </div>
         </div>
       </Card>
