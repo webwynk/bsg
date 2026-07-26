@@ -3,12 +3,12 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight, Search, Gamepad2 } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight, Search, Gamepad2, Sparkles, Clock, Radio, Dices, Trophy } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
-import { getRtpAction, updateRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
+import { getRtpAction, updateRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
@@ -29,6 +29,23 @@ export default function SuperAdminDashboard() {
   const [todayWinCoins, setTodayWinCoins] = React.useState(0)
   const [todayLostCoins, setTodayLostCoins] = React.useState(0)
 
+  // Live Draw Monitor & Multi-Game State
+  const [selectedGameTab, setSelectedGameTab] = React.useState<'triple_chance' | 'game_2' | 'game_3'>('triple_chance')
+  const [latestDraws, setLatestDraws] = React.useState<Array<{
+    id: string
+    game: string
+    resultNumber: number
+    redDigit: number
+    greenDigit: number
+    blackDigit: number
+    betAmount: number
+    winAmount: number
+    status: string
+    playerUsername: string
+    createdAt: string
+  }>>([])
+  const [nowTime, setNowTime] = React.useState(Date.now())
+
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -41,13 +58,22 @@ export default function SuperAdminDashboard() {
   const [logPage, setLogPage] = React.useState(1)
   const logsPerPage = 4
 
+  // Live 1-second Ticker Interval for Relative Timestamps (e.g. 25s ago)
+  React.useEffect(() => {
+    const ticker = setInterval(() => {
+      setNowTime(Date.now())
+    }, 1000)
+    return () => clearInterval(ticker)
+  }, [])
+
   const fetchMetrics = () => {
     setIsLoadingMetrics(true)
     Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
-      getAuditLogsAction()
-    ]).then(([resMetrics, resRtp, resLogs]) => {
+      getAuditLogsAction(),
+      getLatestGameDrawsAction()
+    ]).then(([resMetrics, resRtp, resLogs, resDraws]) => {
       setIsLoadingMetrics(false)
       if (resMetrics) {
         setTotalCoins(resMetrics.totalCoins || 0)
@@ -68,6 +94,9 @@ export default function SuperAdminDashboard() {
       }
       if (resLogs?.logs) {
         setSystemLogs(resLogs.logs)
+      }
+      if (resDraws?.draws) {
+        setLatestDraws(resDraws.draws)
       }
     }).catch(() => setIsLoadingMetrics(false))
   }
@@ -339,6 +368,233 @@ export default function SuperAdminDashboard() {
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Net lost coins by players</p>
           </div>
         </div>
+      </Card>
+
+      {/* 🎰 Live Game Draw Monitor & Winning Numbers Feed (Multi-Game Architecture) */}
+      <Card className="bg-card border-border/80 shadow-2xs rounded-2xl p-3 sm:p-4 space-y-3">
+        {/* Card Header & Multi-Game Selector Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
+          <div className="flex items-center space-x-2">
+            <div className="p-1.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+              <Radio className="h-4 w-4 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-sm sm:text-base font-black tracking-tight text-foreground">
+                  Live Game Draw Monitor
+                </h2>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground font-semibold hidden sm:block">
+                Real-time round outcome stream, 30s pre-determined winning number reveal, and draw timestamps.
+              </p>
+            </div>
+          </div>
+
+          {/* Multi-Game Tabs (Triple Chance + 2 Future Games Placeholders) */}
+          <div className="flex items-center gap-1 bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold self-start sm:self-auto overflow-x-auto max-w-full">
+            <button
+              onClick={() => setSelectedGameTab('triple_chance')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
+                selectedGameTab === 'triple_chance'
+                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span>🎰 Triple Chance</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedGameTab('game_2')}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
+                selectedGameTab === 'game_2'
+                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                  : 'text-muted-foreground/60 hover:text-muted-foreground'
+              }`}
+            >
+              <span>🎲 Game 2</span>
+              <span className="text-[8px] bg-secondary px-1 rounded text-muted-foreground">Soon</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedGameTab('game_3')}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
+                selectedGameTab === 'game_3'
+                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                  : 'text-muted-foreground/60 hover:text-muted-foreground'
+              }`}
+            >
+              <span>🃏 Game 3</span>
+              <span className="text-[8px] bg-secondary px-1 rounded text-muted-foreground">Soon</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Tab 1: Triple Chance Active View */}
+        {selectedGameTab === 'triple_chance' && (
+          <div className="space-y-3">
+            {/* Featured Latest Round Box */}
+            {latestDraws.length > 0 ? (
+              (() => {
+                const latest = latestDraws[0]
+                const drawTime = latest.createdAt ? new Date(latest.createdAt).getTime() : Date.now()
+                const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
+
+                let relativeTimeStr = 'Just now'
+                if (diffSecs >= 5 && diffSecs < 60) relativeTimeStr = `${diffSecs}s ago`
+                else if (diffSecs >= 60 && diffSecs < 3600) relativeTimeStr = `${Math.floor(diffSecs / 60)}m ago`
+                else if (diffSecs >= 3600) relativeTimeStr = `${Math.floor(diffSecs / 3600)}h ago`
+
+                // 30s UTC pre-determination indicator
+                const utcSecs = Math.floor(nowTime / 1000)
+                const cycleRem = 103 - (utcSecs % 103)
+                const roundCountdown = cycleRem >= 14 ? cycleRem - 13 : 0
+                const isPreDetermined30s = roundCountdown <= 30
+
+                return (
+                  <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-purple-950/30 via-card to-background border border-purple-500/30 space-y-3 shadow-inner">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          Latest Draw Result
+                        </span>
+                        {isPreDetermined30s && (
+                          <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
+                            ⚡ Pre-Determined (30s Remaining)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>{relativeTimeStr}</span>
+                      </div>
+                    </div>
+
+                    {/* Color-Coded 3-Digit Winning Outcome Display */}
+                    <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+                      <div className="flex items-center space-x-2 sm:space-x-3">
+                        {/* Red Digit (1st) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
+                            {latest.redDigit}
+                          </div>
+                        </div>
+
+                        <span className="text-muted-foreground/40 font-black text-xl mt-4">+</span>
+
+                        {/* Green Digit (2nd) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
+                            {latest.greenDigit}
+                          </div>
+                        </div>
+
+                        <span className="text-muted-foreground/40 font-black text-xl mt-4">+</span>
+
+                        {/* Black Digit (3rd) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
+                            {latest.blackDigit}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Combination Result Badge */}
+                      <div className="flex flex-col items-start sm:items-end">
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Result</span>
+                        <div className="text-2xl sm:text-4xl font-black font-mono tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/30 mt-0.5">
+                          {latest.resultNumber.toString().padStart(3, '0')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Round Financial Breakdown */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-purple-500/20 text-[10px] sm:text-xs">
+                      <div>
+                        <span className="text-muted-foreground font-semibold block">Player:</span>
+                        <span className="font-extrabold font-mono text-foreground">@{latest.playerUsername}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground font-semibold block">Wagered:</span>
+                        <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.betAmount)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground font-semibold block">Net Payout:</span>
+                        <span className={`font-extrabold font-mono ${latest.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                          {latest.winAmount > 0 ? `+${formatCurrency(latest.winAmount)}` : '0 Coins'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()
+            ) : (
+              <div className="p-4 rounded-xl bg-secondary/30 border border-border text-center text-xs text-muted-foreground">
+                No game draw records found. Plays made on Triple Chance will automatically show here in real-time.
+              </div>
+            )}
+
+            {/* Recent Rounds Stream (Horizontal Chips Stream) */}
+            {latestDraws.length > 1 && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
+                  Recent Draw Stream (Last 10 Rounds)
+                </span>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                  {latestDraws.slice(1).map(draw => {
+                    const drawTime = draw.createdAt ? new Date(draw.createdAt).getTime() : Date.now()
+                    const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
+                    let relTime = 'Just now'
+                    if (diffSecs >= 5 && diffSecs < 60) relTime = `${diffSecs}s ago`
+                    else if (diffSecs >= 60 && diffSecs < 3600) relTime = `${Math.floor(diffSecs / 60)}m ago`
+                    else if (diffSecs >= 3600) relTime = `${Math.floor(diffSecs / 3600)}h ago`
+
+                    return (
+                      <div
+                        key={draw.id}
+                        className="px-2.5 py-1.5 rounded-xl bg-secondary/40 border border-border/60 shrink-0 flex items-center space-x-2 text-xs font-mono"
+                      >
+                        <span className="text-[10px] text-muted-foreground font-semibold">{relTime}</span>
+                        <div className="flex items-center space-x-1 font-bold">
+                          <span className="text-red-400">{draw.redDigit}</span>
+                          <span className="text-muted-foreground/50 text-[10px]">•</span>
+                          <span className="text-emerald-400">{draw.greenDigit}</span>
+                          <span className="text-muted-foreground/50 text-[10px]">•</span>
+                          <span className="text-foreground">{draw.blackDigit}</span>
+                        </div>
+                        <span className="font-extrabold text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[11px] border border-primary/20">
+                          {draw.resultNumber.toString().padStart(3, '0')}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2 & 3: Future Games Placeholder Views */}
+        {selectedGameTab !== 'triple_chance' && (
+          <div className="p-6 text-center rounded-xl bg-secondary/20 border border-dashed border-border/80 space-y-2">
+            <div className="inline-flex p-3 rounded-full bg-primary/10 text-primary border border-primary/20">
+              <Dices className="h-6 w-6" />
+            </div>
+            <h3 className="text-sm font-black text-foreground">
+              {selectedGameTab === 'game_2' ? 'Game 2 (Coming Soon)' : 'Game 3 (Coming Soon)'}
+            </h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Multi-game architecture is ready. Live draw outcome feeds and round telemetry for this game will activate automatically upon release.
+            </p>
+          </div>
+        )}
       </Card>
 
       {/* Main Widgets: RTP Configuration & Recent System Logs */}

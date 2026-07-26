@@ -266,3 +266,51 @@ export async function updateRtpAction(rtpPercentage: number) {
 
   return { success: false, error: 'Database service role key missing' }
 }
+
+export async function getLatestGameDrawsAction() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (!serviceRoleKey || !supabaseUrl) {
+    return { draws: [] }
+  }
+
+  try {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const { data: rows } = await supabaseAdmin
+      .from('game_history')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    const draws = (rows || []).map(row => {
+      const resStr = (row.result_number !== null && row.result_number !== undefined)
+        ? row.result_number.toString().padStart(3, '0')
+        : '000'
+      const red = row.red_digit !== null && row.red_digit !== undefined ? row.red_digit : parseInt(resStr[0], 10)
+      const green = row.green_digit !== null && row.green_digit !== undefined ? row.green_digit : parseInt(resStr[1], 10)
+      const black = row.black_digit !== null && row.black_digit !== undefined ? row.black_digit : parseInt(resStr[2], 10)
+
+      return {
+        id: row.id,
+        game: row.game_name || 'Triple Chance',
+        resultNumber: row.result_number !== null && row.result_number !== undefined ? row.result_number : 0,
+        redDigit: red,
+        greenDigit: green,
+        blackDigit: black,
+        betAmount: Number(row.bet_amount || 0),
+        winAmount: Number(row.win_amount || 0),
+        status: row.status || (Number(row.win_amount || 0) > 0 ? 'WON' : 'LOST'),
+        playerUsername: row.user_username || 'player',
+        createdAt: row.created_at
+      }
+    })
+
+    return { draws }
+  } catch (_) {
+    return { draws: [] }
+  }
+}
