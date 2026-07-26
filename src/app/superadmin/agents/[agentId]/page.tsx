@@ -25,7 +25,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
@@ -62,6 +62,7 @@ export default function AgentDetailPage({ params }: Props) {
   const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false)
   const [passwordError, setPasswordError] = React.useState<string | null>(null)
   const [passwordSuccess, setPasswordSuccess] = React.useState<string | null>(null)
+  const [showPassword, setShowPassword] = React.useState(false)
 
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
@@ -331,16 +332,25 @@ export default function AgentDetailPage({ params }: Props) {
                   )}
                   <div className="space-y-2">
                     <Label htmlFor="new-password">New Password</Label>
-                    <Input 
-                      id="new-password" 
-                      type="password" 
-                      placeholder="••••••••" 
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="bg-background border-border text-foreground"
-                      required
-                      minLength={6}
-                    />
+                    <div className="relative">
+                      <Input 
+                        id="new-password" 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="••••••••" 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full bg-background border-border text-foreground pr-10"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>

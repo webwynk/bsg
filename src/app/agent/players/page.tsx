@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft } from "lucide-react"
+import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
@@ -78,6 +78,10 @@ export default function PlayersPage() {
   const [isResettingPassword, setIsResettingPassword] = React.useState(false)
   const [resetPasswordError, setResetPasswordError] = React.useState<string | null>(null)
   const [resetPasswordSuccess, setResetPasswordSuccess] = React.useState<string | null>(null)
+
+  const [showCreatePassword, setShowCreatePassword] = React.useState(false)
+  const [showNewPassword, setShowNewPassword] = React.useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
@@ -261,9 +265,24 @@ export default function PlayersPage() {
                   <Label htmlFor="username" className="text-right text-muted-foreground">Username</Label>
                   <Input id="username" name="username" placeholder="rahul99" className="col-span-3 bg-background border-border text-foreground" required />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
+                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="password" className="text-right text-muted-foreground">Password</Label>
-                  <Input id="password" name="password" type="password" className="col-span-3 bg-background border-border text-foreground" required />
+                  <div className="col-span-3 relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showCreatePassword ? "text" : "password"}
+                      className="w-full bg-background border-border text-foreground pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePassword(!showCreatePassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+                    >
+                      {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -462,6 +481,8 @@ export default function PlayersPage() {
                         setConfirmPassword('')
                         setResetPasswordError(null)
                         setResetPasswordSuccess(null)
+                        setShowNewPassword(false)
+                        setShowConfirmPassword(false)
                       }}
                     >
                       <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-primary/30 text-primary hover:bg-primary/10 cursor-pointer text-xs font-bold" })}>
@@ -487,25 +508,43 @@ export default function PlayersPage() {
                           )}
                           <div className="space-y-2">
                             <Label htmlFor="new-password">New Password</Label>
-                            <Input 
-                              id="new-password" 
-                              type="password" 
-                              placeholder="At least 6 characters" 
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              className="bg-background border-border text-foreground" 
-                            />
+                            <div className="relative">
+                              <Input 
+                                id="new-password" 
+                                type={showNewPassword ? "text" : "password"} 
+                                placeholder="At least 6 characters" 
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="w-full bg-background border-border text-foreground pr-10" 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+                              >
+                                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="confirm-password">Confirm Password</Label>
-                            <Input 
-                              id="confirm-password" 
-                              type="password" 
-                              placeholder="Confirm new password" 
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              className="bg-background border-border text-foreground" 
-                            />
+                            <div className="relative">
+                              <Input 
+                                id="confirm-password" 
+                                type={showConfirmPassword ? "text" : "password"} 
+                                placeholder="Confirm new password" 
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full bg-background border-border text-foreground pr-10" 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+                              >
+                                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </div>
                         </div>
                         <DialogFooter>

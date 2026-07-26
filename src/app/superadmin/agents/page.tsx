@@ -22,7 +22,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Eye, Loader2 } from "lucide-react"
+import { Plus, Eye, EyeOff, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
@@ -38,6 +38,7 @@ export default function AgentsPage() {
   const [isLoading, setIsLoading] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
+  const [showPassword, setShowPassword] = React.useState(false)
 
   const itemsPerPage = 10
 
@@ -138,7 +139,22 @@ export default function AgentsPage() {
                   <Label htmlFor="password" className="text-right text-muted-foreground">
                     Password
                   </Label>
-                  <Input id="password" name="password" type="password" className="col-span-3 bg-background border-border text-foreground" required />
+                  <div className="col-span-3 relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      className="w-full bg-background border-border text-foreground pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
               <DialogFooter>

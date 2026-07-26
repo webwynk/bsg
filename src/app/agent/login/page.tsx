@@ -1,17 +1,18 @@
+"use client"
+
 import * as React from 'react'
+import { useSearchParams } from 'next/navigation'
 import { agentLogin } from './actions'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { KeyRound, Lock, User } from 'lucide-react'
+import { KeyRound, Lock, User, Eye, EyeOff } from 'lucide-react'
 
-interface Props {
-  searchParams: Promise<{ error?: string }>
-}
-
-export default async function AgentLogin({ searchParams }: Props) {
-  const { error } = await searchParams
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
+  const [showPassword, setShowPassword] = React.useState(false)
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background p-4 sm:p-6">
@@ -76,11 +77,19 @@ export default async function AgentLogin({ searchParams }: Props) {
                   <Input
                     id="password"
                     name="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="pl-9 bg-background/50 border-border/80 focus:border-primary/50 text-sm h-10 rounded-lg"
+                    className="pl-9 pr-10 bg-background/50 border-border/80 focus:border-primary/50 text-sm h-10 rounded-lg"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
             </CardContent>
@@ -97,5 +106,13 @@ export default async function AgentLogin({ searchParams }: Props) {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function AgentLogin() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground font-semibold text-sm">Loading...</div>}>
+      <LoginForm />
+    </React.Suspense>
   )
 }
