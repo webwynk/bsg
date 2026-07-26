@@ -78,15 +78,17 @@ export async function getSystemOverviewMetricsAction() {
         }
       } catch (_) {}
 
-      // Total bets in 24h from game_history table
+      // Total bets (Sum of bet_amount in 24h) from game_history table
       let totalBets24h = 0
       try {
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        const { count } = await supabaseAdmin
+        const { data: betsData } = await supabaseAdmin
           .from('game_history')
-          .select('*', { count: 'exact', head: true })
+          .select('bet_amount')
           .gte('created_at', twentyFourHoursAgo)
-        totalBets24h = count || 0
+        if (betsData) {
+          totalBets24h = betsData.reduce((acc, row) => acc + Number(row.bet_amount || 0), 0)
+        }
       } catch (_) {}
 
       return {

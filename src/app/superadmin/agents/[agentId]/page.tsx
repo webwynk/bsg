@@ -29,6 +29,7 @@ import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDow
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
+import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
 
 interface Props {
   params: React.Usable<{ agentId: string }>
@@ -40,6 +41,9 @@ export default function AgentDetailPage({ params }: Props) {
   const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string } | null>(null)
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
+  const [gamePlays, setGamePlays] = React.useState<Array<{ id: string; game: string; mode: string; selections: string; resultNumber: number; bet: number; win: number; status: 'WON' | 'LOST'; date: string }>>([])
+  const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; balanceAfter: number; date: string }>>([])
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
 
@@ -63,6 +67,17 @@ export default function AgentDetailPage({ params }: Props) {
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 4
 
+  const loadPlayerHistory = React.useCallback((playerId: string) => {
+    setIsLoadingHistory(true)
+    getPlayerDetailHistoryAction(playerId).then((res) => {
+      setIsLoadingHistory(false)
+      if (res) {
+        setGamePlays(res.gamePlays)
+        setPointsHistory(res.pointsHistory)
+      }
+    })
+  }, [])
+
   const loadAgentDetails = React.useCallback(() => {
     getAgentDetailAction(agentId).then((res) => {
       if (res.agent) {
@@ -72,14 +87,20 @@ export default function AgentDetailPage({ params }: Props) {
         setPlayers(res.players)
         if (res.players.length > 0 && !selectedPlayer) {
           setSelectedPlayer(res.players[0])
+          loadPlayerHistory(res.players[0].id)
         }
       }
     })
-  }, [agentId, selectedPlayer])
+  }, [agentId, selectedPlayer, loadPlayerHistory])
 
   React.useEffect(() => {
     loadAgentDetails()
-  }, [loadAgentDetails])
+  }, [])
+
+  const handleSelectPlayer = (player: typeof players[0]) => {
+    setSelectedPlayer(player)
+    loadPlayerHistory(player.id)
+  }
 
   const handleToggleAgentStatus = async () => {
     if (!agentInfo) return
@@ -137,9 +158,6 @@ export default function AgentDetailPage({ params }: Props) {
       loadAgentDetails()
     }
   }
-
-  const gamePlays: Array<{ id: string; player: string; game: string; bet: number; win: number; date: string }> = []
-  const pointsHistory: Array<{ id: string; player: string; type: 'deposit' | 'withdraw'; amount: number; date: string }> = []
 
   const totalGamesPages = Math.ceil(gamePlays.length / itemsPerPage) || 1
   const paginatedGames = gamePlays.slice((gamesPage - 1) * itemsPerPage, gamesPage * itemsPerPage)
@@ -415,7 +433,7 @@ export default function AgentDetailPage({ params }: Props) {
                   <div
                     key={player.id}
                     onClick={() => {
-                      setSelectedPlayer(player)
+                      handleSelectPlayer(player)
                       setGamesPage(1)
                       setPointsPage(1)
                     }}
