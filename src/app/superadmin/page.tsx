@@ -5,26 +5,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
-import { getAgentsAction } from './agents/actions'
-import { getRtpAction, updateRtpAction, getAuditLogsAction } from './actions'
+import { getRtpAction, updateRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
   const [totalCoins, setTotalCoins] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
-  const [totalBets] = React.useState(0)
+  const [activePlayers, setActivePlayers] = React.useState(0)
+  const [totalBets24h, setTotalBets24h] = React.useState(0)
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
 
   const fetchMetrics = () => {
-    getAgentsAction().then((res) => {
-      if (res.agents) {
-        setActiveAgents(res.agents.length)
-        const total = res.agents.reduce((acc, a) => acc + (a.balance || 0), 0)
-        setTotalCoins(total)
+    getSystemOverviewMetricsAction().then((res) => {
+      if (res) {
+        setTotalCoins(res.totalCoins || 0)
+        setActiveAgents(res.activeAgents || 0)
+        setActivePlayers(res.activePlayers || 0)
+        setTotalBets24h(res.totalBets24h || 0)
       }
     })
     getRtpAction().then((res) => {
@@ -59,11 +60,12 @@ export default function SuperAdminDashboard() {
 
   React.useEffect(() => {
     let isMounted = true
-    getAgentsAction().then((res) => {
-      if (isMounted && res.agents) {
-        setActiveAgents(res.agents.length)
-        const total = res.agents.reduce((acc, a) => acc + (a.balance || 0), 0)
-        setTotalCoins(total)
+    getSystemOverviewMetricsAction().then((res) => {
+      if (isMounted && res) {
+        setTotalCoins(res.totalCoins || 0)
+        setActiveAgents(res.activeAgents || 0)
+        setActivePlayers(res.activePlayers || 0)
+        setTotalBets24h(res.totalBets24h || 0)
       }
     })
     getRtpAction().then((res) => {
@@ -113,23 +115,23 @@ export default function SuperAdminDashboard() {
             <div className="flex items-center space-x-1.5 mt-2">
               <TrendingUp className="h-3.5 w-3.5 text-success-text" />
               <span className="text-xs font-semibold text-success-text">Active</span>
-              <span className="text-xs text-muted-foreground">live tracking</span>
+              <span className="text-xs text-muted-foreground">Agents + Players ecosystem</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Bento Card 2: Active Agent Count */}
+        {/* Bento Card 2: Active Agent & Player Count */}
         <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Agents</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Network</span>
             <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
               <Users className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents}</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents} <span className="text-sm font-normal text-muted-foreground">Agents</span></div>
             <p className="text-xs text-muted-foreground mt-2">
-              <span className="font-semibold text-foreground">{activeAgents} registered</span> agent network
+              <span className="font-semibold text-foreground">{activePlayers} registered</span> players network
             </p>
           </CardContent>
         </Card>
@@ -151,7 +153,7 @@ export default function SuperAdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Bento Card 4: Bets Placed */}
+        {/* Bento Card 4: Bets Placed (24h) */}
         <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Bets (24h)</span>
@@ -160,9 +162,9 @@ export default function SuperAdminDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-2">
-            <div className="text-3xl font-bold font-mono tracking-tight">{totalBets}</div>
+            <div className="text-3xl font-bold font-mono tracking-tight">{totalBets24h}</div>
             <p className="text-xs text-muted-foreground mt-2">
-              Live traffic: <span className="font-semibold text-foreground">0 rpm</span>
+              Spins in last <span className="font-semibold text-foreground">24 hours</span>
             </p>
           </CardContent>
         </Card>

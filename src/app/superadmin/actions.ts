@@ -41,6 +41,54 @@ export async function getAuditLogsAction() {
   return { logs: [] }
 }
 
+export async function getSystemOverviewMetricsAction() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      })
+
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      const allUsers = usersData?.users || []
+
+      const agents = allUsers.filter(u => u.user_metadata?.role === 'agent')
+      const players = allUsers.filter(u => u.user_metadata?.role === 'player')
+
+      const agentCoins = agents.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
+      const playerCoins = players.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
+      const totalCoins = agentCoins + playerCoins
+
+      // Total bets in 24h from game_history table
+      let totalBets24h = 0
+      try {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const { count } = await supabaseAdmin
+          .from('game_history')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', twentyFourHoursAgo)
+        totalBets24h = count || 0
+      } catch (_) {}
+
+      return {
+        totalCoins,
+        activeAgents: agents.length,
+        activePlayers: players.length,
+        totalBets24h
+      }
+    } catch (_) {}
+  }
+
+  return {
+    totalCoins: 0,
+    activeAgents: 0,
+    activePlayers: 0,
+    totalBets24h: 0
+  }
+}
+
 export async function logAuditEventAction(type: 'System' | 'Security' | 'Transaction', detail: string) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
