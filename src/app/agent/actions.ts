@@ -8,7 +8,7 @@ export async function getAgentDashboardDataAction() {
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
   if (!authUser) {
-    return { balance: 0, playersCount: 0, players: [] }
+    return { balance: 0, playersCount: 0, players: [], todaysBets: 0, todaysWins: 0, todaysProfitLoss: 0, recentTransactions: [] }
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -20,14 +20,17 @@ export async function getAgentDashboardDataAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      const todayStart = new Date()
-      todayStart.setHours(0, 0, 0, 0)
+      // Calculate Asia/Kolkata (IST - UTC+5:30) today start (00:00:00 IST)
+      const now = new Date()
+      const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
+      const istTodayStart = new Date(`${istTodayString}T00:00:00+05:30`)
+      const todayStartISO = istTodayStart.toISOString()
 
-      // Execute all 4 sub-queries in parallel via Promise.all
+      // Execute all sub-queries in parallel via Promise.all
       const [agentProfRes, playersProfRes, spinsRes, txnsRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('username, balance').eq('id', authUser.id).maybeSingle(),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', authUser.id),
-        supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStart.toISOString()),
+        supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStartISO),
         supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id).order('created_at', { ascending: false }).limit(5)
       ])
 
@@ -56,12 +59,15 @@ export async function getAgentDashboardDataAction() {
           }))
       }
 
-      // Calculate today's profit/loss from game_history
+      // Calculate today's bets, wins, and net profit/loss from game_history (IST timezone 00:00:00+)
+      let todaysBets = 0
+      let todaysWins = 0
       let todaysProfitLoss = 0
+
       if (spinsRes.data && spinsRes.data.length > 0) {
-        const totalBets = spinsRes.data.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
-        const totalWins = spinsRes.data.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
-        todaysProfitLoss = totalBets - totalWins
+        todaysBets = spinsRes.data.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
+        todaysWins = spinsRes.data.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+        todaysProfitLoss = todaysBets - todaysWins
       }
 
       // Format last 5 cashier transactions
@@ -81,6 +87,8 @@ export async function getAgentDashboardDataAction() {
         playersCount: players.length,
         players,
         username,
+        todaysBets,
+        todaysWins,
         todaysProfitLoss,
         recentTransactions
       }
@@ -92,6 +100,8 @@ export async function getAgentDashboardDataAction() {
     playersCount: 0,
     players: [],
     username: authUser.user_metadata?.username || 'agent',
+    todaysBets: 0,
+    todaysWins: 0,
     todaysProfitLoss: 0,
     recentTransactions: []
   }
@@ -108,39 +118,32 @@ export async function getAgentTransactionHistoryAction() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      const { data: txns } = await supabaseAdmin
-        .from('transactions')
-        .select('*')
-        .eq('agent_id', authUser.id)
-        .order('created_at', { ascending: false })
-        .limit(200)
-
-      if (txns) {
-        const transactions = txns.map(tx => ({
-          id: tx.id.substring(0, 8),
-          type: (tx.type === 'agent_credit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-          amount: Math.abs(Number(tx.amount || 0)),
-          target: tx.user_username || 'player',
-          date: new Date(tx.created_at).toLocaleString('en-US', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          status: 'Completed'
-        }))
-        return { transactions }
-      }
-    } catch (_) {}
+  if (!serviceRoleKey || !supabaseUrl) {
+    return { transactions: [] }
   }
 
-  return { transactions: [] }
+  try {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const { data: txns } = await supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('agent_id', authUser.id)
+      .order('created_at', { ascending: false })
+
+    const formatted = (txns || []).map(tx => ({
+      id: tx.id,
+      type: (tx.type === 'agent_credit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+      amount: Math.abs(Number(tx.amount)),
+      target: tx.user_username || 'player',
+      status: 'Success',
+      date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+    }))
+
+    return { transactions: formatted }
+  } catch (err) {
+    return { transactions: [] }
+  }
 }

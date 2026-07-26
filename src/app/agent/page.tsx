@@ -23,6 +23,8 @@ export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
   const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
   const [balance, setBalance] = React.useState(0)
+  const [todaysBets, setTodaysBets] = React.useState(0)
+  const [todaysWins, setTodaysWins] = React.useState(0)
   const [todaysProfitLoss, setTodaysProfitLoss] = React.useState(0)
   const [isLoadingDashboard, setIsLoadingDashboard] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -46,6 +48,8 @@ export default function AgentDashboard() {
       setIsLoadingDashboard(false)
       if (resDash) {
         setBalance(resDash.balance || 0)
+        setTodaysBets(resDash.todaysBets || 0)
+        setTodaysWins(resDash.todaysWins || 0)
         setTodaysProfitLoss(resDash.todaysProfitLoss || 0)
         if (resDash.recentTransactions) {
           setRecentTransactions(resDash.recentTransactions)
@@ -145,9 +149,10 @@ export default function AgentDashboard() {
         </div>
       </div>
 
-      {/* Top KPI Metric Cards (3-Column Micro Strip) */}
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+      {/* Top KPI Metric Cards (5 Micro Cards Grid - Mobile First) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3">
+        {/* Card 1: Available Coins */}
+        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Available Coins</span>
             <Coins className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
@@ -159,10 +164,11 @@ export default function AgentDashboard() {
               {formatCurrency(balance)}
             </div>
           )}
-          <p className="text-[10px] text-muted-foreground/70 hidden sm:block mt-0.5">Coins available to allocate</p>
+          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Coins available to allocate</p>
         </Card>
 
-        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+        {/* Card 2: My Players */}
+        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>My Players</span>
             <Users className="h-3.5 w-3.5 text-blue-500 shrink-0 hidden sm:block" />
@@ -174,13 +180,14 @@ export default function AgentDashboard() {
               {players.length}
             </div>
           )}
-          <p className="text-[10px] text-muted-foreground/70 hidden sm:block mt-0.5">Registered players network</p>
+          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Registered player network</p>
         </Card>
 
-        <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
+        {/* Card 3: Today's P/L */}
+        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Today&apos;s P/L</span>
-            <ArrowUpRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
+            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
           {isLoadingDashboard || isRefreshing ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
@@ -189,7 +196,39 @@ export default function AgentDashboard() {
               {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
             </div>
           )}
-          <p className="text-[10px] text-muted-foreground/70 hidden sm:block mt-0.5">Net player performance today</p>
+          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily 00:00 IST</p>
+        </Card>
+
+        {/* Card 4: Today's Bets (In) */}
+        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
+            <span>Today Bets (In)</span>
+            <ArrowUpRight className="h-3.5 w-3.5 text-blue-400 shrink-0 hidden sm:block" />
+          </div>
+          {isLoadingDashboard || isRefreshing ? (
+            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
+          ) : (
+            <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate">
+              {formatCurrency(todaysBets)}
+            </div>
+          )}
+          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Wagered coins today</p>
+        </Card>
+
+        {/* Card 5: Today's Wins (Out) */}
+        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
+            <span>Today Wins (Out)</span>
+            <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
+          </div>
+          {isLoadingDashboard || isRefreshing ? (
+            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
+          ) : (
+            <div className="text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate">
+              {formatCurrency(todaysWins)}
+            </div>
+          )}
+          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players today</p>
         </Card>
       </div>
 
