@@ -23,7 +23,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Eye, EyeOff, Loader2, Search, Users, ShieldCheck, ArrowRight, Coins, CheckCircle2, XCircle, Filter } from "lucide-react"
+import { Plus, Eye, EyeOff, Loader2, Search, Users, ShieldCheck, ArrowRight, Coins, CheckCircle2, XCircle, Filter, RefreshCw } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
@@ -31,6 +31,7 @@ import { createAgentAction, getAgentsAction } from './actions'
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Blocked'>('all')
@@ -44,8 +45,8 @@ export default function AgentsPage() {
 
   const itemsPerPage = 10
 
-  const loadAgents = React.useCallback(() => {
-    setIsLoadingAgents(true)
+  const loadAgents = React.useCallback((isSilent: boolean = false) => {
+    if (!isSilent) setIsLoadingAgents(true)
     getAgentsAction().then((res) => {
       setIsLoadingAgents(false)
       if (res.agents) {
@@ -56,7 +57,17 @@ export default function AgentsPage() {
 
   React.useEffect(() => {
     loadAgents()
+    const interval = setInterval(() => {
+      loadAgents(true)
+    }, 30000)
+    return () => clearInterval(interval)
   }, [loadAgents])
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    loadAgents(false)
+    setTimeout(() => setIsRefreshing(false), 600)
+  }
 
   const handleCreateAgent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -122,10 +133,19 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "w-full sm:w-auto h-9 px-4 font-extrabold shadow-sm cursor-pointer rounded-xl text-xs" })}>
-            <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Agent
-          </DialogTrigger>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Sync (30s)
+          </span>
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-9 px-3 text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Data
+          </Button>
+
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "w-full sm:w-auto h-9 px-4 font-extrabold shadow-sm cursor-pointer rounded-xl text-xs" })}>
+              <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Agent
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
             <DialogHeader className="space-y-1">
               <DialogTitle className="text-lg font-black">Register New Agent</DialogTitle>
@@ -209,6 +229,7 @@ export default function AgentsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Sub-Navigation Tabs */}

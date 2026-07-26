@@ -220,8 +220,10 @@ export default function PlayersPage() {
     }).catch(() => setIsLoadingHistory(false))
   }, [])
 
-  const loadPlayers = React.useCallback((currentSelectedId?: string) => {
-    setIsLoadingPlayers(true)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+
+  const loadPlayers = React.useCallback((currentSelectedId?: string, isSilent: boolean = false) => {
+    if (!isSilent) setIsLoadingPlayers(true)
     getPlayersAction().then((res) => {
       setIsLoadingPlayers(false)
       if (res.players) {
@@ -231,7 +233,6 @@ export default function PlayersPage() {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
-            loadPlayerHistory(updated.id)
           }
         } else if (res.players.length > 0) {
           setSelectedPlayer(res.players[0])
@@ -243,7 +244,20 @@ export default function PlayersPage() {
 
   React.useEffect(() => {
     loadPlayers()
+    const interval = setInterval(() => {
+      loadPlayers(undefined, true)
+    }, 30000)
+    return () => clearInterval(interval)
   }, [])
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    loadPlayers(selectedPlayer?.id, false)
+    if (selectedPlayer?.id) {
+      loadPlayerHistory(selectedPlayer.id)
+    }
+    setTimeout(() => setIsRefreshing(false), 600)
+  }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
     if (selectedPlayer?.id === player.id) {
@@ -380,11 +394,20 @@ export default function PlayersPage() {
           </p>
         </div>
 
-        {/* Add Player Modal */}
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger className="w-full sm:w-auto h-10 px-4 font-extrabold bg-primary text-primary-foreground hover:bg-primary/95 shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center">
-            <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Player
-          </DialogTrigger>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Auto-Sync (30s)
+          </span>
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-10 px-3 text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Data
+          </Button>
+
+          {/* Add Player Modal */}
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger className="w-full sm:w-auto h-10 px-4 font-extrabold bg-primary text-primary-foreground hover:bg-primary/95 shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center">
+              <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Player
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[400px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
             <DialogHeader className="space-y-1">
               <DialogTitle className="text-lg font-black">Register New Player</DialogTitle>
@@ -468,6 +491,7 @@ export default function PlayersPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Compact Grid Layout (3 cols left vs 9 cols right) */}
