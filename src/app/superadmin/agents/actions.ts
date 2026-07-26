@@ -180,6 +180,13 @@ export async function transferPointsAction(targetId: string, amount: number, typ
 
     // Case 1: Agent transferring to a Player
     if (targetRole === 'player') {
+      const callerRole = callerUser?.user_metadata?.role
+
+      // Security check: If caller is an agent, they MUST own this player!
+      if (callerRole === 'agent' && targetUser.user_metadata?.agent_id && targetUser.user_metadata.agent_id !== callerUser.id) {
+        return { error: 'Unauthorized. You can only transfer coins to your own assigned players.' }
+      }
+
       let agentId = targetUser.user_metadata?.agent_id || callerUser?.id
 
       // Fallback: if player has no agent_id set yet, link to caller or first active agent

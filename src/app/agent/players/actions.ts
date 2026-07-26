@@ -122,10 +122,18 @@ export async function togglePlayerStatusAction(playerId: string, currentStatus: 
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
+    const supabase = await createServerClient()
+    const { data: { user: callerUser } } = await supabase.auth.getUser()
+
     const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
     const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
     if (getUserError || !userData?.user) {
       return { error: 'Player account not found.' }
+    }
+
+    // Security check: Agent can only manage their own players
+    if (callerUser && userData.user.user_metadata?.agent_id && userData.user.user_metadata?.agent_id !== callerUser.id) {
+      return { error: 'Unauthorized. You can only manage your own assigned players.' }
     }
 
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
