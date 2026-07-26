@@ -437,27 +437,35 @@ export default function SuperAdminDashboard() {
         {selectedGameTab === 'triple_chance' && (
           <div className="space-y-3">
             {(() => {
-              // 30s UTC pre-determination calculation
+              const latest = latestDraws.length > 0 ? latestDraws[0] : null
+              const drawTime = latest?.createdAt ? new Date(latest.createdAt).getTime() : 0
+              const diffSecs = latest ? Math.max(0, Math.floor((nowTime - drawTime) / 1000)) : 999999
+              const isRecentCompletion = latest && diffSecs <= 15
+
+              // 90s UTC countdown calculation
               const utcSecs = Math.floor(nowTime / 1000)
               const cycleRem = 103 - (utcSecs % 103)
               const roundCountdown = cycleRem >= 14 ? cycleRem - 13 : 0
-              const isPreDetermined30s = roundCountdown <= 30
 
-              // PHASE 1: Loading State (90s down to 31s remaining)
-              if (!isPreDetermined30s) {
+              // STATE 1: Round In Progress / Calculating Loading State
+              if (!isRecentCompletion) {
                 return (
                   <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-secondary/40 via-card to-background border border-border/80 space-y-3 shadow-inner">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center space-x-2">
                         <span className="px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center space-x-1.5">
                           <Loader2 className="h-3 w-3 animate-spin" />
-                          <span>Calculating Round Outcome... (Reveals at 30s remaining)</span>
+                          <span>Calculating Round Outcome...</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Round In Progress
                         </span>
                       </div>
 
                       <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
                         <Clock className="h-3.5 w-3.5" />
-                        <span>{roundCountdown}s remaining in betting phase</span>
+                        <span>{roundCountdown}s remaining in round</span>
                       </div>
                     </div>
 
@@ -499,116 +507,104 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <p className="text-[10px] text-muted-foreground font-semibold pt-1 border-t border-border/40">
-                      💡 Players are placing bets. Pre-determined winning outcome will reveal automatically on Superadmin when timer hits 30 seconds.
+                      💡 Players are placing bets. Winning outcome will display as soon as mobile spin completes.
                     </p>
                   </div>
                 )
               }
 
-              // PHASE 2: Revealed Real Winning Outcome (30s down to 0s & during spin)
-              if (latestDraws.length > 0) {
-                const latest = latestDraws[0]
-                const drawTime = latest.createdAt ? new Date(latest.createdAt).getTime() : Date.now()
-                const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
+              // STATE 2: Mobile Spin Complete - Featured Real Winning Result (15 seconds display)
+              let relativeTimeStr = 'Just now'
+              if (diffSecs >= 5 && diffSecs < 60) relativeTimeStr = `${diffSecs}s ago`
+              else if (diffSecs >= 60 && diffSecs < 3600) relativeTimeStr = `${Math.floor(diffSecs / 60)}m ago`
+              else if (diffSecs >= 3600) relativeTimeStr = `${Math.floor(diffSecs / 3600)}h ago`
 
-                let relativeTimeStr = 'Just now'
-                if (diffSecs >= 5 && diffSecs < 60) relativeTimeStr = `${diffSecs}s ago`
-                else if (diffSecs >= 60 && diffSecs < 3600) relativeTimeStr = `${Math.floor(diffSecs / 60)}m ago`
-                else if (diffSecs >= 3600) relativeTimeStr = `${Math.floor(diffSecs / 3600)}h ago`
-
-                return (
-                  <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-purple-950/30 via-card to-background border border-purple-500/30 space-y-3 shadow-inner">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse flex items-center space-x-1">
-                          <Sparkles className="h-3 w-3" />
-                          <span>⚡ Pre-Determined Result Revealed (30s Remaining)</span>
-                        </span>
-                      </div>
-
-                      <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>{relativeTimeStr}</span>
-                      </div>
+              return (
+                <div className="p-3 sm:p-4 rounded-xl bg-gradient-to-r from-purple-950/30 via-card to-background border border-purple-500/30 space-y-3 shadow-inner">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse flex items-center space-x-1">
+                        <Trophy className="h-3 w-3 text-amber-400" />
+                        <span>🏆 Latest Winning Result (Just Completed)</span>
+                      </span>
                     </div>
 
-                    {/* Color-Coded 3-Digit Winning Outcome Display */}
-                    <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
-                      <div className="flex items-center space-x-2 sm:space-x-3">
-                        {/* Red Digit (1st) */}
-                        <div className="flex flex-col items-center">
-                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
-                            {latest.redDigit}
-                          </div>
-                        </div>
+                    <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>{relativeTimeStr}</span>
+                    </div>
+                  </div>
 
-                        <span className="text-muted-foreground/40 font-black text-xl mt-4">+</span>
-
-                        {/* Green Digit (2nd) */}
-                        <div className="flex flex-col items-center">
-                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
-                            {latest.greenDigit}
-                          </div>
-                        </div>
-
-                        <span className="text-muted-foreground/40 font-black text-xl mt-4">+</span>
-
-                        {/* Black Digit (3rd) */}
-                        <div className="flex flex-col items-center">
-                          <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
-                            {latest.blackDigit}
-                          </div>
+                  {/* Color-Coded 3-Digit Winning Outcome Display */}
+                  <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+                    <div className="flex items-center space-x-2 sm:space-x-3">
+                      {/* Red Digit (1st) */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
+                          {latest.redDigit}
                         </div>
                       </div>
 
-                      {/* Combination Result Badge */}
-                      <div className="flex flex-col items-start sm:items-end">
-                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Result</span>
-                        <div className="text-2xl sm:text-4xl font-black font-mono tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/30 mt-0.5">
-                          {latest.resultNumber.toString().padStart(3, '0')}
+                      <span className="text-muted-foreground/40 font-black text-xl mt-4">+</span>
+
+                      {/* Green Digit (2nd) */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
+                          {latest.greenDigit}
+                        </div>
+                      </div>
+
+                      <span className="text-muted-foreground/40 font-black text-xl mt-4">+</span>
+
+                      {/* Black Digit (3rd) */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-[9px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-lg sm:text-2xl font-black font-mono shadow-md">
+                          {latest.blackDigit}
                         </div>
                       </div>
                     </div>
 
-                    {/* Round Financial Breakdown */}
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-purple-500/20 text-[10px] sm:text-xs">
-                      <div>
-                        <span className="text-muted-foreground font-semibold block">Player:</span>
-                        <span className="font-extrabold font-mono text-foreground">@{latest.playerUsername}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground font-semibold block">Wagered:</span>
-                        <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.betAmount)}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground font-semibold block">Net Payout:</span>
-                        <span className={`font-extrabold font-mono ${latest.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                          {latest.winAmount > 0 ? `+${formatCurrency(latest.winAmount)}` : '0 Coins'}
-                        </span>
+                    {/* Combination Result Badge */}
+                    <div className="flex flex-col items-start sm:items-end">
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Result</span>
+                      <div className="text-2xl sm:text-4xl font-black font-mono tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/30 mt-0.5">
+                        {latest.resultNumber.toString().padStart(3, '0')}
                       </div>
                     </div>
                   </div>
-                )
-              }
 
-              return (
-                <div className="p-4 rounded-xl bg-secondary/30 border border-border text-center text-xs text-muted-foreground">
-                  No game draw records found. Plays made on Triple Chance will automatically show here in real-time.
+                  {/* Round Financial Breakdown */}
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-purple-500/20 text-[10px] sm:text-xs">
+                    <div>
+                      <span className="text-muted-foreground font-semibold block">Player:</span>
+                      <span className="font-extrabold font-mono text-foreground">@{latest.playerUsername}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-semibold block">Wagered:</span>
+                      <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.betAmount)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-semibold block">Net Payout:</span>
+                      <span className={`font-extrabold font-mono ${latest.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                        {latest.winAmount > 0 ? `+${formatCurrency(latest.winAmount)}` : '0 Coins'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )
             })()}
 
             {/* Recent Rounds Stream (Horizontal Chips Stream) */}
-            {latestDraws.length > 1 && (
+            {latestDraws.length > 0 && (
               <div className="space-y-1.5 pt-1">
                 <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
                   Recent Draw Stream (Last 10 Rounds)
                 </span>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
-                  {latestDraws.slice(1).map(draw => {
+                  {latestDraws.map(draw => {
                     const drawTime = draw.createdAt ? new Date(draw.createdAt).getTime() : Date.now()
                     const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
                     let relTime = 'Just now'
