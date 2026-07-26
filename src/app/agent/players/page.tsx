@@ -14,9 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck } from "lucide-react"
+import { Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, ArrowLeft } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
-import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction } from './actions'
+import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
 import { transferPointsAction } from '@/app/superadmin/agents/actions'
 import {
   Table,
@@ -31,6 +31,9 @@ export default function PlayersPage() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
+
+  // Mobile layout state: show list or details pane
+  const [showMobileDetail, setShowMobileDetail] = React.useState(false)
 
   // History data states
   const [gamePlays, setGamePlays] = React.useState<Array<{
@@ -68,6 +71,14 @@ export default function PlayersPage() {
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
 
+  // Password reset state
+  const [isPasswordResetOpen, setIsPasswordResetOpen] = React.useState(false)
+  const [newPassword, setNewPassword] = React.useState('')
+  const [confirmPassword, setConfirmPassword] = React.useState('')
+  const [isResettingPassword, setIsResettingPassword] = React.useState(false)
+  const [resetPasswordError, setResetPasswordError] = React.useState<string | null>(null)
+  const [resetPasswordSuccess, setResetPasswordSuccess] = React.useState<string | null>(null)
+
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
     getPlayerDetailHistoryAction(playerId).then((res) => {
@@ -103,8 +114,12 @@ export default function PlayersPage() {
   }, [])
 
   const handleSelectPlayer = (player: typeof players[0]) => {
-    if (selectedPlayer?.id === player.id) return
+    if (selectedPlayer?.id === player.id) {
+      setShowMobileDetail(true)
+      return
+    }
     setSelectedPlayer(player)
+    setShowMobileDetail(true)
     setIsLoadingHistory(true)
     setGamePlays([])
     setPointsHistory([])
@@ -172,6 +187,37 @@ export default function PlayersPage() {
     }
   }
 
+  const handleResetPassword = async () => {
+    if (!selectedPlayer) return
+    if (newPassword !== confirmPassword) {
+      setResetPasswordError('Passwords do not match.')
+      return
+    }
+    if (newPassword.trim().length < 6) {
+      setResetPasswordError('Password must be at least 6 characters.')
+      return
+    }
+
+    setIsResettingPassword(true)
+    setResetPasswordError(null)
+    setResetPasswordSuccess(null)
+
+    const res = await resetPlayerPasswordAction(selectedPlayer.id, newPassword)
+
+    setIsResettingPassword(false)
+    if (res.error) {
+      setResetPasswordError(res.error)
+    } else {
+      setResetPasswordSuccess('Password updated successfully!')
+      setTimeout(() => {
+        setIsPasswordResetOpen(false)
+        setNewPassword('')
+        setConfirmPassword('')
+        setResetPasswordSuccess(null)
+      }, 1200)
+    }
+  }
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
       <div className="flex items-center justify-between">
@@ -233,7 +279,9 @@ export default function PlayersPage() {
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
         {/* Left Bento: Players Directory List */}
-        <Card className="lg:col-span-5 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[580px]">
+        <Card className={`lg:col-span-5 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[600px] transition-all duration-300 ${
+          showMobileDetail ? 'hidden lg:flex' : 'flex'
+        }`}>
           <CardHeader className="border-b border-border/60 pb-4">
             <CardTitle className="text-lg font-bold text-foreground">Registered Players ({players.length})</CardTitle>
             <CardDescription className="text-muted-foreground">
@@ -276,139 +324,223 @@ export default function PlayersPage() {
         </Card>
 
         {/* Right Bento: Selected Player Details */}
-        <Card className="lg:col-span-7 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[580px]">
+        <Card className={`lg:col-span-7 bg-card border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-[600px] transition-all duration-300 ${
+          showMobileDetail ? 'flex' : 'hidden lg:flex'
+        }`}>
           <CardHeader className="border-b border-border/60 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle className="text-lg font-bold text-foreground">
-                  {selectedPlayer ? `Player: ${selectedPlayer.name}` : 'Player Details'}
-                </CardTitle>
-                <CardDescription className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                  {selectedPlayer ? `@${selectedPlayer.username} • Coins: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
-                </CardDescription>
+            <div className="flex flex-col gap-4">
+              {/* Mobile Back Button */}
+              <div className="lg:hidden flex items-center">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowMobileDetail(false)}
+                  className="px-0 hover:bg-transparent text-primary hover:text-primary/80 font-bold"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Directory
+                </Button>
               </div>
 
-              {selectedPlayer && (
-                <div className="flex items-center space-x-2 shrink-0">
-                  {/* Deposit Modal */}
-                  <Dialog 
-                    open={activeTransferModal === 'deposit'}
-                    onOpenChange={(open) => {
-                      setActiveTransferModal(open ? 'deposit' : null)
-                      setTransferAmount('')
-                      setTransferError(null)
-                    }}
-                  >
-                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer text-xs font-bold" })}>
-                      <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit Coins
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
-                      <DialogHeader>
-                        <DialogTitle>Deposit Coins</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
-                          Add coins to {selectedPlayer.name}&apos;s account.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        {transferError && (
-                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                            {transferError}
-                          </div>
-                        )}
-                        <div className="space-y-2">
-                          <Label htmlFor="player-deposit-amount">Amount (Coins)</Label>
-                          <Input 
-                            id="player-deposit-amount" 
-                            type="number" 
-                            placeholder="1000" 
-                            value={transferAmount}
-                            onChange={(e) => setTransferAmount(e.target.value)}
-                            className="bg-background border-border text-foreground text-lg" 
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button 
-                          onClick={() => handleTransferPoints('deposit')} 
-                          disabled={isTransferring}
-                          className="w-full bg-success text-white hover:bg-success/90 font-bold cursor-pointer"
-                        >
-                          {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          {isTransferring ? 'Processing...' : 'Confirm Deposit'}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Withdraw Modal */}
-                  <Dialog 
-                    open={activeTransferModal === 'withdraw'}
-                    onOpenChange={(open) => {
-                      setActiveTransferModal(open ? 'withdraw' : null)
-                      setTransferAmount('')
-                      setTransferError(null)
-                    }}
-                  >
-                    <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer text-xs font-bold" })}>
-                      <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw Coins
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
-                      <DialogHeader>
-                        <DialogTitle>Withdraw Coins</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
-                          Recall coins from {selectedPlayer.name}&apos;s account.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        {transferError && (
-                          <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                            {transferError}
-                          </div>
-                        )}
-                        <div className="space-y-2">
-                          <Label htmlFor="player-withdraw-amount">Amount (Coins)</Label>
-                          <Input 
-                            id="player-withdraw-amount" 
-                            type="number" 
-                            placeholder="1000" 
-                            value={transferAmount}
-                            onChange={(e) => setTransferAmount(e.target.value)}
-                            className="bg-background border-border text-foreground text-lg" 
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button 
-                          onClick={() => handleTransferPoints('withdraw')} 
-                          disabled={isTransferring}
-                          className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold cursor-pointer"
-                        >
-                          {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Block / Unblock Button */}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleToggleStatus}
-                    disabled={isTogglingStatus}
-                    className={`text-xs cursor-pointer ${
-                      selectedPlayer.status === 'Active' 
-                        ? 'border-red-500/30 text-red-500 hover:bg-red-500/10' 
-                        : 'border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10'
-                    }`}
-                  >
-                    {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
-                      selectedPlayer.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    {selectedPlayer.status === 'Active' ? 'Block Account' : 'Unblock Account'}
-                  </Button>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-lg font-bold text-foreground">
+                    {selectedPlayer ? `Player: ${selectedPlayer.name}` : 'Player Details'}
+                  </CardTitle>
+                  <CardDescription className="text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                    {selectedPlayer ? `@${selectedPlayer.username} • Coins: ${formatCurrency(selectedPlayer.balance)}` : 'Select a player from the directory'}
+                  </CardDescription>
                 </div>
-              )}
+
+                {selectedPlayer && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Deposit Modal */}
+                    <Dialog 
+                      open={activeTransferModal === 'deposit'}
+                      onOpenChange={(open) => {
+                        setActiveTransferModal(open ? 'deposit' : null)
+                        setTransferAmount('')
+                        setTransferError(null)
+                      }}
+                    >
+                      <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer text-xs font-bold" })}>
+                        <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> Deposit
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
+                        <DialogHeader>
+                          <DialogTitle>Deposit Coins</DialogTitle>
+                          <DialogDescription className="text-muted-foreground">
+                            Add coins to {selectedPlayer.name}&apos;s account.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          {transferError && (
+                            <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                              {transferError}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label htmlFor="player-deposit-amount">Amount (Coins)</Label>
+                            <Input 
+                              id="player-deposit-amount" 
+                              type="number" 
+                              placeholder="1000" 
+                              value={transferAmount}
+                              onChange={(e) => setTransferAmount(e.target.value)}
+                              className="bg-background border-border text-foreground text-lg" 
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button 
+                            onClick={() => handleTransferPoints('deposit')} 
+                            disabled={isTransferring}
+                            className="w-full bg-success text-white hover:bg-success/90 font-bold cursor-pointer"
+                          >
+                            {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {isTransferring ? 'Processing...' : 'Confirm Deposit'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Withdraw Modal */}
+                    <Dialog 
+                      open={activeTransferModal === 'withdraw'}
+                      onOpenChange={(open) => {
+                        setActiveTransferModal(open ? 'withdraw' : null)
+                        setTransferAmount('')
+                        setTransferError(null)
+                      }}
+                    >
+                      <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 cursor-pointer text-xs font-bold" })}>
+                        <ArrowDownRight className="mr-1 h-3.5 w-3.5" /> Withdraw
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
+                        <DialogHeader>
+                          <DialogTitle>Withdraw Coins</DialogTitle>
+                          <DialogDescription className="text-muted-foreground">
+                            Recall coins from {selectedPlayer.name}&apos;s account.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          {transferError && (
+                            <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                              {transferError}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label htmlFor="player-withdraw-amount">Amount (Coins)</Label>
+                            <Input 
+                              id="player-withdraw-amount" 
+                              type="number" 
+                              placeholder="1000" 
+                              value={transferAmount}
+                              onChange={(e) => setTransferAmount(e.target.value)}
+                              className="bg-background border-border text-foreground text-lg" 
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button 
+                            onClick={() => handleTransferPoints('withdraw')} 
+                            disabled={isTransferring}
+                            className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold cursor-pointer"
+                          >
+                            {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Reset Password Modal */}
+                    <Dialog 
+                      open={isPasswordResetOpen}
+                      onOpenChange={(open) => {
+                        setIsPasswordResetOpen(open)
+                        setNewPassword('')
+                        setConfirmPassword('')
+                        setResetPasswordError(null)
+                        setResetPasswordSuccess(null)
+                      }}
+                    >
+                      <DialogTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "border-primary/30 text-primary hover:bg-primary/10 cursor-pointer text-xs font-bold" })}>
+                        <KeyRound className="mr-1 h-3.5 w-3.5" /> Password
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px] bg-card border-border text-foreground">
+                        <DialogHeader>
+                          <DialogTitle>Reset Player Password</DialogTitle>
+                          <DialogDescription className="text-muted-foreground">
+                            Enter a new password for {selectedPlayer.name}.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          {resetPasswordError && (
+                            <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                              {resetPasswordError}
+                            </div>
+                          )}
+                          {resetPasswordSuccess && (
+                            <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                              {resetPasswordSuccess}
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label htmlFor="new-password">New Password</Label>
+                            <Input 
+                              id="new-password" 
+                              type="password" 
+                              placeholder="At least 6 characters" 
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="bg-background border-border text-foreground" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="confirm-password">Confirm Password</Label>
+                            <Input 
+                              id="confirm-password" 
+                              type="password" 
+                              placeholder="Confirm new password" 
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className="bg-background border-border text-foreground" 
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button 
+                            onClick={handleResetPassword} 
+                            disabled={isResettingPassword}
+                            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold cursor-pointer"
+                          >
+                            {isResettingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            {isResettingPassword ? 'Updating Password...' : 'Update Password'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Block / Unblock Button */}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleToggleStatus}
+                      disabled={isTogglingStatus}
+                      className={`text-xs cursor-pointer ${
+                        selectedPlayer.status === 'Active' 
+                          ? 'border-red-500/30 text-red-500 hover:bg-red-500/10' 
+                          : 'border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10'
+                      }`}
+                    >
+                      {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
+                        selectedPlayer.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      {selectedPlayer.status === 'Active' ? 'Block' : 'Unblock'}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </CardHeader>
 

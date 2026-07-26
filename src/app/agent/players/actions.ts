@@ -255,3 +255,43 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
 
   return { gamePlays, pointsHistory }
 }
+
+export async function resetPlayerPasswordAction(playerId: string, newPassword: string) {
+  if (!playerId || !newPassword || newPassword.trim().length < 6) {
+    return { error: 'Password must be at least 6 characters.' }
+  }
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+
+  if (serviceRoleKey && supabaseUrl) {
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    const supabase = await createServerClient()
+    const { data: { user: callerUser } } = await supabase.auth.getUser()
+
+    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
+    if (getUserError || !userData?.user) {
+      return { error: 'Player account not found.' }
+    }
+
+    // Security check: Agent can only manage their own players
+    if (callerUser && userData.user.user_metadata?.agent_id && userData.user.user_metadata?.agent_id !== callerUser.id) {
+      return { error: 'Unauthorized. You can only manage your own assigned players.' }
+    }
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
+      password: newPassword.trim()
+    })
+
+    if (updateError) {
+      return { error: updateError.message }
+    }
+
+    return { success: true }
+  }
+
+  return { error: 'Service Role Key not configured.' }
+}
