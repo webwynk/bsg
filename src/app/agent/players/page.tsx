@@ -103,7 +103,11 @@ export default function PlayersPage() {
   }, [])
 
   const handleSelectPlayer = (player: typeof players[0]) => {
+    if (selectedPlayer?.id === player.id) return
     setSelectedPlayer(player)
+    setIsLoadingHistory(true)
+    setGamePlays([])
+    setPointsHistory([])
     loadPlayerHistory(player.id)
   }
 
@@ -242,7 +246,7 @@ export default function PlayersPage() {
                 {players.map((player) => (
                   <div
                     key={player.id}
-                    onClick={() => setSelectedPlayer(player)}
+                    onClick={() => handleSelectPlayer(player)}
                     className={`p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-secondary/40 transition-colors ${
                       selectedPlayer?.id === player.id ? 'bg-secondary/80 border-l-4 border-primary' : ''
                     }`}

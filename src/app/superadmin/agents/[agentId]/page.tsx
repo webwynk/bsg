@@ -98,7 +98,11 @@ export default function AgentDetailPage({ params }: Props) {
   }, [])
 
   const handleSelectPlayer = (player: typeof players[0]) => {
+    if (selectedPlayer?.id === player.id) return
     setSelectedPlayer(player)
+    setIsLoadingHistory(true)
+    setGamePlays([])
+    setPointsHistory([])
     loadPlayerHistory(player.id)
   }
 
