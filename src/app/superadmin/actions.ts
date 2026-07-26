@@ -161,14 +161,23 @@ export async function getRtpAction() {
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false }
       })
+
+      // 1. Check admin user metadata first for exact custom float RTP
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
+      if (adminUser?.user_metadata?.rtp !== undefined && adminUser?.user_metadata?.rtp !== null) {
+        return { rtp: Number(adminUser.user_metadata.rtp) }
+      }
+
+      // 2. Check agent_configs table
       const { data } = await supabaseAdmin
         .from('agent_configs')
         .select('target_win_percentage')
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (data?.target_win_percentage) {
-        return { rtp: data.target_win_percentage }
+      if (data?.target_win_percentage !== undefined && data?.target_win_percentage !== null) {
+        return { rtp: Number(data.target_win_percentage) }
       }
     } catch (_) {}
   }
@@ -189,20 +198,28 @@ export async function updateRtpAction(rtpValue: number) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Update or insert default system config
-      const { error } = await supabaseAdmin
-        .from('agent_configs')
-        .upsert({ target_win_percentage: rtpValue, updated_at: new Date().toISOString() })
+      // 1. Always update admin user metadata so custom float RTP is stored
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
+      if (adminUser) {
+        await supabaseAdmin.auth.admin.updateUserById(adminUser.id, {
+          user_metadata: { ...adminUser.user_metadata, rtp: rtpValue }
+        })
+      }
 
-      if (error) {
-        // Store in user_metadata of admin if table does not exist
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
-        if (adminUser) {
-          await supabaseAdmin.auth.admin.updateUserById(adminUser.id, {
-            user_metadata: { ...adminUser.user_metadata, rtp: rtpValue }
-          })
-        }
+      // 2. Also update agent_configs table for all agent profile IDs with onConflict constraint
+      const { data: agentProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .in('role', ['agent', 'super_admin'])
+
+      if (agentProfiles && agentProfiles.length > 0) {
+        const rows = agentProfiles.map(p => ({
+          agent_id: p.id,
+          target_win_percentage: Math.round(rtpValue),
+          updated_at: new Date().toISOString()
+        }))
+        await supabaseAdmin.from('agent_configs').upsert(rows, { onConflict: 'agent_id' })
       }
 
       await logAuditEventAction('System', `Global RTP target updated to ${rtpValue}%`)
