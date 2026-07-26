@@ -325,13 +325,13 @@ export default function AgentDetailPage({ params }: Props) {
         </div>
 
         {/* High-Contrast Quick Action Controls & Refresh Bar */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Auto-Sync (30s)
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-10 px-3 text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Data
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+            <RefreshCw className={`mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
           {/* Deposit Modal */}
           <Dialog
@@ -342,8 +342,8 @@ export default function AgentDetailPage({ params }: Props) {
               setTransferError(null)
             }}
           >
-            <DialogTrigger className="h-10 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center border-0">
-              <ArrowUpRight className="mr-1 h-4 w-4 stroke-[3]" /> Deposit Coins
+            <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center border-0">
+              <ArrowUpRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Deposit
             </DialogTrigger>
             <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
               <DialogHeader>
@@ -367,14 +367,14 @@ export default function AgentDetailPage({ params }: Props) {
                   <Input 
                     id="agent-deposit-amount" 
                     type="number" 
-                    placeholder="50000" 
+                    placeholder="e.g. 1000" 
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
-                    className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
                   />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button 
                   onClick={() => handleTransferPoints('deposit')} 
                   disabled={isTransferring}
@@ -396,14 +396,14 @@ export default function AgentDetailPage({ params }: Props) {
               setTransferError(null)
             }}
           >
-            <DialogTrigger className="h-10 px-3 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-xl text-xs flex items-center justify-center bg-transparent">
-              <ArrowDownRight className="mr-1 h-4 w-4 stroke-[3]" /> Withdraw
+            <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-secondary/80 hover:bg-secondary text-amber-400 border border-amber-500/30 font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
+              <ArrowDownRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Withdraw
             </DialogTrigger>
             <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
               <DialogHeader>
-                <DialogTitle className="font-black text-lg">Withdraw Coins</DialogTitle>
+                <DialogTitle className="font-black text-lg">Withdraw Coins from Agent</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Recall coins from {agentInfo?.name}&apos;s account.
+                  Retrieve coins from {agentInfo?.name}&apos;s account back to cashier pool.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -421,18 +421,19 @@ export default function AgentDetailPage({ params }: Props) {
                   <Input 
                     id="agent-withdraw-amount" 
                     type="number" 
-                    placeholder="10000" 
+                    placeholder="e.g. 500" 
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
-                    className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
                   />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="pt-2">
                 <Button 
                   onClick={() => handleTransferPoints('withdraw')} 
                   disabled={isTransferring}
-                  className="w-full h-10 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-extrabold cursor-pointer rounded-lg text-xs"
+                  variant="destructive"
+                  className="w-full h-10 font-extrabold cursor-pointer rounded-lg text-xs"
                 >
                   {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
@@ -443,12 +444,12 @@ export default function AgentDetailPage({ params }: Props) {
 
           {/* Change Password Modal */}
           <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
-            <DialogTrigger className="h-10 px-3 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-xs font-extrabold rounded-xl flex items-center justify-center bg-transparent">
+            <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-secondary/60 hover:bg-secondary border border-border text-foreground font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
               <Key className="mr-1 h-3.5 w-3.5" /> Password
             </DialogTrigger>
             <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
               <DialogHeader>
-                <DialogTitle className="font-black text-lg">Reset Agent Password</DialogTitle>
+                <DialogTitle className="font-black text-lg">Update Agent Password</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
                   Set a new password for {agentInfo?.name}.
                 </DialogDescription>
@@ -501,7 +502,7 @@ export default function AgentDetailPage({ params }: Props) {
             onClick={handleToggleAgentStatus}
             disabled={isTogglingStatus}
             variant="outline"
-            className={`h-10 font-extrabold cursor-pointer rounded-xl text-xs flex items-center justify-center ${
+            className={`h-8 sm:h-10 px-2.5 sm:px-3 font-extrabold cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center ${
               agentInfo?.status === 'Active' 
                 ? 'border-red-500/40 text-red-400 hover:bg-red-500/10' 
                 : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
@@ -510,71 +511,71 @@ export default function AgentDetailPage({ params }: Props) {
             {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
               agentInfo?.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
             )}
-            {agentInfo?.status === 'Active' ? 'Block Agent' : 'Unblock Agent'}
+            {agentInfo?.status === 'Active' ? 'Block' : 'Unblock'}
           </Button>
         </div>
       </div>
 
-      {/* Stats Metric Strip */}
-      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-        <Card className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm hover:border-emerald-500/30 transition-all flex flex-col justify-between">
+      {/* Stats Metric Strip (Ultra-Compact 3-Column Grid on Mobile) */}
+      <div className="grid gap-1.5 sm:gap-3 grid-cols-3">
+        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-emerald-500/30 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              Coins Balance
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+              Coins
             </span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+            <div className="hidden sm:flex p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
               <Coins className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2">
+          <div className="mt-1 sm:mt-2">
             {isRefreshing ? (
-              <div className="h-7 w-24 bg-secondary/80 rounded animate-pulse my-0.5" />
+              <div className="h-5 sm:h-7 w-16 sm:w-24 bg-secondary/80 rounded animate-pulse my-0.5" />
             ) : (
-              <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
+              <div className="text-xs sm:text-2xl font-mono font-black text-foreground tracking-tight truncate">
                 {formatCurrency(agentInfo?.balance || 0)}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Available for allocation</p>
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 hidden sm:block">Available for allocation</p>
           </div>
         </Card>
 
-        <Card className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm hover:border-primary/30 transition-all flex flex-col justify-between">
+        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-primary/30 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              Active Players
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+              Players
             </span>
-            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+            <div className="hidden sm:flex p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
               <Users className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2">
+          <div className="mt-1 sm:mt-2">
             {isRefreshing ? (
-              <div className="h-7 w-12 bg-secondary/80 rounded animate-pulse my-0.5" />
+              <div className="h-5 sm:h-7 w-10 sm:w-12 bg-secondary/80 rounded animate-pulse my-0.5" />
             ) : (
-              <div className="text-xl sm:text-2xl font-mono font-black text-foreground tracking-tight">
+              <div className="text-xs sm:text-2xl font-mono font-black text-foreground tracking-tight">
                 {players.length}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Sub-registered network</p>
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 hidden sm:block">Sub-registered network</p>
           </div>
         </Card>
 
-        <Card className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm hover:border-amber-500/30 transition-all flex flex-col justify-between">
+        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-amber-500/30 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-              Agent Status
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+              Status
             </span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+            <div className="hidden sm:flex p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
               <Activity className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+          <div className="mt-1 sm:mt-2">
+            <span className={`inline-flex items-center rounded-full px-1.5 sm:px-2.5 py-0.2 sm:py-0.5 text-[8px] sm:text-[10px] font-black uppercase ${
               agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
             }`}>
               {agentInfo?.status || 'Active'}
             </span>
-            <p className="text-[10px] text-muted-foreground font-medium mt-1">Operational status</p>
+            <p className="text-[10px] text-muted-foreground font-medium mt-1 hidden sm:block">Operational status</p>
           </div>
         </Card>
       </div>

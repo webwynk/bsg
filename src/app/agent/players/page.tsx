@@ -376,37 +376,37 @@ export default function PlayersPage() {
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <div className="flex items-center space-x-2">
-            <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+            <div className="p-1 rounded-lg bg-primary/10 text-primary border border-primary/20">
               <Users className="h-4 w-4" />
             </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-foreground">
               Player Accounts
             </h1>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
+            <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
               {players.length} Total
             </span>
           </div>
-          <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs">
+          <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs hidden sm:block">
             Manage player balances, reset passwords, track gameplay history and cashier points.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Auto-Sync (30s)
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-10 px-3 text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Data
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
+            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
 
           {/* Add Player Modal */}
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogTrigger className="w-full sm:w-auto h-10 px-4 font-extrabold bg-primary text-primary-foreground hover:bg-primary/95 shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center">
-              <Plus className="mr-1.5 h-3.5 w-3.5 stroke-[3]" /> Add New Player
+            <DialogTrigger className="flex-1 sm:flex-none h-8 sm:h-10 px-3 sm:px-4 font-extrabold bg-primary text-primary-foreground hover:bg-primary/95 shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
+              <Plus className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Add Player
             </DialogTrigger>
           <DialogContent className="sm:max-w-[400px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
             <DialogHeader className="space-y-1">
