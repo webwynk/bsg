@@ -2,10 +2,12 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight, Search } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ResponsivePagination } from '@/components/responsive-pagination'
 import { getRtpAction, updateRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
@@ -21,6 +23,12 @@ export default function SuperAdminDashboard() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
+
+  // Log Filter, Search & Pagination states
+  const [logCategory, setLogCategory] = React.useState<'ALL' | 'System' | 'Transaction' | 'Security'>('ALL')
+  const [logSearchQuery, setLogSearchQuery] = React.useState('')
+  const [logPage, setLogPage] = React.useState(1)
+  const logsPerPage = 4
 
   const fetchMetrics = () => {
     setIsLoadingMetrics(true)
@@ -52,13 +60,15 @@ export default function SuperAdminDashboard() {
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
-  const handleApplyRtp = async () => {
+  const handleApplyRtp = async (targetVal?: number) => {
+    const valToApply = targetVal !== undefined ? targetVal : rtpValue
     setIsSavingRtp(true)
     setRtpSuccess(null)
-    const res = await updateRtpAction(rtpValue)
+    const res = await updateRtpAction(valToApply)
     setIsSavingRtp(false)
     if (res.success) {
-      setRtpSuccess(`RTP successfully updated to ${rtpValue}%`)
+      setRtpValue(valToApply)
+      setRtpSuccess(`RTP updated to ${valToApply}%`)
       fetchMetrics()
       setTimeout(() => setRtpSuccess(null), 2500)
     }
@@ -68,219 +78,318 @@ export default function SuperAdminDashboard() {
     fetchMetrics()
   }, [])
 
+  // Filtered & Paginated Logs
+  const filteredLogs = React.useMemo(() => {
+    return systemLogs.filter(log => {
+      if (logCategory !== 'ALL' && log.type.toUpperCase() !== logCategory.toUpperCase()) {
+        return false
+      }
+      if (logSearchQuery.trim()) {
+        const query = logSearchQuery.toLowerCase()
+        return log.detail.toLowerCase().includes(query) || log.type.toLowerCase().includes(query)
+      }
+      return true
+    })
+  }, [systemLogs, logCategory, logSearchQuery])
+
+  const paginatedLogs = React.useMemo(() => {
+    const start = (logPage - 1) * logsPerPage
+    return filteredLogs.slice(start, start + logsPerPage)
+  }, [filteredLogs, logPage])
+
+  // Reset page when log filter changes
+  React.useEffect(() => {
+    setLogPage(1)
+  }, [logCategory, logSearchQuery])
+
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
-      {/* Page Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      {/* Page Title Header (ULTRA COMPACT) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent">
+          <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground">
             System Overview
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm md:text-base">
+          <p className="text-muted-foreground text-[11px] sm:text-xs">
             Real-time management dashboard and network controls (God Mode).
           </p>
         </div>
-        <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-fit self-start md:self-auto hover:bg-secondary cursor-pointer">
-          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Metrics
+        <Button 
+          onClick={handleManualRefresh} 
+          variant="outline" 
+          size="sm" 
+          className="h-8 text-xs font-extrabold px-3 rounded-xl border-border/80 hover:bg-secondary cursor-pointer shrink-0 w-fit"
+        >
+          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh Metrics
         </Button>
       </div>
 
-      {/* Bento Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 auto-rows-min">
-        {/* Bento Card 1: Today's Coins Issued (Clickable to /superadmin/agents/issued) */}
+      {/* 2x2 Mobile / 4-Column Desktop High-Density Metric Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        {/* Card 1: Today's Coins Issued */}
         <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
-          <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden group-hover:border-primary/50 group-hover:shadow-md group-hover:scale-[1.01] transition-all duration-200 h-full">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors">
-                Today&apos;s Coins Issued
+          <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
+                Today&apos;s Issued
               </span>
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                <Coins className="h-5 w-5" />
+              <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0">
+                <Coins className="h-4 w-4" />
               </div>
-            </CardHeader>
-            <CardContent className="pt-2">
+            </div>
+            <div className="mt-1.5">
               {isLoadingMetrics ? (
-                <div className="h-8 w-28 bg-secondary/80 animate-pulse rounded my-1" />
+                <div className="h-6 w-20 bg-secondary/80 animate-pulse rounded" />
               ) : (
-                <div className="text-3xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
                   <span>{formatCurrency(todaysCoins)}</span>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
                 </div>
               )}
-              <div className="flex items-center space-x-1.5 mt-2">
-                <TrendingUp className="h-3.5 w-3.5 text-success-text" />
-                <span className="text-xs font-semibold text-success-text">Given to agents today</span>
-                <span className="text-[10px] text-muted-foreground font-semibold">(Click for ledger)</span>
+              <div className="flex items-center space-x-1 mt-1 text-[10px]">
+                <TrendingUp className="h-3 w-3 text-success-text shrink-0" />
+                <span className="text-success-text font-extrabold truncate">Issued Today</span>
+                <span className="text-muted-foreground hidden sm:inline">(Ledger)</span>
               </div>
-            </CardContent>
+            </div>
           </Card>
         </Link>
 
-        {/* Bento Card 2: Active Agent & Player Count */}
-        <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Network</span>
-            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
-              <Users className="h-5 w-5" />
+        {/* Card 2: Active Network */}
+        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Active Network</span>
+            <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
+              <Users className="h-4 w-4" />
             </div>
-          </CardHeader>
-          <CardContent className="pt-2">
+          </div>
+          <div className="mt-1.5">
             {isLoadingMetrics ? (
-              <div className="h-8 w-24 bg-secondary/80 animate-pulse rounded my-1" />
+              <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
             ) : (
-              <div className="text-3xl font-bold font-mono tracking-tight">{activeAgents} <span className="text-sm font-normal text-muted-foreground">Agents</span></div>
+              <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-foreground">
+                {activeAgents} <span className="text-xs font-normal text-muted-foreground">Agents</span>
+              </div>
             )}
-            <p className="text-xs text-muted-foreground mt-2">
-              <span className="font-semibold text-foreground">{activePlayers} registered</span> players network
+            <p className="text-[10px] text-muted-foreground mt-1 truncate">
+              <strong className="text-foreground font-bold">{activePlayers}</strong> players registered
             </p>
-          </CardContent>
+          </div>
         </Card>
 
-        {/* Bento Card 3: Global System RTP status */}
-        <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Global RTP Target</span>
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
-              <Percent className="h-5 w-5" />
+        {/* Card 3: Global RTP Target */}
+        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Global RTP</span>
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
+              <Percent className="h-4 w-4" />
             </div>
-          </CardHeader>
-          <CardContent className="pt-2">
+          </div>
+          <div className="mt-1.5">
             {isLoadingMetrics ? (
-              <div className="h-8 w-20 bg-secondary/80 animate-pulse rounded my-1" />
+              <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
             ) : (
-              <div className="text-3xl font-bold font-mono tracking-tight text-amber-500">{rtpValue}%</div>
+              <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-amber-500">{rtpValue}%</div>
             )}
-            <div className="flex items-center space-x-1.5 mt-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs text-muted-foreground">Active optimization engine</span>
+            <div className="flex items-center space-x-1 mt-1 text-[10px] text-muted-foreground">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="truncate">Optimization Active</span>
             </div>
-          </CardContent>
+          </div>
         </Card>
 
-        {/* Bento Card 4: Bets Placed (24h) */}
-        <Card className="bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md hover:scale-[1.01] transition-all duration-200">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Bets (24h)</span>
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-500">
-              <Activity className="h-5 w-5" />
+        {/* Card 4: Total Bets (24h) */}
+        <Card className="bg-card border-border/80 shadow-xs rounded-xl p-3 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Total Bets (24h)</span>
+            <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-500 shrink-0">
+              <Activity className="h-4 w-4" />
             </div>
-          </CardHeader>
-          <CardContent className="pt-2">
+          </div>
+          <div className="mt-1.5">
             {isLoadingMetrics ? (
-              <div className="h-8 w-24 bg-secondary/80 animate-pulse rounded my-1" />
+              <div className="h-6 w-16 bg-secondary/80 animate-pulse rounded" />
             ) : (
-              <div className="text-3xl font-bold font-mono tracking-tight">{totalBets24h}</div>
+              <div className="text-lg sm:text-2xl font-black font-mono tracking-tight text-foreground">{totalBets24h}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-2">
-              Coins bet in last <span className="font-semibold text-foreground">24 hours</span>
+            <p className="text-[10px] text-muted-foreground mt-1 truncate">
+              Coins wagered (24h)
             </p>
-          </CardContent>
+          </div>
         </Card>
+      </div>
 
-        {/* Bento Card 5: RTP Control Slider Settings (Wide: Col-span 2 on Desktop) */}
-        <Card className="md:col-span-2 bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md transition-all duration-200">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 rounded bg-primary/10 text-primary">
-                  <Settings2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg font-bold">RTP Configuration</CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Adjust theoretical payouts across slots and tables.
-                  </CardDescription>
-                </div>
-              </div>
-              <span className="font-bold text-amber-500 text-2xl font-mono">{rtpValue}%</span>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {rtpSuccess && (
-              <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-2">
-                <Check className="h-4 w-4 text-success-text" />
-                <span>{rtpSuccess}</span>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <Slider 
-                value={[rtpValue]}
-                onValueChange={(val) => {
-                  if (typeof val === 'number') {
-                    setRtpValue(val)
-                  } else if (Array.isArray(val) && typeof val[0] === 'number') {
-                    setRtpValue(val[0])
-                  }
-                }}
-                max={99} 
-                min={50} 
-                step={0.5}
-                className="w-full cursor-pointer"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                <span>50% (High House Edge)</span>
-                <span>99% (Low House Edge)</span>
-              </div>
-            </div>
-
-            <Button 
-              onClick={handleApplyRtp} 
-              disabled={isSavingRtp}
-              className="w-full font-bold cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {isSavingRtp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isSavingRtp ? 'Saving RTP...' : 'Apply Configuration'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Bento Card 6: Recent Activity Audit Logs (Wide: Col-span 2 on Desktop) */}
-        <Card className="md:col-span-2 bg-card border-border shadow-sm rounded-xl overflow-hidden hover:shadow-md transition-all duration-200">
-          <CardHeader>
+      {/* Main Widgets: RTP Configuration & Recent System Logs */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* RTP Configuration Card (md:col-span-5) */}
+        <Card className="md:col-span-5 bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
             <div className="flex items-center space-x-2">
-              <div className="p-2 rounded bg-primary/10 text-primary">
-                <ShieldCheck className="h-5 w-5" />
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                <Settings2 className="h-4 w-4" />
               </div>
               <div>
-                <CardTitle className="text-lg font-bold">Recent System Logs</CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Live audit logs of administrative actions.
-                </CardDescription>
+                <h3 className="text-sm font-black text-foreground leading-tight">RTP Configuration</h3>
+                <p className="text-[10px] text-muted-foreground">Adjust payout rates across slots & games.</p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="relative">
+            <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+              {rtpValue}%
+            </span>
+          </div>
+
+          {isLoadingMetrics ? (
+            <div className="space-y-3 p-2 animate-pulse">
+              <div className="h-4 bg-secondary/80 rounded w-full" />
+              <div className="h-8 bg-secondary/60 rounded w-full" />
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {rtpSuccess && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                  <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
+                  <span>{rtpSuccess}</span>
+                </div>
+              )}
+
+              {/* Slider Controls */}
+              <div className="space-y-2">
+                <Slider 
+                  value={[rtpValue]}
+                  onValueChange={(val) => {
+                    if (typeof val === 'number') {
+                      setRtpValue(val)
+                    } else if (Array.isArray(val) && typeof val[0] === 'number') {
+                      setRtpValue(val[0])
+                    }
+                  }}
+                  max={99} 
+                  min={50} 
+                  step={0.5}
+                  className="w-full cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground font-mono font-bold">
+                  <span>50% (High House Edge)</span>
+                  <span>99% (Low House Edge)</span>
+                </div>
+              </div>
+
+              {/* Preset Quick Pills */}
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Quick RTP Presets
+                </span>
+                <div className="flex items-center flex-wrap gap-1.5">
+                  {[90, 92.5, 95, 96.5, 98].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => handleApplyRtp(preset)}
+                      disabled={isSavingRtp}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border ${
+                        rtpValue === preset
+                          ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                          : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
+                      }`}
+                    >
+                      {preset}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Button 
+                onClick={() => handleApplyRtp()} 
+                disabled={isSavingRtp}
+                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs"
+              >
+                {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                {isSavingRtp ? 'Saving Configuration...' : 'Apply Configuration'}
+              </Button>
+            </div>
+          )}
+        </Card>
+
+        {/* Recent System Logs Widget (md:col-span-7) */}
+        <Card className="md:col-span-7 bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+          {/* Header Bar + Log Filters & Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/60 pb-2.5">
+            <div className="flex items-center space-x-2">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-foreground leading-tight">Recent System Logs</h3>
+                <p className="text-[10px] text-muted-foreground">Live administrative audit trail.</p>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+              {(['ALL', 'System', 'Transaction', 'Security'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setLogCategory(cat)}
+                  className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
+                    logCategory === cat ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
+            <Input 
+              placeholder="Search audit logs..." 
+              value={logSearchQuery}
+              onChange={(e) => setLogSearchQuery(e.target.value)}
+              className="pl-9 h-8 bg-card border-border/80 text-foreground text-xs rounded-xl focus:border-primary/50 shadow-xs" 
+            />
+            {logSearchQuery && (
+              <button 
+                onClick={() => setLogSearchQuery('')}
+                className="absolute right-3 top-2 text-[10px] text-muted-foreground hover:text-foreground font-bold"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Logs List Container */}
+          <div>
             {isLoadingMetrics ? (
-              <div className="space-y-3">
+              <div className="space-y-2.5 p-1">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-lg bg-secondary/20 animate-pulse border border-border/40">
-                    <div className="h-4 bg-secondary/80 rounded w-2/3" />
-                    <div className="h-4 bg-secondary/60 rounded w-1/6" />
+                  <div key={i} className="flex items-center justify-between gap-4 p-2.5 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
+                    <div className="h-3.5 bg-secondary/80 rounded w-2/3" />
+                    <div className="h-3.5 bg-secondary/60 rounded w-1/6" />
                   </div>
                 ))}
               </div>
-            ) : systemLogs.length > 0 ? (
-              <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
-                {systemLogs.map((log) => (
-                  <div key={log.id} className="relative pl-8 flex items-start justify-between gap-4 py-1">
-                    <span className="absolute left-[6px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-card bg-background flex items-center justify-center">
+            ) : paginatedLogs.length > 0 ? (
+              <div className="space-y-2 min-h-[190px]">
+                {paginatedLogs.map((log) => (
+                  <div key={log.id} className="relative pl-6 flex items-center justify-between gap-3 p-2 rounded-xl bg-secondary/20 border border-border/40 hover:bg-secondary/40 transition-colors">
+                    <span className="absolute left-2 top-3 w-2 h-2 rounded-full border border-card bg-background flex items-center justify-center">
                       <span className={`w-1.5 h-1.5 rounded-full ${
-                        log.type === 'Security' ? 'bg-danger' :
-                        log.type === 'System' ? 'bg-success' : 'bg-info'
+                        log.type.toUpperCase() === 'SECURITY' ? 'bg-red-500' :
+                        log.type.toUpperCase() === 'SYSTEM' ? 'bg-emerald-500' : 'bg-blue-500'
                       }`} />
                     </span>
 
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground leading-normal pr-2">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-xs font-bold text-foreground truncate">
                         {log.detail}
                       </p>
-                      <span className="text-[11px] font-medium text-muted-foreground">{log.time}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground block">{log.time}</span>
                     </div>
 
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0 ${
-                      log.type === 'Security' ? 'bg-danger-bg text-danger-text' :
-                      log.type === 'System' ? 'bg-success-bg text-success-text' : 'bg-info-bg text-info-text'
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                      log.type.toUpperCase() === 'SECURITY' ? 'bg-danger-bg text-danger-text border border-red-500/20' :
+                      log.type.toUpperCase() === 'SYSTEM' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-info-bg text-info-text border border-blue-500/20'
                     }`}>
                       {log.type}
                     </span>
@@ -288,11 +397,24 @@ export default function SuperAdminDashboard() {
                 ))}
               </div>
             ) : (
-              <div className="py-12 text-center text-xs text-muted-foreground font-medium">
-                No system logs recorded yet. Real-time actions will appear here.
+              <div className="py-8 text-center text-xs text-muted-foreground font-medium">
+                No system logs found matching the selected filter.
               </div>
             )}
-          </CardContent>
+
+            {/* Pagination for Logs */}
+            {filteredLogs.length > logsPerPage && (
+              <div className="pt-2 border-t border-border/60">
+                <ResponsivePagination 
+                  currentPage={logPage}
+                  totalPages={Math.ceil(filteredLogs.length / logsPerPage)}
+                  onPageChange={setLogPage}
+                  totalItems={filteredLogs.length}
+                  itemsPerPage={logsPerPage}
+                />
+              </div>
+            )}
+          </div>
         </Card>
       </div>
     </div>
