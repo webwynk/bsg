@@ -626,21 +626,21 @@ export default function AgentDetailPage({ params }: Props) {
         <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
           {selectedPlayer ? (
             <div className="space-y-3">
-              {/* 📊 PLAYER PERFORMANCE & PROFIT SUMMARY BAR */}
-              <div className="space-y-2">
+              {/* 📊 SLIM HIGH-DENSITY PERFORMANCE METRIC STRIP */}
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center space-x-1.5">
-                    <Activity className="h-4 w-4 text-primary" />
-                    <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
+                    <Activity className="h-3.5 w-3.5 text-primary" />
+                    <h3 className="text-[10px] font-black uppercase tracking-wider text-foreground">
                       Player Performance Summary
                     </h3>
                   </div>
 
                   {/* Scope Toggle: Today vs Lifetime */}
-                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-lg p-0.5 text-[9px] font-bold">
                     <button
                       onClick={() => setStatsScope('today')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                         statsScope === 'today' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -648,7 +648,7 @@ export default function AgentDetailPage({ params }: Props) {
                     </button>
                     <button
                       onClick={() => setStatsScope('lifetime')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                         statsScope === 'lifetime' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -659,57 +659,53 @@ export default function AgentDetailPage({ params }: Props) {
 
                 {isLoadingHistory ? (
                   /* Skeleton Loader for Performance Cards */
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[1, 2, 3, 4].map(i => (
-                      <Card key={i} className="p-3 bg-card border-border/60 animate-pulse space-y-2 rounded-xl">
-                        <div className="h-3 bg-secondary/80 rounded w-1/2" />
-                        <div className="h-5 bg-secondary/60 rounded w-3/4" />
-                        <div className="h-2.5 bg-secondary/40 rounded w-1/3" />
+                      <Card key={i} className="p-2 bg-card border-border/60 animate-pulse space-y-1.5 rounded-xl">
+                        <div className="h-2.5 bg-secondary/80 rounded w-1/2" />
+                        <div className="h-4 bg-secondary/60 rounded w-3/4" />
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {/* Card 1: Total Plays */}
-                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Plays</span>
-                      <span className="text-lg font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">Spins recorded</p>
+                      <span className="text-base font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
                     </Card>
 
                     {/* Card 2: Bet Volume */}
-                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Bet Volume</span>
-                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">Total wagered</p>
+                      <span className="text-base font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
                     </Card>
 
                     {/* Card 3: Win Payout */}
-                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Win Payout</span>
-                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">Player earnings</p>
+                      <span className="text-base font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
                     </Card>
 
                     {/* Card 4: Net House GGR / Agent Profit */}
-                    <Card className={`border p-3 rounded-xl shadow-xs ${
+                    <Card className={`border p-2.5 rounded-xl shadow-xs ${
                       performanceStats.netGgr >= 0 
                         ? 'bg-emerald-500/10 border-emerald-500/30' 
                         : 'bg-red-500/10 border-red-500/30'
                     }`}>
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Net House GGR</span>
-                      <div className="flex items-center space-x-1">
-                        <span className={`text-lg font-mono font-black ${
+                      <div className="flex items-center justify-between">
+                        <span className={`text-base font-mono font-black ${
                           performanceStats.netGgr >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
                           {performanceStats.netGgr >= 0 ? `+${formatCurrency(performanceStats.netGgr)}` : formatCurrency(performanceStats.netGgr)}
                         </span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
+                          performanceStats.netGgr >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {performanceStats.marginPct.toFixed(1)}%
+                        </span>
                       </div>
-                      <p className={`text-[9px] font-bold mt-0.5 ${
-                        performanceStats.netGgr >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
-                      }`}>
-                        {performanceStats.marginPct.toFixed(1)}% House Margin
-                      </p>
                     </Card>
                   </div>
                 )}
@@ -736,15 +732,18 @@ export default function AgentDetailPage({ params }: Props) {
                       }`} />
                     </div>
 
-                    <div>
-                      <h3 className="text-sm font-black text-foreground leading-tight">
-                        History of {selectedPlayer.name}
-                      </h3>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-xs sm:text-sm font-black text-foreground leading-tight truncate">
+                          History of {selectedPlayer.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 py-0.2 rounded font-bold">
+                          {formatCurrency(selectedPlayer.balance)}
+                        </span>
+                      </div>
                       <div className="flex items-center space-x-2 text-[10px] font-mono">
-                        <span className="text-muted-foreground">@{selectedPlayer.username}</span>
-                        <span>&bull;</span>
-                        <span className="text-muted-foreground">Coins: <strong className="text-foreground">{formatCurrency(selectedPlayer.balance)}</strong></span>
-                        <span>&bull;</span>
+                        <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
+                        <span className="text-muted-foreground/60">&bull;</span>
                         {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />

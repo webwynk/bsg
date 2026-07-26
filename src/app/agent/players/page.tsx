@@ -132,7 +132,6 @@ export default function PlayersPage() {
   // Filtered games list
   const filteredGames = React.useMemo(() => {
     return gamePlays.filter(spin => {
-      // Date Filter
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-US', {
           timeZone: 'Asia/Kolkata',
@@ -143,12 +142,10 @@ export default function PlayersPage() {
         if (!spin.date.includes(filterDateStr)) return false
       }
 
-      // Outcome Filter
       if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
         return false
       }
 
-      // Mode Filter
       if (filterMode !== 'all' && !spin.mode.toUpperCase().includes(filterMode)) {
         return false
       }
@@ -567,32 +564,32 @@ export default function PlayersPage() {
         <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
           {selectedPlayer ? (
             <div className="space-y-3">
-              {/* Selected Player Header Card */}
-              <Card className="border-border/80 bg-card p-3.5 sm:p-4 rounded-2xl shadow-md relative overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  {/* Mobile Back Button & Player Info */}
-                  <div className="flex items-center space-x-2.5">
+              {/* Selected Player Header Card (ULTRA COMPACT) */}
+              <Card className="border-border/80 bg-card p-3 sm:p-3.5 rounded-2xl shadow-md space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  {/* Player Avatar, Name & Live Sync Status */}
+                  <div className="flex items-center space-x-2.5 min-w-0">
                     <button
                       onClick={() => setShowMobileDetail(false)}
-                      className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none"
+                      className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none shrink-0"
                       aria-label="Back to players list"
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </button>
 
                     <div className="relative shrink-0">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-base">
+                      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm">
                         {selectedPlayer.name[0]?.toUpperCase()}
                       </div>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
                         selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                       }`} />
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center space-x-2">
-                        <h2 className="text-base sm:text-lg font-black text-foreground">{selectedPlayer.name}</h2>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black ${
+                        <h2 className="text-sm sm:text-base font-black text-foreground truncate">{selectedPlayer.name}</h2>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black shrink-0 ${
                           selectedPlayer.status === 'Active'
                             ? 'bg-success-bg text-success-text border border-emerald-500/20'
                             : 'bg-danger-bg text-danger-text border border-red-500/20'
@@ -600,17 +597,16 @@ export default function PlayersPage() {
                           {selectedPlayer.status}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-2 text-[11px] font-mono">
-                        <span className="text-muted-foreground">@{selectedPlayer.username}</span>
-                        <span>&bull;</span>
-                        {/* Live Sync Status Indicator */}
+                      <div className="flex items-center space-x-2 text-[10px] font-mono">
+                        <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
+                        <span className="text-muted-foreground/60">&bull;</span>
                         {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
-                          <span className="inline-flex items-center text-emerald-400 font-extrabold text-[10px]">
+                          <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
                             Real-Time Sync Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center text-red-400/80 font-bold text-[10px]">
+                          <span className="inline-flex items-center text-red-400/80 font-bold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1" />
                             Player Offline
                           </span>
@@ -619,32 +615,32 @@ export default function PlayersPage() {
                     </div>
                   </div>
 
-                  {/* Player Balance Summary Pill */}
-                  <div className="bg-secondary/40 border border-border/60 p-2.5 rounded-xl flex items-center justify-between sm:justify-end sm:space-x-3 min-w-[180px]">
+                  {/* Balance Summary Pill */}
+                  <div className="bg-secondary/40 border border-border/60 px-3 py-1.5 rounded-xl flex items-center justify-between sm:justify-end space-x-2.5 shrink-0">
                     <div className="text-left sm:text-right">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
                         Coins Balance
                       </span>
-                      <span className="text-lg font-mono font-black text-foreground">
+                      <span className="text-base font-mono font-black text-foreground">
                         {formatCurrency(selectedPlayer.balance)}
                       </span>
                     </div>
-                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                      <Coins className="h-4 w-4" />
+                    <div className="p-1 rounded-lg bg-primary/10 text-primary">
+                      <Coins className="h-3.5 w-3.5" />
                     </div>
                   </div>
                 </div>
 
-                {/* Quick Actions Grid (HIGH CONTRAST & EXPLICIT VISIBILITY) */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-border/60 mt-3">
+                {/* Quick Actions Bar (Compact Buttons: h-8) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-border/50">
                   {/* Deposit Modal */}
                   <Dialog open={activeTransferModal === 'deposit'} onOpenChange={(open) => {
                     setActiveTransferModal(open ? 'deposit' : null)
                     setTransferAmount('')
                     setTransferError(null)
                   }}>
-                    <DialogTrigger className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-md cursor-pointer rounded-xl text-xs flex items-center justify-center border-0">
-                      <ArrowUpRight className="mr-1 h-4 w-4 stroke-[3]" /> Deposit Coins
+                    <DialogTrigger className="w-full h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-sm cursor-pointer rounded-lg text-[11px] flex items-center justify-center border-0">
+                      <ArrowUpRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Deposit Coins
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
                       <DialogHeader>
@@ -692,8 +688,8 @@ export default function PlayersPage() {
                     setTransferAmount('')
                     setTransferError(null)
                   }}>
-                    <DialogTrigger className="w-full h-10 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-xl text-xs flex items-center justify-center bg-transparent">
-                      <ArrowDownRight className="mr-1 h-4 w-4 stroke-[3]" /> Withdraw
+                    <DialogTrigger className="w-full h-8 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center bg-transparent">
+                      <ArrowDownRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Withdraw
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
                       <DialogHeader>
@@ -748,7 +744,7 @@ export default function PlayersPage() {
                       setShowConfirmPassword(false)
                     }}
                   >
-                    <DialogTrigger className="w-full h-10 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-xs font-extrabold rounded-xl flex items-center justify-center bg-transparent">
+                    <DialogTrigger className="w-full h-8 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-[11px] font-extrabold rounded-lg flex items-center justify-center bg-transparent">
                       <KeyRound className="mr-1 h-3.5 w-3.5" /> Password
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
@@ -831,7 +827,7 @@ export default function PlayersPage() {
                     onClick={handleToggleStatus}
                     disabled={isTogglingStatus}
                     variant="outline"
-                    className={`w-full h-10 font-extrabold cursor-pointer rounded-xl text-xs flex items-center justify-center ${
+                    className={`w-full h-8 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center ${
                       selectedPlayer.status === 'Active'
                         ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
                         : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
@@ -845,21 +841,21 @@ export default function PlayersPage() {
                 </div>
               </Card>
 
-              {/* 📊 PLAYER PERFORMANCE & PROFIT SUMMARY BAR */}
-              <div className="space-y-2">
+              {/* 📊 SLIM HIGH-DENSITY PERFORMANCE METRIC STRIP */}
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center space-x-1.5">
-                    <Activity className="h-4 w-4 text-primary" />
-                    <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
+                    <Activity className="h-3.5 w-3.5 text-primary" />
+                    <h3 className="text-[10px] font-black uppercase tracking-wider text-foreground">
                       Player Performance Summary
                     </h3>
                   </div>
 
                   {/* Scope Toggle: Today vs Lifetime */}
-                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-lg p-0.5 text-[9px] font-bold">
                     <button
                       onClick={() => setStatsScope('today')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                         statsScope === 'today' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -867,7 +863,7 @@ export default function PlayersPage() {
                     </button>
                     <button
                       onClick={() => setStatsScope('lifetime')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
                         statsScope === 'lifetime' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -878,57 +874,53 @@ export default function PlayersPage() {
 
                 {isLoadingHistory ? (
                   /* Skeleton Loader for Performance Cards */
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[1, 2, 3, 4].map(i => (
-                      <Card key={i} className="p-3 bg-card border-border/60 animate-pulse space-y-2 rounded-xl">
-                        <div className="h-3 bg-secondary/80 rounded w-1/2" />
-                        <div className="h-5 bg-secondary/60 rounded w-3/4" />
-                        <div className="h-2.5 bg-secondary/40 rounded w-1/3" />
+                      <Card key={i} className="p-2 bg-card border-border/60 animate-pulse space-y-1.5 rounded-xl">
+                        <div className="h-2.5 bg-secondary/80 rounded w-1/2" />
+                        <div className="h-4 bg-secondary/60 rounded w-3/4" />
                       </Card>
                     ))}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {/* Card 1: Total Plays */}
-                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Plays</span>
-                      <span className="text-lg font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">Spins recorded</p>
+                      <span className="text-base font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
                     </Card>
 
                     {/* Card 2: Bet Volume */}
-                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Bet Volume</span>
-                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">Total wagered</p>
+                      <span className="text-base font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
                     </Card>
 
                     {/* Card 3: Win Payout */}
-                    <Card className="bg-card border border-border/80 p-3 rounded-xl shadow-xs">
+                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Win Payout</span>
-                      <span className="text-lg font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">Player earnings</p>
+                      <span className="text-base font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
                     </Card>
 
                     {/* Card 4: Net House GGR / Agent Profit */}
-                    <Card className={`border p-3 rounded-xl shadow-xs ${
+                    <Card className={`border p-2.5 rounded-xl shadow-xs ${
                       performanceStats.netGgr >= 0 
                         ? 'bg-emerald-500/10 border-emerald-500/30' 
                         : 'bg-red-500/10 border-red-500/30'
                     }`}>
                       <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Net House GGR</span>
-                      <div className="flex items-center space-x-1">
-                        <span className={`text-lg font-mono font-black ${
+                      <div className="flex items-center justify-between">
+                        <span className={`text-base font-mono font-black ${
                           performanceStats.netGgr >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
                           {performanceStats.netGgr >= 0 ? `+${formatCurrency(performanceStats.netGgr)}` : formatCurrency(performanceStats.netGgr)}
                         </span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
+                          performanceStats.netGgr >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {performanceStats.marginPct.toFixed(1)}%
+                        </span>
                       </div>
-                      <p className={`text-[9px] font-bold mt-0.5 ${
-                        performanceStats.netGgr >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
-                      }`}>
-                        {performanceStats.marginPct.toFixed(1)}% House Margin
-                      </p>
                     </Card>
                   </div>
                 )}
@@ -1435,7 +1427,6 @@ export default function PlayersPage() {
                           </TableBody>
                         </Table>
 
-                        {/* Pagination Bar for Coins History */}
                         {filteredPoints.length > itemsPerPage && (
                           <div className="p-3 border-t border-border/60">
                             <ResponsivePagination 
