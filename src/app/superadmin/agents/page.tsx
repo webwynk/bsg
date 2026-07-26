@@ -19,10 +19,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Eye, EyeOff, Loader2 } from "lucide-react"
+import { Plus, Eye, EyeOff, Loader2, Search, Users, ShieldCheck, ArrowRight, User } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
@@ -89,78 +90,108 @@ export default function AgentsPage() {
   const paginatedAgents = filteredAgents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 md:px-0">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-0 pb-12">
+      {/* Top Title & Add Action Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Agents</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Manage your agent network, view single agent details, and monitor activity.
+          <div className="flex items-center space-x-2">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+              <Users className="h-5 w-5" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+              Agent Directory
+            </h1>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-primary/10 text-primary border border-primary/20">
+              {agents.length} Total
+            </span>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs sm:text-sm">
+            Manage your agent network, issue cashier points, and monitor real-time activity.
           </p>
         </div>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger className={buttonVariants({ variant: "default" })}>
-            <Plus className="mr-2 h-4 w-4" /> Add Agent
+          <DialogTrigger className={buttonVariants({ variant: "default", size: "lg", className: "w-full sm:w-auto h-11 px-5 font-extrabold shadow-lg shadow-primary/20 cursor-pointer rounded-xl text-sm" })}>
+            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Add New Agent
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] bg-card border-border text-foreground">
-            <DialogHeader>
-              <DialogTitle>Create New Agent</DialogTitle>
-              <DialogDescription className="text-muted-foreground">
-                Create a new agent account. They will need these credentials to log in.
+          <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-6">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="text-xl font-black">Register New Agent</DialogTitle>
+              <DialogDescription className="text-muted-foreground text-xs">
+                Create a new agent back-office account. They will need these credentials to sign in.
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleCreateAgent}>
-              <div className="grid gap-4 py-4">
-                {errorMessage && (
-                  <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                    {errorMessage}
-                  </div>
-                )}
-                {successMessage && (
-                  <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
-                    {successMessage}
-                  </div>
-                )}
+            <form onSubmit={handleCreateAgent} className="space-y-4 pt-2">
+              {errorMessage && (
+                <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 shrink-0 animate-ping" />
+                  {errorMessage}
+                </div>
+              )}
+              {successMessage && (
+                <div className="p-3 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                  {successMessage}
+                </div>
+              )}
 
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="name" className="text-right text-muted-foreground">
-                    Name
-                  </Label>
-                  <Input id="name" name="name" placeholder="John Doe" className="col-span-3 bg-background border-border text-foreground" required />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="username" className="text-right text-muted-foreground">
-                    Username
-                  </Label>
-                  <Input id="username" name="username" placeholder="agent_john" className="col-span-3 bg-background border-border text-foreground" required />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="password" className="text-right text-muted-foreground">
-                    Password
-                  </Label>
-                  <div className="col-span-3 relative">
-                    <Input
-                      id="password"
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      className="w-full bg-background border-border text-foreground pr-10"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Full Name
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  placeholder="e.g. John Doe"
+                  className="h-11 bg-background/60 border-border text-foreground text-sm rounded-lg"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Username
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-3 text-sm text-muted-foreground/70 font-mono">@</span>
+                  <Input
+                    id="username"
+                    name="username"
+                    placeholder="agent_john"
+                    className="pl-8 h-11 bg-background/60 border-border text-foreground text-sm rounded-lg"
+                    required
+                  />
                 </div>
               </div>
-              <DialogFooter>
-                <Button type="submit" disabled={isLoading} className="w-full font-bold cursor-pointer">
+
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    className="h-11 bg-background/60 border-border text-foreground pr-10 text-sm rounded-lg"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button type="submit" disabled={isLoading} className="w-full h-11 font-extrabold text-sm rounded-lg shadow-md shadow-primary/10 cursor-pointer">
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {isLoading ? 'Creating Agent...' : 'Create Agent'}
+                  {isLoading ? 'Registering Agent...' : 'Create Agent Account'}
                 </Button>
               </DialogFooter>
             </form>
@@ -168,71 +199,91 @@ export default function AgentsPage() {
         </Dialog>
       </div>
 
-      {/* Navigation Sub-Tabs */}
+      {/* Sub-Navigation Tabs */}
       <div className="flex border-b border-border/60 space-x-2">
         <Link
           href="/superadmin/agents"
-          className="py-2.5 px-4 font-bold text-sm text-primary border-b-2 border-primary"
+          className="py-2.5 px-4 font-extrabold text-sm text-primary border-b-2 border-primary flex items-center space-x-2"
         >
-          Agent Directory
+          <ShieldCheck className="h-4 w-4" />
+          <span>Agent Directory</span>
         </Link>
         <Link
           href="/superadmin/agents/issued"
-          className="py-2.5 px-4 font-semibold text-sm text-muted-foreground hover:text-foreground border-b-2 border-transparent hover:border-border transition-all"
+          className="py-2.5 px-4 font-semibold text-sm text-muted-foreground hover:text-foreground border-b-2 border-transparent hover:border-border transition-all flex items-center space-x-2"
         >
-          Coins Issued Ledger
+          <span>Coins Issued Ledger</span>
         </Link>
       </div>
 
-      <div className="flex items-center justify-between mb-4">
+      {/* Search Input Bar */}
+      <div className="relative max-w-md w-full">
+        <Search className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground/70" />
         <Input 
-          placeholder="Search agents..." 
+          placeholder="Search agents by name or @username..." 
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-sm bg-card border-border text-foreground" 
+          onChange={(e) => {
+            setSearchQuery(e.target.value)
+            setCurrentPage(1)
+          }}
+          className="pl-10 h-11 bg-card border-border/80 text-foreground text-sm rounded-xl focus:border-primary/50 shadow-xs" 
         />
+        {searchQuery && (
+          <button 
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-3 text-xs text-muted-foreground hover:text-foreground font-bold"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      {/* --- DESKTOP VIEW (hidden on mobile, visible md+) --- */}
+      <div className="hidden md:block rounded-2xl border border-border/80 bg-card overflow-hidden shadow-xl">
         <div className="overflow-x-auto table-scroll">
           <Table>
             <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] min-w-[150px]">Name</TableHead>
-                <TableHead className="text-muted-foreground min-w-[120px]">Username</TableHead>
-                <TableHead className="text-right text-muted-foreground min-w-[120px]">Coins</TableHead>
-                <TableHead className="text-center text-muted-foreground min-w-[100px]">Status</TableHead>
-                <TableHead className="text-right text-muted-foreground min-w-[120px]">Actions</TableHead>
+              <TableRow className="border-border hover:bg-transparent bg-secondary/20">
+                <TableHead className="text-muted-foreground text-xs uppercase tracking-wider sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] min-w-[160px]">Agent Name</TableHead>
+                <TableHead className="text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Username</TableHead>
+                <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Coins Balance</TableHead>
+                <TableHead className="text-center text-muted-foreground text-xs uppercase tracking-wider min-w-[110px]">Status</TableHead>
+                <TableHead className="text-right text-muted-foreground text-xs uppercase tracking-wider min-w-[130px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoadingAgents ? (
                 [1, 2, 3, 4, 5].map((i) => (
                   <TableRow key={i} className="border-border">
-                    <TableCell><div className="h-4 bg-secondary/80 rounded animate-pulse w-28" /></TableCell>
-                    <TableCell><div className="h-4 bg-secondary/60 rounded animate-pulse w-20" /></TableCell>
-                    <TableCell className="text-right"><div className="h-4 bg-secondary/70 rounded animate-pulse w-16 ml-auto" /></TableCell>
-                    <TableCell className="text-center"><div className="h-4 bg-secondary/80 rounded animate-pulse w-14 mx-auto" /></TableCell>
-                    <TableCell className="text-right"><div className="h-4 bg-secondary/60 rounded animate-pulse w-16 ml-auto" /></TableCell>
+                    <TableCell className="sticky left-0 bg-card z-10">
+                      <div className="h-5 bg-secondary/80 rounded-md animate-pulse w-32" />
+                    </TableCell>
+                    <TableCell><div className="h-4 bg-secondary/60 rounded-md animate-pulse w-24" /></TableCell>
+                    <TableCell className="text-right"><div className="h-5 bg-secondary/70 rounded-md animate-pulse w-20 ml-auto" /></TableCell>
+                    <TableCell className="text-center"><div className="h-5 bg-secondary/80 rounded-full animate-pulse w-16 mx-auto" /></TableCell>
+                    <TableCell className="text-right"><div className="h-8 bg-secondary/60 rounded-lg animate-pulse w-20 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : paginatedAgents.length > 0 ? (
                 paginatedAgents.map((agent) => (
-                  <TableRow key={agent.id} className="border-border hover:bg-secondary/50">
-                    <TableCell className="font-semibold text-foreground sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
-                      <Link href={`/superadmin/agents/${agent.id}`} className="hover:underline font-bold text-primary">
-                        {agent.name}
+                  <TableRow key={agent.id} className="border-border hover:bg-secondary/40 transition-colors">
+                    <TableCell className="font-bold text-foreground text-sm sticky left-0 bg-card z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
+                      <Link href={`/superadmin/agents/${agent.id}`} className="hover:text-primary transition-colors flex items-center space-x-2">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 text-xs font-black">
+                          {agent.name[0]?.toUpperCase()}
+                        </div>
+                        <span>{agent.name}</span>
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">@{agent.username}</TableCell>
-                    <TableCell className="text-right text-foreground font-mono font-bold">
+                    <TableCell className="text-muted-foreground font-mono text-xs">@{agent.username}</TableCell>
+                    <TableCell className="text-right text-foreground font-mono font-black text-sm">
                       {formatCurrency(agent.balance)}
                     </TableCell>
                     <TableCell className="text-center">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-black ${
                         agent.status === 'Active' 
-                          ? 'bg-success-bg text-success-text' 
-                          : 'bg-danger-bg text-danger-text'
+                          ? 'bg-success-bg text-success-text border border-emerald-500/20' 
+                          : 'bg-danger-bg text-danger-text border border-red-500/20'
                       }`}>
                         {agent.status}
                       </span>
@@ -240,7 +291,7 @@ export default function AgentsPage() {
                     <TableCell className="text-right space-x-2 whitespace-nowrap">
                       <Link
                         href={`/superadmin/agents/${agent.id}`}
-                        className={buttonVariants({ variant: "outline", size: "sm", className: "border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-bold" })}
+                        className={buttonVariants({ variant: "outline", size: "sm", className: "border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-bold rounded-lg text-xs" })}
                       >
                         <Eye className="mr-1.5 h-3.5 w-3.5" /> View
                       </Link>
@@ -249,8 +300,8 @@ export default function AgentsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-32 text-center text-muted-foreground text-xs font-medium">
-                    No agents created yet. Click &quot;Add Agent&quot; to register your first agent.
+                  <TableCell colSpan={5} className="h-36 text-center text-muted-foreground text-xs font-medium">
+                    No agents found matching &quot;{searchQuery}&quot;.
                   </TableCell>
                 </TableRow>
               )}
@@ -266,6 +317,77 @@ export default function AgentsPage() {
             totalItems={filteredAgents.length}
             itemsPerPage={itemsPerPage}
           />
+        )}
+      </div>
+
+      {/* --- MOBILE VIEW CARDS (visible on mobile < md, hidden on md+) --- */}
+      <div className="md:hidden space-y-3">
+        {isLoadingAgents ? (
+          [1, 2, 3, 4].map((i) => (
+            <Card key={i} className="border-border/80 bg-card p-4 rounded-xl space-y-3 animate-pulse">
+              <div className="flex items-center justify-between">
+                <div className="h-5 bg-secondary/80 rounded w-1/3" />
+                <div className="h-5 bg-secondary/60 rounded-full w-16" />
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <div className="h-4 bg-secondary/60 rounded w-1/4" />
+                <div className="h-6 bg-secondary/80 rounded w-24" />
+              </div>
+              <div className="h-10 bg-secondary/50 rounded-lg w-full pt-2" />
+            </Card>
+          ))
+        ) : paginatedAgents.length > 0 ? (
+          paginatedAgents.map((agent) => (
+            <Card key={agent.id} className="border-border/80 bg-card/90 backdrop-blur-xs p-4 rounded-2xl space-y-3 shadow-md relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm shrink-0">
+                    {agent.name[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-foreground text-sm leading-tight">{agent.name}</h3>
+                    <p className="text-muted-foreground font-mono text-xs">@{agent.username}</p>
+                  </div>
+                </div>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-black ${
+                  agent.status === 'Active' 
+                    ? 'bg-success-bg text-success-text border border-emerald-500/20' 
+                    : 'bg-danger-bg text-danger-text border border-red-500/20'
+                }`}>
+                  {agent.status}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
+                <span className="text-muted-foreground font-semibold">Coins Balance</span>
+                <span className="font-mono font-black text-foreground text-base">{formatCurrency(agent.balance)}</span>
+              </div>
+
+              <Link
+                href={`/superadmin/agents/${agent.id}`}
+                className={buttonVariants({ variant: "outline", size: "sm", className: "w-full h-10 border-primary/30 text-primary hover:bg-primary/10 font-bold justify-center rounded-xl text-xs" })}
+              >
+                <span>View Agent Dashboard</span>
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Link>
+            </Card>
+          ))
+        ) : (
+          <div className="p-8 text-center text-muted-foreground text-xs font-medium bg-card rounded-2xl border border-border">
+            No agents found.
+          </div>
+        )}
+
+        {filteredAgents.length > itemsPerPage && (
+          <div className="pt-2">
+            <ResponsivePagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={filteredAgents.length}
+              itemsPerPage={itemsPerPage}
+            />
+          </div>
         )}
       </div>
     </div>
