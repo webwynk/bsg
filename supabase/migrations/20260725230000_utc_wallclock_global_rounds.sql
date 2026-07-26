@@ -74,17 +74,34 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_results jsonb;
+  v_now_epoch int := extract(epoch from now())::int;
+  v_current_round_num bigint := floor(v_now_epoch / 73)::bigint;
+  v_results jsonb := '[]'::jsonb;
+  v_r_num bigint;
+  v_hash text;
+  v_red int;
+  v_green int;
+  v_black int;
+  i int;
 BEGIN
-  SELECT jsonb_agg(r ORDER BY r.round_number DESC) INTO v_results
-  FROM (
-    SELECT id, round_number, red, green, black, scheduled_at, created_at
-    FROM public.game_rounds
-    WHERE red IS NOT NULL AND green IS NOT NULL AND black IS NOT NULL
-    ORDER BY round_number DESC
-    LIMIT p_limit
-  ) r;
+  -- Generate the last p_limit consecutive finished rounds (v_current_round_num - 1 down to v_current_round_num - p_limit)
+  FOR i IN 1..p_limit LOOP
+    v_r_num := v_current_round_num - i;
+    v_hash := md5('bsg_seed_' || v_r_num::text);
+    v_red   := (abs(('x' || substr(v_hash, 1, 8))::bit(32)::int) % 10);
+    v_green := (abs(('x' || substr(v_hash, 9, 8))::bit(32)::int) % 10);
+    v_black := (abs(('x' || substr(v_hash, 17, 8))::bit(32)::int) % 10);
 
-  RETURN COALESCE(v_results, '[]'::jsonb);
+    v_results := v_results || jsonb_build_object(
+      'id', 'round_' || v_r_num::text,
+      'round_number', v_r_num,
+      'red', v_red,
+      'green', v_green,
+      'black', v_black,
+      'scheduled_at', to_timestamp(v_r_num * 73)
+    );
+  END LOOP;
+
+  RETURN v_results;
 END;
 $$;
