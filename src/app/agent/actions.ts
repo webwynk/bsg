@@ -64,7 +64,7 @@ export async function getAgentDashboardDataAction() {
             type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
             amount: Math.abs(Number(tx.amount)),
             target: tx.user_username || 'player',
-            date: new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
           }))
         }
       } catch (_) {}
@@ -118,7 +118,8 @@ export async function getAgentTransactionHistoryAction() {
           type: (tx.type === 'agent_credit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
           amount: Math.abs(Number(tx.amount || 0)),
           target: tx.user_username || 'player',
-          date: new Date(tx.created_at).toLocaleString([], {
+          date: new Date(tx.created_at).toLocaleString('en-US', {
+            timeZone: 'Asia/Kolkata',
             year: 'numeric',
             month: 'short',
             day: 'numeric',

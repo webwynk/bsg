@@ -433,7 +433,8 @@ export async function getAgentCoinTransactionsAction(params?: {
     type: tx.type,
     amount: Number(tx.amount),
     createdAt: tx.created_at,
-    date: new Date(tx.created_at).toLocaleString([], {
+    date: new Date(tx.created_at).toLocaleString('en-US', {
+      timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: 'short',
       day: 'numeric',

@@ -25,7 +25,7 @@ export async function getAuditLogsAction() {
           id: item.id,
           type: item.type || 'System',
           detail: item.detail,
-          time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          time: new Date(item.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
         }))
         return { logs }
       }
@@ -124,7 +124,7 @@ export async function logAuditEventAction(type: 'System' | 'Security' | 'Transac
         id: Math.random().toString(36).substring(2, 9),
         type,
         detail,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }),
         created_at: new Date().toISOString()
       }
 

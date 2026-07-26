@@ -237,7 +237,8 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
           bet: Number(p.bet_amount || 0),
           win: Number(p.win_amount || 0),
           status: (p.status || (Number(p.win_amount || 0) > 0 ? 'WON' : 'LOST')) as 'WON' | 'LOST',
-          date: new Date(p.created_at).toLocaleString([], {
+          date: new Date(p.created_at).toLocaleString('en-US', {
+            timeZone: 'Asia/Kolkata',
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -278,7 +279,8 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
         type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
         amount: Math.abs(Number(tx.amount || 0)),
         balanceAfter: Number(tx.balance_after || 0),
-        date: new Date(tx.created_at).toLocaleString([], {
+        date: new Date(tx.created_at).toLocaleString('en-US', {
+          timeZone: 'Asia/Kolkata',
           year: 'numeric',
           month: 'short',
           day: 'numeric',
