@@ -57,6 +57,10 @@ export default function AgentDashboard() {
     }).catch(() => setIsLoadingDashboard(false))
   }, [])
 
+  React.useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
+
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
     fetchDashboardData()
