@@ -123,10 +123,10 @@ export default function SuperAdminDashboard() {
 
   React.useEffect(() => {
     fetchMetrics()
-    const interval = setInterval(() => {
+    const autoPoll = setInterval(() => {
       fetchMetrics()
-    }, 30000)
-    return () => clearInterval(interval)
+    }, 5000)
+    return () => clearInterval(autoPoll)
   }, [])
 
   // Filtered & Paginated Logs
