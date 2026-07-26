@@ -280,13 +280,25 @@ export async function getLatestGameDrawsAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { data: rows } = await supabaseAdmin
+    // Fetch game_history (individual player spin bets)
+    const { data: historyRows } = await supabaseAdmin
       .from('game_history')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(10)
 
-    const draws = (rows || []).map(row => {
+    // Fetch game_rounds (server global synchronized round results)
+    let roundRows: any[] = []
+    try {
+      const { data } = await supabaseAdmin
+        .from('game_rounds')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10)
+      roundRows = data || []
+    } catch (_) {}
+
+    const historyDraws = (historyRows || []).map(row => {
       const resNum = (row.result_number !== null && row.result_number !== undefined)
         ? Number(row.result_number)
         : 0
@@ -310,7 +322,36 @@ export async function getLatestGameDrawsAction() {
       }
     })
 
-    return { draws }
+    const roundDraws = (roundRows || []).map(row => {
+      const red = row.red !== null && row.red !== undefined ? row.red : 0
+      const green = row.green !== null && row.green !== undefined ? row.green : 0
+      const black = row.black !== null && row.black !== undefined ? row.black : 0
+      const resNum = (row.result_number !== null && row.result_number !== undefined)
+        ? Number(row.result_number)
+        : (red * 100 + green * 10 + black)
+
+      return {
+        id: row.id || `round_${row.round_number}`,
+        game: 'Triple Chance',
+        resultNumber: resNum,
+        redDigit: red,
+        greenDigit: green,
+        blackDigit: black,
+        betAmount: 0,
+        winAmount: 0,
+        status: row.status || 'COMPLETED',
+        playerUsername: 'Global Round',
+        createdAt: row.created_at || row.scheduled_at || new Date().toISOString()
+      }
+    })
+
+    // Merge both streams, deduplicate by ID, and sort by createdAt DESC
+    const allDraws = [...historyDraws, ...roundDraws]
+      .filter((item, index, self) => index === self.findIndex(t => t.id === item.id))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10)
+
+    return { draws: allDraws }
   } catch (_) {
     return { draws: [] }
   }
