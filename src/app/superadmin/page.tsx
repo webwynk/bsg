@@ -254,6 +254,10 @@ export default function SuperAdminDashboard() {
 
               {/* Slider Controls */}
               <div className="space-y-2">
+                <div className="flex justify-between items-center text-[10px] font-mono font-bold">
+                  <span className="text-muted-foreground">Adjust Target RTP</span>
+                  <span className="text-amber-500 font-black">{rtpValue}%</span>
+                </div>
                 <Slider 
                   value={[rtpValue]}
                   onValueChange={(val) => {
@@ -268,32 +272,86 @@ export default function SuperAdminDashboard() {
                   step={0.5}
                   className="w-full cursor-pointer"
                 />
-                <div className="flex justify-between text-[10px] text-muted-foreground font-mono font-bold">
-                  <span>50% (High House Edge)</span>
-                  <span>99% (Low House Edge)</span>
+                <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                  <span>50% (Max House Margin)</span>
+                  <span>99% (Min House Margin)</span>
                 </div>
               </div>
 
               {/* Preset Quick Pills */}
               <div className="space-y-1">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Quick RTP Presets
+                  Quick Presets
                 </span>
                 <div className="flex items-center flex-wrap gap-1.5">
-                  {[90, 92.5, 95, 96.5, 98].map((preset) => (
+                  {[
+                    { val: 90, label: '90% Aggressive' },
+                    { val: 92.5, label: '92.5% Medium' },
+                    { val: 95, label: '95% Balanced' },
+                    { val: 96.5, label: '96.5% Standard' },
+                    { val: 98, label: '98% High Payout' }
+                  ].map((preset) => (
                     <button
-                      key={preset}
-                      onClick={() => handleApplyRtp(preset)}
+                      key={preset.val}
+                      onClick={() => handleApplyRtp(preset.val)}
                       disabled={isSavingRtp}
                       className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border ${
-                        rtpValue === preset
+                        rtpValue === preset.val
                           ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                           : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
                       }`}
                     >
-                      {preset}%
+                      {preset.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Live House Edge & Payout Yield Breakdown Box */}
+              <div className="p-3 rounded-xl bg-secondary/30 border border-border/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Yield Rating & Margin
+                  </span>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
+                    rtpValue < 92
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : rtpValue <= 96.5
+                      ? 'bg-success-bg text-success-text border border-emerald-500/30'
+                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                  }`}>
+                    {rtpValue < 92 ? '🔥 Aggressive Yield' : rtpValue <= 96.5 ? '⚖️ Balanced (Recommended)' : '💎 Player Friendly'}
+                  </span>
+                </div>
+
+                {/* Visual Ratio Progress Bar */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-mono font-bold">
+                    <span className="text-emerald-400">Player Return: {rtpValue}%</span>
+                    <span className="text-amber-400">House Edge: {(100 - rtpValue).toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-amber-500/20 overflow-hidden flex">
+                    <div 
+                      className="h-full bg-emerald-500 transition-all duration-300 rounded-l-full" 
+                      style={{ width: `${rtpValue}%` }} 
+                    />
+                    <div 
+                      className="h-full bg-amber-500 transition-all duration-300 rounded-r-full" 
+                      style={{ width: `${(100 - rtpValue).toFixed(1)}%` }} 
+                    />
+                  </div>
+                </div>
+
+                {/* Simulated 1,000 Wager Turnover */}
+                <div className="grid grid-cols-2 gap-2 pt-1 text-center text-[10px] font-mono">
+                  <div className="p-1.5 rounded-lg bg-card border border-border/40">
+                    <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. Player Payout (1k Coins)</span>
+                    <span className="font-black text-emerald-400 text-xs">{(1000 * (rtpValue / 100)).toFixed(0)} Coins</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-card border border-border/40">
+                    <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. House Profit (1k Coins)</span>
+                    <span className="font-black text-amber-400 text-xs">{(1000 * ((100 - rtpValue) / 100)).toFixed(0)} Coins</span>
+                  </div>
                 </div>
               </div>
 
