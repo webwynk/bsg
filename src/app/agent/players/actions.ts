@@ -21,7 +21,7 @@ export async function getPlayersAction() {
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
         const players = data.users
-          .filter(u => u.user_metadata?.role === 'player' && (!agentId || !u.user_metadata?.agent_id || u.user_metadata?.agent_id === agentId))
+          .filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
           .map(u => ({
             id: u.id,
             name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
@@ -76,6 +76,9 @@ export async function createPlayerAction(formData: FormData) {
     })
 
     if (error) {
+      if (error.message.toLowerCase().includes('already') || error.message.toLowerCase().includes('exists')) {
+        return { error: `Username "${username}" is already taken by another player. Please choose a different username.` }
+      }
       return { error: error.message }
     }
 
