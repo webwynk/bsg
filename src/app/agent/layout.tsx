@@ -4,7 +4,7 @@ import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { Wallet, Users, History, LogOut, ShieldCheck } from 'lucide-react'
+import { Wallet, Users, History, LogOut, ShieldCheck, TrendingUp } from 'lucide-react'
 
 export default function AgentLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -16,6 +16,7 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
 
   const isCashierActive = pathname === '/agent' || pathname === '/agent/'
   const isPlayersActive = !!pathname?.startsWith('/agent/players')
+  const isProfitActive = !!pathname?.startsWith('/agent/profit')
   const isHistoryActive = !!pathname?.startsWith('/agent/history')
 
   const handleSignOut = () => {
@@ -61,6 +62,17 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
           >
             <Users className="h-4 w-4 shrink-0" />
             <span>Players</span>
+          </Link>
+          <Link 
+            href="/agent/profit" 
+            className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
+              isProfitActive 
+                ? 'bg-primary text-primary-foreground shadow-sm' 
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <TrendingUp className="h-4 w-4 shrink-0" />
+            <span>P&L Report</span>
           </Link>
           <Link 
             href="/agent/history" 
@@ -148,6 +160,23 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
             <Users className={`h-4 w-4 transition-transform duration-300 ${isPlayersActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
             <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isPlayersActive ? 'font-black text-primary' : 'font-bold'}`}>
               Players
+            </span>
+          </Link>
+
+          <Link 
+            href="/agent/profit" 
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isProfitActive 
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
+            }`}
+          >
+            {isProfitActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <TrendingUp className={`h-4 w-4 transition-transform duration-300 ${isProfitActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isProfitActive ? 'font-black text-primary' : 'font-bold'}`}>
+              P&L
             </span>
           </Link>
 

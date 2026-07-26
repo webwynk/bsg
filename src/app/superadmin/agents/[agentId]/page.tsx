@@ -25,11 +25,12 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
+import { getAgentProfitReportAction } from '@/app/agent/profit/actions'
 
 interface Props {
   params: React.Usable<{ agentId: string }>
@@ -68,7 +69,20 @@ export default function AgentDetailPage({ params }: Props) {
   }
   const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; balanceAfter: number; date: string }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
-  const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
+  const [activeTab, setActiveTab] = React.useState<'games' | 'points' | 'profit'>('games')
+  const [profitSummary, setProfitSummary] = React.useState({ todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 })
+  const [profitPlayers, setProfitPlayers] = React.useState<Array<{
+    id: string
+    username: string
+    isActive: boolean
+    balance: number
+    totalPlays: number
+    totalBets: number
+    totalWins: number
+    netPnl: number
+    marginPct: number
+    lastPlayedAt: string
+  }>>([])
   
   // Filter & Scope States
   const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
@@ -197,7 +211,10 @@ export default function AgentDetailPage({ params }: Props) {
 
   const loadAgentDetails = React.useCallback(() => {
     setIsRefreshing(true)
-    getAgentDetailAction(agentId).then((res) => {
+    Promise.all([
+      getAgentDetailAction(agentId),
+      getAgentProfitReportAction({ targetAgentId: agentId, filterDate: filterDate ? filterDate.toISOString() : undefined })
+    ]).then(([res, resProf]) => {
       setIsRefreshing(false)
       if (res.agent) {
         setAgentInfo(res.agent)
@@ -210,8 +227,12 @@ export default function AgentDetailPage({ params }: Props) {
           loadPlayerHistory(targetPlayer.id)
         }
       }
+      if (resProf) {
+        setProfitSummary(resProf.summary)
+        setProfitPlayers(resProf.players)
+      }
     }).catch(() => setIsRefreshing(false))
-  }, [agentId, selectedPlayer?.id, loadPlayerHistory])
+  }, [agentId, selectedPlayer?.id, loadPlayerHistory, filterDate])
 
   React.useEffect(() => {
     loadAgentDetails()
@@ -908,6 +929,20 @@ export default function AgentDetailPage({ params }: Props) {
                     <span className="text-[10px] text-muted-foreground">({pointsHistory.length})</span>
                   )}
                 </button>
+                <button
+                  onClick={() => setActiveTab('profit')}
+                  className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
+                    activeTab === 'profit' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>P&L Audit</span>
+                  {isLoadingHistory ? (
+                    <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">({profitPlayers.length})</span>
+                  )}
+                </button>
               </div>
 
               {/* Content Body */}
@@ -1280,8 +1315,8 @@ export default function AgentDetailPage({ params }: Props) {
                         No game play history recorded for the selected filter.
                       </div>
                     )
-                  ) : (
-                    filteredPoints.length > 0 ? (
+                  ) : activeTab === 'points' ? (
+                      filteredPoints.length > 0 ? (
                       <>
                         <Table>
                           <TableHeader>
@@ -1335,6 +1370,79 @@ export default function AgentDetailPage({ params }: Props) {
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
                         No coin transactions recorded for this player.
+                      </div>
+                    )
+                  ) : (
+                    /* activeTab === 'profit' Player P/L Audit View */
+                    profitPlayers.length > 0 ? (
+                      <div className="p-3 space-y-3">
+                        {/* Summary Micro Bar */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-secondary/20 p-2.5 rounded-xl border border-border/50 text-xs">
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Today&apos;s P/L</span>
+                            <span className={`font-mono font-black ${profitSummary.todaysPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.todaysPnl >= 0 ? '+' : ''}{formatCurrency(profitSummary.todaysPnl)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Lifetime P/L</span>
+                            <span className={`font-mono font-black ${profitSummary.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.lifetimePnl >= 0 ? '+' : ''}{formatCurrency(profitSummary.lifetimePnl)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Bets</span>
+                            <span className="font-mono font-bold text-foreground">{formatCurrency(profitSummary.totalVolume)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">House Margin</span>
+                            <span className={`font-mono font-black ${profitSummary.netMarginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.netMarginPct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Player P/L Table */}
+                        <Table>
+                          <TableHeader className="bg-secondary/30">
+                            <TableRow>
+                              <TableHead className="text-[10px] uppercase font-black">Player</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-center">Plays</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Bets (In)</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Wins (Out)</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Net P/L (+/-)</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Margin %</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody className="divide-y divide-border/60">
+                            {profitPlayers.map((p) => (
+                              <TableRow key={p.id} className="hover:bg-secondary/20 transition-colors">
+                                <TableCell className="py-2">
+                                  <span className="font-mono text-xs font-black text-foreground">@{p.username}</span>
+                                </TableCell>
+                                <TableCell className="py-2 text-center font-mono text-xs text-muted-foreground font-bold">
+                                  {p.totalPlays}
+                                </TableCell>
+                                <TableCell className="py-2 text-right font-mono text-xs text-foreground font-bold">
+                                  {formatCurrency(p.totalBets)}
+                                </TableCell>
+                                <TableCell className="py-2 text-right font-mono text-xs text-amber-500 font-bold">
+                                  {formatCurrency(p.totalWins)}
+                                </TableCell>
+                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                  {p.netPnl >= 0 ? '+' : ''}{formatCurrency(p.netPnl)}
+                                </TableCell>
+                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                  {p.marginPct.toFixed(1)}%
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="p-10 text-center text-xs text-muted-foreground font-medium">
+                        No profit/loss data recorded for this agent.
                       </div>
                     )
                   )}
