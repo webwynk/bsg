@@ -409,13 +409,14 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
       .from('transactions')
       .select('*')
       .eq('user_id', playerId)
+      .in('type', ['agent_credit', 'agent_debit', 'deposit', 'withdraw', 'withdrawal'])
       .order('created_at', { ascending: false })
       .limit(50)
 
     if (txns) {
       pointsHistory = txns.map(tx => ({
         id: tx.id.substring(0, 8),
-        type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
+        type: (tx.type === 'agent_credit' || tx.type === 'deposit') ? 'deposit' : 'withdraw',
         amount: Math.abs(Number(tx.amount || 0)),
         balanceAfter: Number(tx.balance_after || 0),
         date: new Date(tx.created_at).toLocaleString('en-US', {

@@ -132,15 +132,17 @@ export async function getAgentTransactionHistoryAction() {
       supabaseAdmin.from('agent_coin_transactions').select('*').eq('agent_id', authUser.id)
     ])
 
-    const playerTxns = (playerTxnsRes.data || []).map(tx => ({
-      id: tx.id,
-      type: (tx.type === 'agent_credit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-      amount: Math.abs(Number(tx.amount)),
-      target: `@${tx.user_username || 'player'}`,
-      status: 'Success',
-      created_at: tx.created_at,
-      date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    }))
+    const playerTxns = (playerTxnsRes.data || [])
+      .filter(tx => tx.type === 'agent_credit' || tx.type === 'agent_debit' || tx.type === 'deposit' || tx.type === 'withdraw' || tx.type === 'withdrawal')
+      .map(tx => ({
+        id: tx.id,
+        type: (tx.type === 'agent_credit' || tx.type === 'deposit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+        amount: Math.abs(Number(tx.amount)),
+        target: `@${tx.user_username || tx.user_name || 'player'}`,
+        status: 'Success',
+        created_at: tx.created_at,
+        date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      }))
 
     const adminTxns = (adminTxnsRes.data || []).map(tx => ({
       id: tx.id,
