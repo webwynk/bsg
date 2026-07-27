@@ -72,6 +72,22 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
+    let agentId = params.targetAgentId || authUser.id
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId)
+    if (!isUuid) {
+      const { data: lookup } = await supabaseAdmin.from('profiles').select('id').ilike('username', agentId).single()
+      if (lookup?.id) {
+        agentId = lookup.id
+      } else {
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        const matched = (usersData?.users || []).find(u => 
+          u.user_metadata?.username?.toLowerCase() === agentId.toLowerCase() ||
+          u.email?.toLowerCase().split('@')[0] === agentId.toLowerCase()
+        )
+        if (matched) agentId = matched.id
+      }
+    }
+
     const { todayStartISO, startDate, endDate } = getISTDateRange(params.datePreset, params.filterDate)
 
     // Build history query for filtered period

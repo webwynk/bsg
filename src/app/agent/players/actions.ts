@@ -119,6 +119,19 @@ export async function createPlayerAction(formData: FormData) {
       return { error: error.message }
     }
 
+    if (data?.user) {
+      try {
+        await supabaseAdmin.from('profiles').upsert({
+          id: data.user.id,
+          username,
+          role: 'player',
+          agent_id: agentId || null,
+          balance: 0,
+          is_active: true
+        })
+      } catch (_) {}
+    }
+
     revalidatePath('/agent/players')
     revalidatePath('/agent')
     revalidatePath('/superadmin/agents')

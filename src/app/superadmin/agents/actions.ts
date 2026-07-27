@@ -61,83 +61,125 @@ export async function getAgentDetailAction(agentIdentifier: string) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Step 1: Resolve username → UUID (supports both username and UUID for backward compat)
+      // Step 1: Resolve username → UUID (case-insensitive + auth listUsers fallback)
       let agentId = agentIdentifier
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentIdentifier)
+      
       if (!isUuid) {
+        // Try profiles table lookup with ilike (case-insensitive)
         const { data: lookup } = await supabaseAdmin
           .from('profiles')
           .select('id')
-          .eq('username', agentIdentifier)
+          .ilike('username', agentIdentifier)
           .single()
-        if (!lookup?.id) return { agent: null, players: [], resolvedAgentId: null }
-        agentId = lookup.id
+
+        if (lookup?.id) {
+          agentId = lookup.id
+        } else {
+          // Fallback: search Auth listUsers by username or email prefix
+          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+          const matchedUser = (usersData?.users || []).find(u => 
+            u.user_metadata?.username?.toLowerCase() === agentIdentifier.toLowerCase() ||
+            u.email?.toLowerCase().split('@')[0] === agentIdentifier.toLowerCase()
+          )
+
+          if (matchedUser) {
+            agentId = matchedUser.id
+          } else {
+            return { agent: null, players: [], resolvedAgentId: null, error: 'Agent not found' }
+          }
+        }
       }
 
-      // Run all 3 sub-queries in parallel via Promise.all
-      // Note: agent info now reads from indexed profiles table (fast) instead of GoTrue getUserById (slow)
+      // Step 2: Run sub-queries in parallel
       const [agentProfileRes, sessRes, playersRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('id', agentId).single(),
         supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', agentId)
       ])
 
-      if (agentProfileRes.data) {
-        const ap = agentProfileRes.data
-        const sessions = sessRes.data || null
-        const now = new Date().getTime()
+      const sessions = sessRes.data || null
+      const now = new Date().getTime()
 
-        let agentPlayers: Array<any> = []
-        if (playersRes.data && playersRes.data.length > 0) {
-          agentPlayers = playersRes.data.map(p => {
+      // Extract agent info (profiles primary -> Auth fallback)
+      let ap = agentProfileRes.data
+      if (!ap) {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(agentId)
+        if (userData?.user) {
+          const u = userData.user
+          ap = {
+            id: u.id,
+            username: u.user_metadata?.username || u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
+            balance: Number(u.user_metadata?.balance || 0),
+            is_active: u.user_metadata?.status !== 'Blocked'
+          }
+          // Self-heal profiles table
+          try {
+            await supabaseAdmin.from('profiles').upsert({
+              id: u.id,
+              username: ap.username,
+              role: 'agent',
+              balance: ap.balance,
+              is_active: ap.is_active
+            })
+          } catch (_) {}
+        }
+      }
+
+      if (!ap) {
+        return { agent: null, players: [], resolvedAgentId: null, error: 'Agent profile not found' }
+      }
+
+      // Extract players (profiles primary -> Auth fallback)
+      let agentPlayers: Array<any> = []
+      if (playersRes.data && playersRes.data.length > 0) {
+        agentPlayers = playersRes.data.map(p => {
+          const activeSess = sessions?.find(s => s.user_id === p.id)
+          const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
+          return {
+            id: p.id,
+            name: p.username || 'Player',
+            username: p.username || '',
+            balance: Number(p.balance || 0),
+            status: p.is_active ? 'Active' : 'Blocked',
+            isOnline,
+            gamePlays: 0
+          }
+        })
+      } else {
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+        agentPlayers = (usersData?.users || [])
+          .filter(p => p.user_metadata?.role === 'player' && (p.user_metadata?.agent_id === agentId || !p.user_metadata?.agent_id))
+          .map(p => {
             const activeSess = sessions?.find(s => s.user_id === p.id)
             const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
             return {
               id: p.id,
-              name: p.username || 'Player',
-              username: p.username || '',
-              balance: Number(p.balance || 0),
-              status: p.is_active ? 'Active' : 'Blocked',
+              name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
+              username: p.user_metadata?.username || p.email?.split('@')[0] || '',
+              balance: Number(p.user_metadata?.balance || 0),
+              status: p.user_metadata?.status || 'Active',
               isOnline,
               gamePlays: 0
             }
           })
-        } else {
-          // Fallback to Auth listUsers if profiles table returns empty for players
-          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-          agentPlayers = (usersData?.users || [])
-            .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
-            .map(p => {
-              const activeSess = sessions?.find(s => s.user_id === p.id)
-              const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
-              return {
-                id: p.id,
-                name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
-                username: p.user_metadata?.username || p.email?.split('@')[0] || '',
-                balance: p.user_metadata?.balance || 0,
-                status: p.user_metadata?.status || 'Active',
-                isOnline,
-                gamePlays: 0
-              }
-            })
-        }
+      }
 
-        return {
-          agent: {
-            id: ap.id,
-            name: ap.username || 'Agent',
-            username: ap.username || '',
-            balance: Number(ap.balance || 0),
-            status: ap.is_active ? 'Active' : 'Blocked'
-          },
-          players: agentPlayers,
-          resolvedAgentId: agentId  // Return resolved UUID for client to use
-        }
+      return {
+        agent: {
+          id: ap.id,
+          name: ap.username || 'Agent',
+          username: ap.username || '',
+          balance: Number(ap.balance || 0),
+          status: ap.is_active ? 'Active' : 'Blocked'
+        },
+        players: agentPlayers,
+        resolvedAgentId: agentId
       }
     } catch (_) {}
   }
 
-  return { error: 'Agent not found' }
+  return { agent: null, players: [], resolvedAgentId: null, error: 'Service error' }
 }
 
 export async function createAgentAction(formData: FormData) {
@@ -177,8 +219,16 @@ export async function createAgentAction(formData: FormData) {
       },
     })
 
-    if (error) {
-      return { error: error.message }
+    if (data.user) {
+      try {
+        await supabaseAdmin.from('profiles').upsert({
+          id: data.user.id,
+          username,
+          role: 'agent',
+          balance: 0,
+          is_active: true
+        })
+      } catch (_) {}
     }
 
     await logAuditEventAction('System', `Created new Agent account @${username}`)
