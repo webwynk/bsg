@@ -408,26 +408,31 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     const { data: txns } = await supabaseAdmin
       .from('transactions')
       .select('*')
-      .eq('user_id', playerId)
-      .in('type', ['agent_credit', 'agent_debit', 'deposit', 'withdraw', 'withdrawal'])
+      .or(`user_id.eq.${playerId},user_username.ilike.${playerIdentifier}`)
       .order('created_at', { ascending: false })
       .limit(50)
 
-    if (txns) {
-      pointsHistory = txns.map(tx => ({
-        id: tx.id.substring(0, 8),
-        type: (tx.type === 'agent_credit' || tx.type === 'deposit') ? 'deposit' : 'withdraw',
-        amount: Math.abs(Number(tx.amount || 0)),
-        balanceAfter: Number(tx.balance_after || 0),
-        date: new Date(tx.created_at).toLocaleString('en-US', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
+    if (txns && txns.length > 0) {
+      pointsHistory = txns
+        .filter(tx => tx.type !== 'bet_stake' && tx.type !== 'bet_payout' && tx.type !== 'bet' && tx.type !== 'win')
+        .map(tx => {
+          const typeLower = (tx.type || '').toLowerCase()
+          const isDeposit = typeLower.includes('credit') || typeLower.includes('deposit') || Number(tx.amount || 0) > 0
+          return {
+            id: tx.id.substring(0, 8),
+            type: (isDeposit ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+            amount: Math.abs(Number(tx.amount || 0)),
+            balanceAfter: Number(tx.balance_after || 0),
+            date: new Date(tx.created_at).toLocaleString('en-US', {
+              timeZone: 'Asia/Kolkata',
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          }
         })
-      }))
     }
   } catch (_) {}
 

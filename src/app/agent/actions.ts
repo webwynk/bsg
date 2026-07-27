@@ -127,9 +127,15 @@ export async function getAgentTransactionHistoryAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
+    const agentUsername = authUser.user_metadata?.username || authUser.email?.split('@')[0] || ''
+
     const [playerTxnsRes, adminTxnsRes] = await Promise.all([
-      supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id),
-      supabaseAdmin.from('agent_coin_transactions').select('*').eq('agent_id', authUser.id)
+      agentUsername
+        ? supabaseAdmin.from('transactions').select('*').or(`agent_id.eq.${authUser.id},agent_username.ilike.${agentUsername}`)
+        : supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id),
+      agentUsername
+        ? supabaseAdmin.from('agent_coin_transactions').select('*').or(`agent_id.eq.${authUser.id},agent_username.ilike.${agentUsername}`)
+        : supabaseAdmin.from('agent_coin_transactions').select('*').eq('agent_id', authUser.id)
     ])
 
     const playerTxns = (playerTxnsRes.data || [])
