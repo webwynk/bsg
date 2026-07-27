@@ -72,61 +72,70 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    let agentId = params.targetAgentId || authUser.id
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId)
+    let targetAgentIdResolved = params.targetAgentId || authUser.id
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetAgentIdResolved)
     if (!isUuid) {
-      const { data: lookup } = await supabaseAdmin.from('profiles').select('id').ilike('username', agentId).single()
+      const { data: lookup } = await supabaseAdmin.from('profiles').select('id').ilike('username', targetAgentIdResolved).single()
       if (lookup?.id) {
-        agentId = lookup.id
+        targetAgentIdResolved = lookup.id
       } else {
         const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
         const matched = (usersData?.users || []).find(u => 
-          u.user_metadata?.username?.toLowerCase() === agentId.toLowerCase() ||
-          u.email?.toLowerCase().split('@')[0] === agentId.toLowerCase()
+          u.user_metadata?.username?.toLowerCase() === targetAgentIdResolved.toLowerCase() ||
+          u.email?.toLowerCase().split('@')[0] === targetAgentIdResolved.toLowerCase()
         )
-        if (matched) agentId = matched.id
+        if (matched) targetAgentIdResolved = matched.id
       }
     }
 
+    const agentId = targetAgentIdResolved
+
     const { todayStartISO, startDate, endDate } = getISTDateRange(params.datePreset, params.filterDate)
 
-    // Build history query for filtered period
-    let historyQuery = supabaseAdmin
-      .from('game_history')
-      .select('user_id, bet_amount, win_amount, created_at')
-      .eq('agent_id', agentId)
+    // Build history queries for round_bets (primary multiplayer source)
+    let roundQuery = supabaseAdmin
+      .from('round_bets')
+      .select('user_id, total_stake, win_amount, created_at, profiles!inner(agent_id)')
+      .eq('profiles.agent_id', agentId)
 
     if (startDate) {
-      historyQuery = historyQuery.gte('created_at', startDate)
+      roundQuery = roundQuery.gte('created_at', startDate)
     }
     if (endDate) {
-      historyQuery = historyQuery.lte('created_at', endDate)
+      roundQuery = roundQuery.lte('created_at', endDate)
     }
 
     // Execute queries in parallel
-    const [allSpinsRes, todaySpinsRes, filteredSpinsRes, profilesRes, authUsersRes] = await Promise.all([
-      // 1. All spins for lifetime summary
-      supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', agentId),
-      // 2. Today's spins for daily reset summary (Asia/Kolkata 00:00:00+)
-      supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', agentId).gte('created_at', todayStartISO),
-      // 3. Filtered spins for breakdown
-      historyQuery,
-      // 4. Profiles table (if populated)
+    const [allRoundsRes, todayRoundsRes, filteredRoundsRes, allHistRes, todayHistRes, filteredHistRes, profilesRes, authUsersRes] = await Promise.all([
+      supabaseAdmin.from('round_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId),
+      supabaseAdmin.from('round_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId).gte('created_at', todayStartISO),
+      roundQuery,
+      supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId),
+      supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId).gte('created_at', todayStartISO),
+      supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId),
       supabaseAdmin.from('profiles').select('id, username, is_active, balance').eq('agent_id', agentId),
-      // 5. Auth users list (fallback/primary store for users)
       supabaseAdmin.auth.admin.listUsers()
     ])
 
-    const allSpins = allSpinsRes.data || []
-    const todaySpins = todaySpinsRes.data || []
-    const filteredSpins = filteredSpinsRes.data || []
+    // Map round_bets to standard { user_id, bet_amount, win_amount, created_at } format
+    const roundAllSpins = (allRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
+    const roundTodaySpins = (todayRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
+    const roundFilteredSpins = (filteredRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
+
+    const histAllSpins = (allHistRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.bet_amount || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
+    const histTodaySpins = (todayHistRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.bet_amount || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
+    const histFilteredSpins = (filteredHistRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.bet_amount || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
+
+    const allSpins = roundAllSpins.length > 0 ? roundAllSpins : histAllSpins
+    const todaySpins = roundTodaySpins.length > 0 ? roundTodaySpins : histTodaySpins
+    const filteredSpins = roundFilteredSpins.length > 0 ? roundFilteredSpins : histFilteredSpins
 
     // Summary calculations
-    const todaysPnl = todaySpins.reduce((acc, s) => acc + (Number(s.bet_amount || 0) - Number(s.win_amount || 0)), 0)
-    const lifetimePnl = allSpins.reduce((acc, s) => acc + (Number(s.bet_amount || 0) - Number(s.win_amount || 0)), 0)
+    const todaysPnl = todaySpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)
+    const lifetimePnl = allSpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)
 
-    const totalVolume = filteredSpins.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
-    const totalPayouts = filteredSpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+    const totalVolume = filteredSpins.reduce((acc, s) => acc + s.bet_amount, 0)
+    const totalPayouts = filteredSpins.reduce((acc, s) => acc + s.win_amount, 0)
     const filteredPnl = totalVolume - totalPayouts
     const netMarginPct = totalVolume > 0 ? (filteredPnl / totalVolume) * 100 : 0
 

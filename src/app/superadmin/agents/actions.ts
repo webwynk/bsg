@@ -523,7 +523,7 @@ export async function toggleAgentStatusAction(agentIdentifier: string, currentSt
     if (newStatus === 'Blocked') {
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
       if (usersData?.users) {
-        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player' && (u.user_metadata?.agent_id === agentId || !u.user_metadata?.agent_id))
+        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
         for (const player of agentPlayers) {
           await supabaseAdmin.auth.admin.updateUserById(player.id, {
             user_metadata: {

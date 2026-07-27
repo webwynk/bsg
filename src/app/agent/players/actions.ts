@@ -270,57 +270,50 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
   }> = []
 
   try {
-    const { data: plays } = await supabaseAdmin
-      .from('game_history')
-      .select('*')
+    // Primary source: round_bets joined with game_rounds
+    const { data: roundBets } = await supabaseAdmin
+      .from('round_bets')
+      .select('*, game_rounds(red, green, black, status)')
       .eq('user_id', playerId)
       .order('created_at', { ascending: false })
       .limit(50)
 
-    if (plays) {
-      gamePlays = plays.map(p => {
-        let selText = 'No selection'
-        if (p.numbers_picked && typeof p.numbers_picked === 'object') {
-          const modeObj = p.numbers_picked[p.mode] || p.numbers_picked
-          if (typeof modeObj === 'object') {
-            const parts = Object.entries(modeObj).map(([num, val]) => `${(p.mode || 'single').toUpperCase()}: ${num} (${val} Coins)`)
-            if (parts.length > 0) selText = parts.join(', ')
-          }
-        }
+    if (roundBets && roundBets.length > 0) {
+      gamePlays = roundBets.map(p => {
+        const round = p.game_rounds || {}
+        const red = round.red ?? null
+        const green = round.green ?? null
+        const black = round.black ?? null
+        const resultNumber = (red !== null && green !== null && black !== null) ? (red * 100 + green * 10 + black) : 0
 
-        const picked = p.numbers_picked || {}
-        const singleBetsObj = (picked.single && Object.keys(picked.single).length > 0) 
-          ? picked.single 
-          : (p.single_bets || {})
-        const doubleBetsObj = (picked.double && Object.keys(picked.double).length > 0) 
-          ? picked.double 
-          : (p.double_bets || {})
-        const tripleBetsObj = (picked.triple && Object.keys(picked.triple).length > 0) 
-          ? picked.triple 
-          : (p.triple_bets || {})
+        const singleBetsObj = p.single_bets || {}
+        const doubleBetsObj = p.double_bets || {}
+        const tripleBetsObj = p.triple_bets || {}
 
         const activeModes = []
-        if (singleBetsObj && Object.keys(singleBetsObj).length > 0) activeModes.push('SINGLE')
-        if (doubleBetsObj && Object.keys(doubleBetsObj).length > 0) activeModes.push('DOUBLE')
-        if (tripleBetsObj && Object.keys(tripleBetsObj).length > 0) activeModes.push('TRIPLE')
-        const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : (p.mode || 'single').toUpperCase()
+        if (Object.keys(singleBetsObj).length > 0) activeModes.push('SINGLE')
+        if (Object.keys(doubleBetsObj).length > 0) activeModes.push('DOUBLE')
+        if (Object.keys(tripleBetsObj).length > 0) activeModes.push('TRIPLE')
+        const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : 'TRIPLE CHANCE'
 
-        const resStr = (p.result_number !== null && p.result_number !== undefined)
-          ? p.result_number.toString().padStart(3, '0')
-          : '000'
-        const red = p.red_digit !== null ? p.red_digit : parseInt(resStr[0], 10)
-        const green = p.green_digit !== null ? p.green_digit : parseInt(resStr[1], 10)
-        const black = p.black_digit !== null ? p.black_digit : parseInt(resStr[2], 10)
+        let selText = 'Multi-board Bet'
+        const parts: string[] = []
+        if (Object.keys(singleBetsObj).length > 0) parts.push(`Single: ${Object.keys(singleBetsObj).join(',')}`)
+        if (Object.keys(doubleBetsObj).length > 0) parts.push(`Double: ${Object.keys(doubleBetsObj).join(',')}`)
+        if (Object.keys(tripleBetsObj).length > 0) parts.push(`Triple: ${Object.keys(tripleBetsObj).join(',')}`)
+        if (parts.length > 0) selText = parts.join(' | ')
+
+        const winAmt = Number(p.win_amount || 0)
 
         return {
           id: p.id.substring(0, 8),
-          game: p.game_name || 'Triple Chance',
+          game: 'Triple Chance',
           mode: modeLabel,
           selections: selText,
-          resultNumber: p.result_number,
-          bet: Number(p.bet_amount || 0),
-          win: Number(p.win_amount || 0),
-          status: (p.status || (Number(p.win_amount || 0) > 0 ? 'WON' : 'LOST')) as 'WON' | 'LOST',
+          resultNumber,
+          bet: Number(p.total_stake || 0),
+          win: winAmt,
+          status: (winAmt > 0 ? 'WON' : 'LOST') as 'WON' | 'LOST',
           date: new Date(p.created_at).toLocaleString('en-US', {
             timeZone: 'Asia/Kolkata',
             year: 'numeric',
@@ -337,6 +330,68 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
           blackDigit: black
         }
       })
+    } else {
+      // Fallback: game_history
+      const { data: plays } = await supabaseAdmin
+        .from('game_history')
+        .select('*')
+        .eq('user_id', playerId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (plays) {
+        gamePlays = plays.map(p => {
+          let selText = 'No selection'
+          if (p.numbers_picked && typeof p.numbers_picked === 'object') {
+            const modeObj = p.numbers_picked[p.mode] || p.numbers_picked
+            if (typeof modeObj === 'object') {
+              const parts = Object.entries(modeObj).map(([num, val]) => `${(p.mode || 'single').toUpperCase()}: ${num} (${val} Coins)`)
+              if (parts.length > 0) selText = parts.join(', ')
+            }
+          }
+
+          const picked = p.numbers_picked || {}
+          const singleBetsObj = (picked.single && Object.keys(picked.single).length > 0) ? picked.single : (p.single_bets || {})
+          const doubleBetsObj = (picked.double && Object.keys(picked.double).length > 0) ? picked.double : (p.double_bets || {})
+          const tripleBetsObj = (picked.triple && Object.keys(picked.triple).length > 0) ? picked.triple : (p.triple_bets || {})
+
+          const activeModes = []
+          if (singleBetsObj && Object.keys(singleBetsObj).length > 0) activeModes.push('SINGLE')
+          if (doubleBetsObj && Object.keys(doubleBetsObj).length > 0) activeModes.push('DOUBLE')
+          if (tripleBetsObj && Object.keys(tripleBetsObj).length > 0) activeModes.push('TRIPLE')
+          const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : (p.mode || 'single').toUpperCase()
+
+          const resStr = (p.result_number !== null && p.result_number !== undefined) ? p.result_number.toString().padStart(3, '0') : '000'
+          const red = p.red_digit !== null ? p.red_digit : parseInt(resStr[0], 10)
+          const green = p.green_digit !== null ? p.green_digit : parseInt(resStr[1], 10)
+          const black = p.black_digit !== null ? p.black_digit : parseInt(resStr[2], 10)
+
+          return {
+            id: p.id.substring(0, 8),
+            game: p.game_name || 'Triple Chance',
+            mode: modeLabel,
+            selections: selText,
+            resultNumber: p.result_number,
+            bet: Number(p.bet_amount || 0),
+            win: Number(p.win_amount || 0),
+            status: (p.status || (Number(p.win_amount || 0) > 0 ? 'WON' : 'LOST')) as 'WON' | 'LOST',
+            date: new Date(p.created_at).toLocaleString('en-US', {
+              timeZone: 'Asia/Kolkata',
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            singleBets: singleBetsObj,
+            doubleBets: doubleBetsObj,
+            tripleBets: tripleBetsObj,
+            redDigit: red,
+            greenDigit: green,
+            blackDigit: black
+          }
+        })
+      }
     }
   } catch (_) {}
 

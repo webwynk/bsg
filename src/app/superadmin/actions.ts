@@ -97,13 +97,13 @@ export async function getSystemOverviewMetricsAction() {
       const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
       const istTodayStart = new Date(`${istTodayString}T00:00:00+05:30`)
       const todayStartISO = istTodayStart.toISOString()
-
       // Execute all database queries in parallel via Promise.all
-      const [profilesRes, txnsRes, allBetsRes, todayBetsRes] = await Promise.all([
+      const [profilesRes, txnsRes, roundBetsRes, todayRoundBetsRes, gameHistRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('role, balance'),
         supabaseAdmin.from('agent_coin_transactions').select('amount').eq('type', 'deposit').gte('created_at', todayStartISO),
-        supabaseAdmin.from('game_history').select('bet_amount, win_amount'),
-        supabaseAdmin.from('game_history').select('bet_amount, win_amount').gte('created_at', todayStartISO)
+        supabaseAdmin.from('round_bets').select('total_stake, win_amount'),
+        supabaseAdmin.from('round_bets').select('total_stake, win_amount').gte('created_at', todayStartISO),
+        supabaseAdmin.from('game_history').select('bet_amount, win_amount')
       ])
 
       let totalCoins = 0
@@ -117,7 +117,6 @@ export async function getSystemOverviewMetricsAction() {
           if (p.role === 'player') activePlayers++
         }
       } else {
-        // Fallback to Auth listUsers if profiles table query returns empty
         const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
         const allUsers = usersData?.users || []
         const agents = allUsers.filter(u => u.user_metadata?.role === 'agent')
@@ -130,17 +129,25 @@ export async function getSystemOverviewMetricsAction() {
       // Today's coins issued (resets daily at 00:00 IST)
       const todaysCoinsIssued = txnsRes.data ? txnsRes.data.reduce((acc, tx) => acc + Number(tx.amount || 0), 0) : 0
 
-      // Overall Lifetime Gameplay Stats
-      const allSpins = allBetsRes.data || []
-      const totalBetsCount = allSpins.length
-      const totalBetCoins = allSpins.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
-      const totalWinCoins = allSpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+      // Overall Lifetime Gameplay Stats (round_bets primary + game_history fallback)
+      const roundSpins = roundBetsRes.data || []
+      const histSpins = gameHistRes.data || []
+
+      let totalBetsCount = roundSpins.length
+      let totalBetCoins = roundSpins.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
+      let totalWinCoins = roundSpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+
+      if (totalBetsCount === 0 && histSpins.length > 0) {
+        totalBetsCount = histSpins.length
+        totalBetCoins = histSpins.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
+        totalWinCoins = histSpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+      }
       const totalLostCoins = totalBetCoins - totalWinCoins
 
       // Today IST Gameplay Stats
-      const todaySpins = todayBetsRes.data || []
+      const todaySpins = todayRoundBetsRes.data || []
       const todayBetsCount = todaySpins.length
-      const todayBetCoins = todaySpins.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
+      const todayBetCoins = todaySpins.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
       const todayWinCoins = todaySpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
       const todayLostCoins = todayBetCoins - todayWinCoins
 
