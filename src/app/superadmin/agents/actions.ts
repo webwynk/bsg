@@ -282,15 +282,15 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
       return { error: 'Target account not found.' }
     }
 
-    const { data: targetUserData, error: getTargetError } = await supabaseAdmin.auth.admin.getUserById(targetId)
-    if (getTargetError || !targetUserData?.user) {
-      return { error: 'Target account not found.' }
-    }
+    const { data: targetProfile, error: getTargetError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, username, role, agent_id, balance')
+      .eq('id', targetId)
+      .single()
 
-    const targetUser = targetUserData.user
-    const targetRole = targetUser.user_metadata?.role
-    const targetBalance = targetUser.user_metadata?.balance || 0
-    const targetUsername = targetUser.user_metadata?.username || targetUser.email?.split('@')[0] || 'account'
+    if (getTargetError || !targetProfile) {
+      return { error: 'Target profile not found in database.' }
+    }
 
     // Get active caller user
     const supabase = await createServerClient()
@@ -302,216 +302,64 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
       if (freshCaller?.user) callerUser = freshCaller.user
     }
 
-    // Case 1: Agent transferring to a Player
-    if (targetRole === 'player') {
+    // Case 1: Agent transferring to a Player (or Superadmin transferring to Player on behalf of Agent)
+    if (targetProfile.role === 'player') {
       const callerRole = callerUser?.user_metadata?.role
 
-      // Security check: If caller is an agent, they MUST own this player!
-      if (callerRole === 'agent' && callerUser && targetUser.user_metadata?.agent_id && targetUser.user_metadata.agent_id !== callerUser.id) {
+      // Security check: Agent can ONLY manage their assigned players!
+      if (callerRole === 'agent' && targetProfile.agent_id && targetProfile.agent_id !== callerUser?.id) {
         return { error: 'Unauthorized. You can only transfer coins to your own assigned players.' }
       }
 
-      let agentId = targetUser.user_metadata?.agent_id || callerUser?.id
-
-      // Fallback: if player has no agent_id set yet, link to caller or first active agent
-      if (!agentId) {
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        const firstAgent = (usersData?.users || []).find(u => u.user_metadata?.role === 'agent')
-        if (firstAgent) agentId = firstAgent.id
-      }
+      let agentId = targetProfile.agent_id || callerUser?.id
 
       if (!agentId) {
-        return { error: 'Agent session not found.' }
+        return { error: 'Agent account for player not specified.' }
       }
 
-      const { data: agentUserData } = await supabaseAdmin.auth.admin.getUserById(agentId)
-      if (!agentUserData?.user) {
-        return { error: 'Agent account not found.' }
+      const rpcName = type === 'deposit' ? 'transfer_coins_agent_to_player' : 'withdraw_coins_player_to_agent'
+      const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc(rpcName, {
+        p_agent_id: agentId,
+        p_player_id: targetId,
+        p_amount: sanitizedAmount
+      })
+
+      if (rpcErr) {
+        return { error: rpcErr.message }
       }
 
-      const agentUser = agentUserData.user
-      const agentBalance = agentUser.user_metadata?.balance || 0
-      const agentUsername = agentUser.user_metadata?.username || agentUser.email?.split('@')[0] || 'agent'
-
-      if (type === 'deposit') {
-        // STRICT OVERDRAFT CHECK: Agent cannot deposit more than available balance!
-        if (agentBalance < sanitizedAmount) {
-          return { 
-            error: `Insufficient Agent Coins. You only have ${agentBalance.toLocaleString()} Coins available, but tried to deposit ${sanitizedAmount.toLocaleString()} Coins.` 
-          }
-        }
-
-        const newAgentBalance = Math.max(0, agentBalance - sanitizedAmount)
-        const newPlayerBalance = targetBalance + sanitizedAmount
-
-        // Sync both Auth user_metadata AND public.profiles table
-        await supabaseAdmin.auth.admin.updateUserById(agentId, {
-          user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
-        })
-
-        await supabaseAdmin.auth.admin.updateUserById(targetId, {
-          user_metadata: { 
-            ...targetUser.user_metadata, 
-            agent_id: agentId,
-            balance: newPlayerBalance 
-          }
-        })
-
-        try {
-          await Promise.all([
-            supabaseAdmin.from('profiles').upsert({
-              id: agentId,
-              username: agentUsername,
-              role: 'agent',
-              balance: newAgentBalance,
-              is_active: agentUser.user_metadata?.status !== 'Blocked'
-            }),
-            supabaseAdmin.from('profiles').upsert({
-              id: targetId,
-              username: targetUsername,
-              role: 'player',
-              agent_id: agentId,
-              balance: newPlayerBalance,
-              is_active: targetUser.user_metadata?.status !== 'Blocked'
-            })
-          ])
-        } catch (_) {}
-
-        // Insert transaction record into public.transactions table
-        try {
-          await supabaseAdmin.from('transactions').insert({
-            user_id: targetId,
-            agent_id: agentId,
-            agent_username: agentUsername,
-            user_name: targetUser.user_metadata?.full_name || targetUsername,
-            user_username: targetUsername,
-            type: 'agent_credit',
-            amount: sanitizedAmount,
-            balance_after: newPlayerBalance
-          })
-        } catch (_) {}
-
-        await logAuditEventAction('Transaction', `Agent @${agentUsername} deposited ${sanitizedAmount.toLocaleString()} Coins to Player @${targetUsername}`)
-        revalidatePath('/agent')
-        revalidatePath('/agent/players')
-        revalidatePath('/agent/history')
-        revalidatePath('/superadmin/agents')
-        return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
-      } else {
-        // STRICT OVERDRAFT CHECK: Agent cannot withdraw more than player's available balance!
-        if (targetBalance < sanitizedAmount) {
-          return { 
-            error: `Insufficient Player Coins. Player @${targetUsername} only has ${targetBalance.toLocaleString()} Coins, but tried to withdraw ${sanitizedAmount.toLocaleString()} Coins.` 
-          }
-        }
-
-        const newPlayerBalance = Math.max(0, targetBalance - sanitizedAmount)
-        const newAgentBalance = agentBalance + sanitizedAmount
-
-        // Sync both Auth user_metadata AND public.profiles table
-        await supabaseAdmin.auth.admin.updateUserById(targetId, {
-          user_metadata: { 
-            ...targetUser.user_metadata, 
-            agent_id: agentId,
-            balance: newPlayerBalance 
-          }
-        })
-
-        await supabaseAdmin.auth.admin.updateUserById(agentId, {
-          user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
-        })
-
-        try {
-          await Promise.all([
-            supabaseAdmin.from('profiles').upsert({
-              id: agentId,
-              username: agentUsername,
-              role: 'agent',
-              balance: newAgentBalance,
-              is_active: agentUser.user_metadata?.status !== 'Blocked'
-            }),
-            supabaseAdmin.from('profiles').upsert({
-              id: targetId,
-              username: targetUsername,
-              role: 'player',
-              agent_id: agentId,
-              balance: newPlayerBalance,
-              is_active: targetUser.user_metadata?.status !== 'Blocked'
-            })
-          ])
-        } catch (_) {}
-
-        // Insert transaction record into public.transactions table
-        try {
-          await supabaseAdmin.from('transactions').insert({
-            user_id: targetId,
-            agent_id: agentId,
-            agent_username: agentUsername,
-            user_name: targetUser.user_metadata?.full_name || targetUsername,
-            user_username: targetUsername,
-            type: 'agent_debit',
-            amount: -sanitizedAmount,
-            balance_after: newPlayerBalance
-          })
-        } catch (_) {}
-
-        await logAuditEventAction('Transaction', `Agent @${agentUsername} withdrew ${sanitizedAmount.toLocaleString()} Coins from Player @${targetUsername}`)
-        revalidatePath('/agent')
-        revalidatePath('/agent/players')
-        revalidatePath('/agent/history')
-        revalidatePath('/superadmin/agents')
-        return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
-      }
-    }
-
-    // Case 2: SuperAdmin transferring to an Agent directly
-    if (type === 'withdraw' && targetBalance < sanitizedAmount) {
+      await logAuditEventAction('Transaction', `Agent cashier ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Player @${targetProfile.username}`)
+      revalidatePath('/agent')
+      revalidatePath('/agent/players')
+      revalidatePath('/agent/history')
+      revalidatePath('/superadmin/agents')
       return { 
-        error: `Insufficient Agent Coins. Agent @${targetUsername} only has ${targetBalance.toLocaleString()} Coins, but tried to withdraw ${sanitizedAmount.toLocaleString()} Coins.` 
+        success: true, 
+        newBalance: rpcRes?.new_player_balance, 
+        agentBalance: rpcRes?.new_agent_balance 
       }
     }
 
-    const delta = type === 'deposit' ? sanitizedAmount : -sanitizedAmount
-    const newBalance = Math.max(0, targetBalance + delta)
+    // Case 2: SuperAdmin transferring to an Agent directly (issue_agent_coins)
+    if (targetProfile.role === 'agent') {
+      const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('issue_agent_coins', {
+        p_admin_id: callerUser?.id || null,
+        p_agent_id: targetId,
+        p_amount: sanitizedAmount,
+        p_type: type
+      })
 
-    // Sync both Auth user_metadata AND public.profiles table
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
-      user_metadata: {
-        ...targetUser.user_metadata,
-        balance: newBalance
+      if (rpcErr) {
+        return { error: rpcErr.message }
       }
-    })
 
-    if (updateError) {
-      return { error: updateError.message }
+      await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Agent @${targetProfile.username}`)
+      revalidatePath('/superadmin/agents')
+      revalidatePath('/superadmin/agents/issued')
+      return { success: true, newBalance: rpcRes?.new_balance }
     }
 
-    try {
-      await supabaseAdmin.from('profiles').upsert({
-        id: targetId,
-        username: targetUsername,
-        role: 'agent',
-        balance: newBalance,
-        is_active: targetUser.user_metadata?.status !== 'Blocked'
-      })
-    } catch (_) {}
-
-    // Insert into agent_coin_transactions table for ledger tracking
-    try {
-      await supabaseAdmin.from('agent_coin_transactions').insert({
-        agent_id: targetId,
-        agent_name: targetUser.user_metadata?.full_name || targetUsername,
-        agent_username: targetUsername,
-        admin_id: callerUser?.id || null,
-        type: type,
-        amount: sanitizedAmount
-      })
-    } catch (_) {}
-
-    await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Agent @${targetUsername}`)
-    revalidatePath('/superadmin/agents')
-    revalidatePath('/superadmin/agents/issued')
-    return { success: true, newBalance }
+    return { error: 'Invalid target role for transfer.' }
   }
 
   return { error: 'Service Role Key not configured in Vercel environment variables.' }

@@ -23,16 +23,20 @@ export async function GET(request: Request) {
     }
 
     const userMetadata = user.user_metadata || {}
-
-    if (userMetadata.status === 'Blocked') {
-      return NextResponse.json({ message: 'Account is blocked.' }, { status: 403 })
+    let balance = Number(userMetadata.balance || 0)
+    const { data: prof } = await supabase.from('profiles').select('balance, is_active, username').eq('id', user.id).single()
+    if (prof) {
+      balance = Number(prof.balance || 0)
+      if (!prof.is_active) {
+        return NextResponse.json({ message: 'Account is blocked.' }, { status: 403 })
+      }
     }
 
     return NextResponse.json({
       id: user.id,
-      username: userMetadata.username || user.email?.split('@')[0] || 'player',
+      username: prof?.username || userMetadata.username || user.email?.split('@')[0] || 'player',
       name: userMetadata.full_name || userMetadata.username || 'Player',
-      balance: userMetadata.balance || 0,
+      balance,
       status: userMetadata.status || 'Active',
     })
   } catch (error: unknown) {

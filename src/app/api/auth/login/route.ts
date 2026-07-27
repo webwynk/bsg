@@ -42,6 +42,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Only player accounts can log into the mobile app.' }, { status: 403 })
     }
 
+    // Query real-time balance from public.profiles table
+    let balance = Number(userMetadata.balance || 0)
+    const { data: prof } = await supabase.from('profiles').select('balance, is_active').eq('id', user.id).single()
+    if (prof) {
+      balance = Number(prof.balance || 0)
+      if (!prof.is_active) {
+        return NextResponse.json({ message: 'Account is blocked. Please contact your Agent.' }, { status: 403 })
+      }
+    }
+
     // Fetch Agent Name
     let agentName = 'N/A'
     if (userMetadata.agent_id && serviceRoleKey) {
@@ -60,7 +70,7 @@ export async function POST(request: Request) {
         id: user.id,
         username: userMetadata.username || username,
         name: userMetadata.full_name || username,
-        balance: userMetadata.balance || 0,
+        balance,
         agentName,
         status: userMetadata.status || 'Active',
       },
