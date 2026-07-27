@@ -221,42 +221,62 @@ export default function PlayersPage() {
   }, [])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [countdown, setCountdown] = React.useState(90)
+  // Stable ref — tracks selected player ID without being a useCallback dependency
+  const selectedPlayerIdRef = React.useRef<string | null>(null)
 
-  const loadPlayers = React.useCallback((currentSelectedId?: string) => {
-    setIsRefreshing(true)
+  const loadPlayers = React.useCallback((opts?: { silent?: boolean; reloadHistory?: boolean }) => {
+    const silent = opts?.silent ?? false
+    const reloadHistory = opts?.reloadHistory ?? false
+    if (!silent) setIsRefreshing(true)
     getPlayersAction().then((res) => {
-      setIsRefreshing(false)
+      if (!silent) setIsRefreshing(false)
       setIsLoadingPlayers(false)
       if (res.players) {
         setPlayers(res.players)
-        const targetId = currentSelectedId || selectedPlayer?.id
+        const targetId = selectedPlayerIdRef.current
         if (targetId) {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
-            loadPlayerHistory(updated.id)
+            // Only reload history on explicit request (manual refresh / player select), NOT on silent auto-tick
+            if (reloadHistory) loadPlayerHistory(updated.id)
           }
         } else if (res.players.length > 0) {
+          selectedPlayerIdRef.current = res.players[0].id
           setSelectedPlayer(res.players[0])
           loadPlayerHistory(res.players[0].id)
         }
       }
     }).catch(() => {
-      setIsRefreshing(false)
+      if (!silent) setIsRefreshing(false)
       setIsLoadingPlayers(false)
     })
-  }, [selectedPlayer?.id, loadPlayerHistory])
+  }, [loadPlayerHistory]) // Stable — no selectedPlayer?.id dep, no interval leak
 
   React.useEffect(() => {
-    loadPlayers()
-    const interval = setInterval(() => {
-      loadPlayers()
-    }, 30000)
-    return () => clearInterval(interval)
+    loadPlayers({ reloadHistory: true }) // initial load: players + history
+
+    // 1s countdown tick — UI only, no DB fetch
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 90 : prev - 1))
+    }, 1000)
+
+    // 90s data interval — silent, list only (no history cascade)
+    const dataInterval = setInterval(() => {
+      setCountdown(90)
+      loadPlayers({ silent: true })
+    }, 90000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(dataInterval)
+    }
   }, [loadPlayers])
 
   const handleManualRefresh = async () => {
-    loadPlayers(selectedPlayer?.id)
+    setCountdown(90)
+    loadPlayers({ reloadHistory: true })
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
@@ -264,6 +284,7 @@ export default function PlayersPage() {
       setShowMobileDetail(true)
       return
     }
+    selectedPlayerIdRef.current = player.id // keep ref in sync
     setSelectedPlayer(player)
     setShowMobileDetail(true)
     setIsLoadingHistory(true)
@@ -293,7 +314,7 @@ export default function PlayersPage() {
       setErrorMessage(res.error)
     } else {
       setSuccessMessage(`Player "@${username}" registered successfully!`)
-      loadPlayers()
+      loadPlayers({ reloadHistory: true })
       setTimeout(() => {
         setIsOpen(false)
         setSuccessMessage(null)
@@ -320,7 +341,7 @@ export default function PlayersPage() {
     } else {
       setActiveTransferModal(null)
       setTransferAmount('')
-      loadPlayers(selectedPlayer.id)
+      loadPlayers({ reloadHistory: true })
     }
   }
 
@@ -333,7 +354,7 @@ export default function PlayersPage() {
 
     setIsTogglingStatus(false)
     if (!res.error) {
-      loadPlayers(selectedPlayer.id)
+      loadPlayers({ reloadHistory: true })
     }
   }
 
@@ -397,7 +418,7 @@ export default function PlayersPage() {
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

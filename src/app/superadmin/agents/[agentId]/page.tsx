@@ -44,6 +44,12 @@ export default function AgentDetailPage({ params }: Props) {
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [countdown, setCountdown] = React.useState(90)
+  // Stable refs — avoid interval leaks caused by state deps in useCallback
+  const selectedPlayerIdRef = React.useRef<string | null>(null)
+  const filterDateRef = React.useRef<Date | undefined>(undefined)
+  const statsScopeRef = React.useRef<'today' | 'lifetime'>('today')
+  const isInitialMountRef = React.useRef(true)
 
   const [gamePlays, setGamePlays] = React.useState<Array<{
     id: string
@@ -209,41 +215,79 @@ export default function AgentDetailPage({ params }: Props) {
     })
   }, [])
 
-  const loadAgentDetails = React.useCallback((showIndicator: boolean = false) => {
+  const loadAgentDetails = React.useCallback((opts?: { showIndicator?: boolean; reloadHistory?: boolean }) => {
+    const showIndicator = opts?.showIndicator ?? false
+    const reloadHistory = opts?.reloadHistory ?? false
     if (showIndicator) setIsRefreshing(true)
     Promise.all([
       getAgentDetailAction(agentId),
-      getAgentProfitReportAction({ targetAgentId: agentId, datePreset: statsScope, filterDate: filterDate ? filterDate.toISOString() : undefined })
+      getAgentProfitReportAction({
+        targetAgentId: agentId,
+        datePreset: statsScopeRef.current,
+        filterDate: filterDateRef.current ? filterDateRef.current.toISOString() : undefined
+      })
     ]).then(([res, resProf]) => {
-      setIsRefreshing(false)
-      if (res.agent) {
-        setAgentInfo(res.agent)
-      }
+      if (showIndicator) setIsRefreshing(false)
+      if (res.agent) setAgentInfo(res.agent)
       if (res.players) {
         setPlayers(res.players)
-        const targetPlayer = res.players.find(p => p.id === selectedPlayer?.id) || (res.players.length > 0 ? res.players[0] : null)
-        if (targetPlayer) {
-          setSelectedPlayer(targetPlayer)
-          loadPlayerHistory(targetPlayer.id)
+        const targetId = selectedPlayerIdRef.current
+        if (targetId) {
+          const updated = res.players.find(p => p.id === targetId)
+          if (updated) {
+            setSelectedPlayer(updated)
+            // Only reload history on explicit request, NOT on silent auto-tick
+            if (reloadHistory) loadPlayerHistory(updated.id)
+          }
+        } else if (res.players.length > 0) {
+          selectedPlayerIdRef.current = res.players[0].id
+          setSelectedPlayer(res.players[0])
+          loadPlayerHistory(res.players[0].id)
         }
       }
       if (resProf) {
         setProfitSummary(resProf.summary)
         setProfitPlayers(resProf.players)
       }
-    }).catch(() => setIsRefreshing(false))
-  }, [agentId, selectedPlayer?.id, loadPlayerHistory, filterDate, statsScope])
+    }).catch(() => { if (showIndicator) setIsRefreshing(false) })
+  }, [agentId, loadPlayerHistory]) // Stable — agentId from params, loadPlayerHistory has [] deps
+
+  // Keep filter refs in sync so stable loadAgentDetails always reads latest values
+  React.useEffect(() => {
+    filterDateRef.current = filterDate
+    statsScopeRef.current = statsScope
+    // Skip the initial mount — main effect below handles it
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false
+      return
+    }
+    // Re-fetch profit report whenever user changes date/scope filter
+    loadAgentDetails({ showIndicator: false, reloadHistory: false })
+  }, [filterDate, statsScope, loadAgentDetails])
 
   React.useEffect(() => {
-    loadAgentDetails(false)
-    const interval = setInterval(() => {
-      loadAgentDetails(false)
-    }, 30000)
-    return () => clearInterval(interval)
+    loadAgentDetails({ showIndicator: false, reloadHistory: true }) // initial: full load
+
+    // 1s countdown tick — UI only, no DB fetch
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 90 : prev - 1))
+    }, 1000)
+
+    // 90s data interval — silent, balances + player list only (no history cascade)
+    const dataInterval = setInterval(() => {
+      setCountdown(90)
+      loadAgentDetails({ showIndicator: false })
+    }, 90000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(dataInterval)
+    }
   }, [loadAgentDetails])
 
   const handleManualRefresh = async () => {
-    loadAgentDetails(true)
+    setCountdown(90)
+    loadAgentDetails({ showIndicator: true, reloadHistory: true })
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
@@ -251,6 +295,7 @@ export default function AgentDetailPage({ params }: Props) {
       setShowMobileDetail(true)
       return
     }
+    selectedPlayerIdRef.current = player.id // keep ref in sync
     setSelectedPlayer(player)
     setShowMobileDetail(true)
     setIsLoadingHistory(true)
@@ -268,7 +313,7 @@ export default function AgentDetailPage({ params }: Props) {
     setIsTogglingStatus(false)
     if (res.success && res.newStatus) {
       setAgentInfo({ ...agentInfo, status: res.newStatus })
-      loadAgentDetails()
+      loadAgentDetails({ showIndicator: false, reloadHistory: false })
     }
   }
 
@@ -311,7 +356,7 @@ export default function AgentDetailPage({ params }: Props) {
     } else {
       setActiveTransferModal(null)
       setTransferAmount('')
-      loadAgentDetails()
+      loadAgentDetails({ showIndicator: false, reloadHistory: false })
     }
   }
 
@@ -349,7 +394,7 @@ export default function AgentDetailPage({ params }: Props) {
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

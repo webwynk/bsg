@@ -61,15 +61,16 @@ export async function getAgentDetailAction(agentId: string) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Run sub-queries in parallel via Promise.all
-      const [agentRes, sessRes, playersRes] = await Promise.all([
-        supabaseAdmin.auth.admin.getUserById(agentId),
+      // Run all 3 sub-queries in parallel via Promise.all
+      // Note: agent info now reads from indexed profiles table (fast) instead of GoTrue getUserById (slow)
+      const [agentProfileRes, sessRes, playersRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('id', agentId).single(),
         supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', agentId)
       ])
 
-      if (agentRes.data?.user) {
-        const u = agentRes.data.user
+      if (agentProfileRes.data) {
+        const ap = agentProfileRes.data
         const sessions = sessRes.data || null
         const now = new Date().getTime()
 
@@ -89,7 +90,7 @@ export async function getAgentDetailAction(agentId: string) {
             }
           })
         } else {
-          // Fallback to Auth listUsers if profiles table returns empty
+          // Fallback to Auth listUsers if profiles table returns empty for players
           const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
           agentPlayers = (usersData?.users || [])
             .filter(p => p.user_metadata?.role === 'player' && p.user_metadata?.agent_id === agentId)
@@ -110,11 +111,11 @@ export async function getAgentDetailAction(agentId: string) {
 
         return {
           agent: {
-            id: u.id,
-            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
-            username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-            balance: u.user_metadata?.balance || 0,
-            status: u.user_metadata?.status || 'Active'
+            id: ap.id,
+            name: ap.username || 'Agent',
+            username: ap.username || '',
+            balance: Number(ap.balance || 0),
+            status: ap.is_active ? 'Active' : 'Blocked'
           },
           players: agentPlayers
         }
