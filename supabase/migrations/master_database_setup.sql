@@ -742,6 +742,29 @@ BEGIN
 END;
 $$;
 
+-- K. get_recent_rounds
+CREATE OR REPLACE FUNCTION public.get_recent_rounds(p_limit int DEFAULT 10)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_results jsonb;
+BEGIN
+  SELECT jsonb_agg(r) INTO v_results
+  FROM (
+    SELECT id, round_number, red, green, black, scheduled_at, created_at
+    FROM public.game_rounds
+    WHERE status = 'complete' OR (red IS NOT NULL AND green IS NOT NULL AND black IS NOT NULL)
+    ORDER BY round_number DESC
+    LIMIT LEAST(p_limit, 50)
+  ) r;
+
+  RETURN COALESCE(v_results, '[]'::jsonb);
+END;
+$$;
+
 -- ----------------------------------------------------------------------------
 -- 4. ROW LEVEL SECURITY (RLS) POLICIES
 -- ----------------------------------------------------------------------------
