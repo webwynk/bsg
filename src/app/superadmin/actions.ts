@@ -187,14 +187,20 @@ export async function getRtpAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Query agent_configs table
+      // Query agent_configs table for global system config (agent_id IS NULL or id = 'global_system_config')
       const { data, error } = await supabaseAdmin
         .from('agent_configs')
-        .select('rtp_percentage')
+        .select('rtp_percentage, target_win_percentage')
+        .or('agent_id.is.null,id.eq.global_system_config')
+        .order('updated_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
-      if (!error && data?.rtp_percentage !== undefined) {
-        return { rtp: Number(data.rtp_percentage) }
+      if (!error && data) {
+        const val = data.target_win_percentage ?? data.rtp_percentage
+        if (val !== undefined && val !== null) {
+          return { rtp: Number(val) }
+        }
       }
 
       // Fallback: query admin user metadata
@@ -206,7 +212,7 @@ export async function getRtpAction() {
     } catch (_) {}
   }
 
-  return { rtp: 96.5 }
+  return { rtp: 96.0 }
 }
 
 export async function updateRtpAction(rtpPercentage: number) {
@@ -219,10 +225,15 @@ export async function updateRtpAction(rtpPercentage: number) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Upsert into agent_configs table
+      // Upsert into agent_configs table with both column aliases for 100% database compatibility
       await supabaseAdmin
         .from('agent_configs')
-        .upsert({ id: 'global_system_config', rtp_percentage: rtpPercentage, updated_at: new Date().toISOString() })
+        .upsert({
+          id: 'global_system_config',
+          rtp_percentage: rtpPercentage,
+          target_win_percentage: rtpPercentage,
+          updated_at: new Date().toISOString()
+        })
 
       // Update admin user metadata & append audit log
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
