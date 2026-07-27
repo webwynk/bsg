@@ -66,14 +66,15 @@ export default function SuperAdminDashboard() {
     return () => clearInterval(ticker)
   }, [])
 
-  const fetchMetrics = () => {
-    setIsLoadingMetrics(true)
+  const fetchMetrics = (isInitial = false) => {
+    if (isInitial) {
+      setIsLoadingMetrics(true)
+    }
     Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
-      getAuditLogsAction(),
-      getLatestGameDrawsAction()
-    ]).then(([resMetrics, resRtp, resLogs, resDraws]) => {
+      getAuditLogsAction()
+    ]).then(([resMetrics, resRtp, resLogs]) => {
       setIsLoadingMetrics(false)
       if (resMetrics) {
         setTotalCoins(resMetrics.totalCoins || 0)
@@ -95,15 +96,12 @@ export default function SuperAdminDashboard() {
       if (resLogs?.logs) {
         setSystemLogs(resLogs.logs)
       }
-      if (resDraws?.draws) {
-        setLatestDraws(resDraws.draws)
-      }
     }).catch(() => setIsLoadingMetrics(false))
   }
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    fetchMetrics()
+    fetchMetrics(false)
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
@@ -116,16 +114,16 @@ export default function SuperAdminDashboard() {
     if (res.success) {
       setRtpValue(valToApply)
       setRtpSuccess(`RTP updated to ${valToApply}%`)
-      fetchMetrics()
+      fetchMetrics(false)
       setTimeout(() => setRtpSuccess(null), 2500)
     }
   }
 
   React.useEffect(() => {
-    fetchMetrics()
+    fetchMetrics(true)
     const autoPoll = setInterval(() => {
-      fetchMetrics()
-    }, 5000)
+      fetchMetrics(false)
+    }, 30000)
     return () => clearInterval(autoPoll)
   }, [])
 
