@@ -23,7 +23,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Eye, EyeOff, Loader2, Search, Users, ShieldCheck, ArrowRight, Coins, CheckCircle2, XCircle, Filter, RefreshCw } from "lucide-react"
+import { 
+  Plus, Search, ShieldCheck, Eye, RefreshCw, Loader2, Coins, ArrowUpRight, 
+  ArrowDownRight, Users, EyeOff, UserX, UserCheck, KeyRound, CheckCircle2, AlertCircle,
+  Filter, ArrowRight
+} from 'lucide-react'
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
@@ -43,6 +47,10 @@ export default function AgentsPage() {
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
   const [showPassword, setShowPassword] = React.useState(false)
+  
+  const [usernameInput, setUsernameInput] = React.useState('')
+  const isUsernameTouched = usernameInput.length > 0
+  const isUsernameValid = React.useMemo(() => /^[a-zA-Z0-9]{3,20}$/.test(usernameInput), [usernameInput])
 
   const itemsPerPage = 10
 
@@ -154,65 +162,118 @@ export default function AgentsPage() {
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
 
-          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open)
+            if (!open) {
+              setUsernameInput('')
+              setErrorMessage(null)
+              setSuccessMessage(null)
+            }
+          }}>
             <DialogTrigger className={buttonVariants({ variant: "default", size: "sm", className: "flex-1 sm:flex-none h-8 sm:h-9 px-3 sm:px-4 font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs" })}>
               <Plus className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Add Agent
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
-            <DialogHeader className="space-y-1">
-              <DialogTitle className="text-lg font-black">Register New Agent</DialogTitle>
-              <DialogDescription className="text-muted-foreground text-xs">
-                Create a new agent back-office account. They will need these credentials to sign in.
-              </DialogDescription>
-            </DialogHeader>
+          <DialogContent className="sm:max-w-[430px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-0 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-transparent p-5 border-b border-border/60">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2.5 rounded-xl bg-primary/20 text-primary border border-primary/30 shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-black tracking-tight">Register New Agent</DialogTitle>
+                  <DialogDescription className="text-muted-foreground text-xs mt-0.5">
+                    Create a new agent back-office account with credentials.
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
 
-            <form onSubmit={handleCreateAgent} className="space-y-3.5 pt-2">
+            <form onSubmit={handleCreateAgent} className="p-5 space-y-4">
               {errorMessage && (
-                <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 shrink-0 animate-ping" />
-                  {errorMessage}
+                <div className="p-3 text-xs font-bold rounded-xl bg-danger-bg text-danger-text border border-red-500/20 flex items-center shadow-xs">
+                  <AlertCircle className="h-4 w-4 mr-2 text-red-500 shrink-0" />
+                  <span>{errorMessage}</span>
                 </div>
               )}
               {successMessage && (
-                <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
-                  {successMessage}
+                <div className="p-3 text-xs font-bold rounded-xl bg-success-bg text-success-text border border-emerald-500/20 flex items-center shadow-xs">
+                  <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500 shrink-0" />
+                  <span>{successMessage}</span>
                 </div>
               )}
 
-              <div className="space-y-1">
-                <Label htmlFor="name text-[10px]">Agent Full Name</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Agent Full Name
+                </Label>
                 <Input
                   id="name"
                   name="name"
                   placeholder="e.g. Rahul Sharma"
-                  className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
+                  className="h-10 bg-background/70 border-border text-foreground text-xs rounded-xl focus:border-primary/50"
                   required
                 />
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="username text-[10px]">Username</Label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="username" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Username
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground font-mono">Only letters & numbers</span>
+                </div>
                 <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground/70 font-mono">@</span>
+                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground/70 font-mono font-bold">@</span>
                   <Input
                     id="username"
                     name="username"
-                    placeholder="agent_rahul"
-                    className="pl-8 h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    placeholder="agent01"
+                    className={`pl-8 pr-9 h-10 bg-background/70 text-foreground text-xs rounded-xl font-mono transition-all ${
+                      isUsernameTouched
+                        ? isUsernameValid
+                          ? 'border-emerald-500/80 focus:border-emerald-500'
+                          : 'border-red-500/80 focus:border-red-500'
+                        : 'border-border focus:border-primary/50'
+                    }`}
                     required
                   />
+                  {isUsernameTouched && (
+                    <div className="absolute right-3 top-2.5">
+                      {isUsernameValid ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                      )}
+                    </div>
+                  )}
                 </div>
+                {isUsernameTouched && !isUsernameValid && (
+                  <p className="text-[10px] font-bold text-red-500 flex items-center mt-1">
+                    <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
+                    No symbols allowed. Use 3-20 letters/numbers only (e.g. agent01, agent03)
+                  </p>
+                )}
+                {isUsernameTouched && isUsernameValid && (
+                  <p className="text-[10px] font-bold text-emerald-500 flex items-center mt-1">
+                    <CheckCircle2 className="h-3 w-3 mr-1 shrink-0" />
+                    Valid username format: @{usernameInput}
+                  </p>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="password text-[10px]">Password</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Password
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="At least 6 characters"
-                    className="h-10 bg-background/60 border-border text-foreground pr-10 text-xs rounded-lg"
+                    placeholder="Min 6 characters"
+                    className="h-10 bg-background/70 border-border text-foreground pr-10 text-xs rounded-xl"
                     required
                     minLength={6}
                   />
@@ -227,9 +288,13 @@ export default function AgentsPage() {
                 </div>
               </div>
 
-              <DialogFooter className="pt-2">
-                <Button type="submit" disabled={isLoading} className="w-full h-10 font-extrabold text-xs rounded-lg shadow-sm cursor-pointer">
-                  {isLoading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              <DialogFooter className="pt-3">
+                <Button 
+                  type="submit" 
+                  disabled={isLoading || (isUsernameTouched && !isUsernameValid)} 
+                  className="w-full h-10 font-black text-xs rounded-xl shadow-md cursor-pointer bg-primary hover:bg-primary/90 transition-all"
+                >
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {isLoading ? 'Registering Agent...' : 'Create Agent Account'}
                 </Button>
               </DialogFooter>
@@ -374,7 +439,7 @@ export default function AgentsPage() {
                 paginatedAgents.map((agent) => (
                   <TableRow key={agent.id} className="border-border hover:bg-secondary/30 transition-colors">
                     <TableCell className="font-bold text-foreground text-xs sticky left-0 bg-card z-10 py-2">
-                      <Link href={`/superadmin/agents/${agent.id}`} className="hover:text-primary transition-colors flex items-center space-x-2">
+                      <Link href={`/superadmin/agents/${agent.username}`} className="hover:text-primary transition-colors flex items-center space-x-2">
                         <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 text-xs font-black">
                           {agent.name[0]?.toUpperCase()}
                         </div>
@@ -396,7 +461,7 @@ export default function AgentsPage() {
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap py-2">
                       <Link
-                        href={`/superadmin/agents/${agent.id}`}
+                        href={`/superadmin/agents/${agent.username}`}
                         className={buttonVariants({ variant: "outline", size: "sm", className: "h-7 px-2.5 border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-bold rounded-lg text-xs" })}
                       >
                         <Eye className="mr-1 h-3 w-3" /> View
@@ -470,7 +535,7 @@ export default function AgentsPage() {
               </div>
 
               <Link
-                href={`/superadmin/agents/${agent.id}`}
+                href={`/superadmin/agents/${agent.username}`}
                 className={buttonVariants({ variant: "outline", size: "sm", className: "w-full h-8 border-primary/30 text-primary hover:bg-primary/10 font-bold justify-center rounded-lg text-xs" })}
               >
                 <span>View Agent Dashboard</span>

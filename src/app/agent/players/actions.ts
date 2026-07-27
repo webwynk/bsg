@@ -79,6 +79,11 @@ export async function createPlayerAction(formData: FormData) {
     return { error: 'Please provide Name, Username, and Password.' }
   }
 
+  const usernameRegex = /^[a-zA-Z0-9]{3,20}$/
+  if (!usernameRegex.test(username)) {
+    return { error: 'Username must be 3 to 20 characters and contain ONLY letters and numbers (no symbols, spaces, or special characters).' }
+  }
+
   const supabase = await createServerClient()
   const { data: { user: agentUser } } = await supabase.auth.getUser()
   const agentId = agentUser?.id

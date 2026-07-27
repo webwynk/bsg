@@ -405,7 +405,7 @@ export default function CoinsIssuedPage() {
                       {tx.id.substring(0, 8)}...
                     </TableCell>
                     <TableCell className="text-foreground text-xs py-2">
-                      <Link href={`/superadmin/agents/${tx.agentId}`} className="font-bold hover:underline text-primary">
+                      <Link href={`/superadmin/agents/${tx.agentUsername}`} className="font-bold hover:underline text-primary">
                         {tx.agentName}
                       </Link>
                       <span className="text-muted-foreground block text-[10px]">@{tx.agentUsername}</span>
@@ -486,7 +486,7 @@ export default function CoinsIssuedPage() {
 
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
                 <div>
-                  <Link href={`/superadmin/agents/${tx.agentId}`} className="font-bold text-foreground hover:text-primary">
+                  <Link href={`/superadmin/agents/${tx.agentUsername}`} className="font-bold text-foreground hover:text-primary">
                     {tx.agentName}
                   </Link>
                   <span className="text-muted-foreground block text-[10px]">@{tx.agentUsername}</span>

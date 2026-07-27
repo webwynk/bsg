@@ -51,7 +51,7 @@ export async function getAgentsAction() {
   return { agents: [] }
 }
 
-export async function getAgentDetailAction(agentId: string) {
+export async function getAgentDetailAction(agentIdentifier: string) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -60,6 +60,19 @@ export async function getAgentDetailAction(agentId: string) {
       const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false }
       })
+
+      // Step 1: Resolve username → UUID (supports both username and UUID for backward compat)
+      let agentId = agentIdentifier
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentIdentifier)
+      if (!isUuid) {
+        const { data: lookup } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('username', agentIdentifier)
+          .single()
+        if (!lookup?.id) return { agent: null, players: [], resolvedAgentId: null }
+        agentId = lookup.id
+      }
 
       // Run all 3 sub-queries in parallel via Promise.all
       // Note: agent info now reads from indexed profiles table (fast) instead of GoTrue getUserById (slow)
@@ -117,7 +130,8 @@ export async function getAgentDetailAction(agentId: string) {
             balance: Number(ap.balance || 0),
             status: ap.is_active ? 'Active' : 'Blocked'
           },
-          players: agentPlayers
+          players: agentPlayers,
+          resolvedAgentId: agentId  // Return resolved UUID for client to use
         }
       }
     } catch (_) {}
@@ -133,6 +147,11 @@ export async function createAgentAction(formData: FormData) {
 
   if (!name || !username || !password) {
     return { error: 'Please provide Name, Username, and Password.' }
+  }
+
+  const usernameRegex = /^[a-zA-Z0-9]{3,20}$/
+  if (!usernameRegex.test(username)) {
+    return { error: 'Username must be 3 to 20 characters and contain ONLY letters and numbers (no symbols, spaces, or special characters).' }
   }
 
   const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
@@ -298,7 +317,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
         revalidatePath('/agent/players')
         revalidatePath('/agent/history')
         revalidatePath('/superadmin/agents')
-        revalidatePath(`/superadmin/agents/${agentId}`)
+        revalidatePath('/superadmin/agents')
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
       } else {
         // STRICT OVERDRAFT CHECK: Agent cannot withdraw more than player's available balance!
@@ -341,7 +360,7 @@ export async function transferPointsAction(targetId: string, amount: number, typ
         revalidatePath('/agent/players')
         revalidatePath('/agent/history')
         revalidatePath('/superadmin/agents')
-        revalidatePath(`/superadmin/agents/${agentId}`)
+        revalidatePath('/superadmin/agents')
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
       }
     }

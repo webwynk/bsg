@@ -1,6 +1,15 @@
 "use client"
 
 import * as React from 'react'
+import Link from 'next/link'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -10,49 +19,39 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { 
-  Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, 
-  ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins, 
-  Calendar as CalendarIcon, Filter, Activity, TrendingUp, TrendingDown, RefreshCw, X 
-} from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from './actions'
-import { transferPointsAction } from '@/app/superadmin/agents/actions'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
+import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
+import { getAgentProfitReportAction } from '@/app/agent/profit/actions'
 
-export default function PlayersPage() {
-  const [players, setPlayers] = React.useState<Array<{ 
-    id: string; 
-    name: string; 
-    username: string; 
-    balance: number; 
-    status: string; 
-    isOnline?: boolean;
-    gamePlays: number 
-  }>>([])
+interface Props {
+  params: React.Usable<{ agentUsername: string }>
+}
+
+export default function AgentDetailPage({ params }: Props) {
+  const { agentUsername } = React.use(params)
+  const resolvedAgentIdRef = React.useRef<string>('') // UUID resolved from username by server action
+  
+  const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string } | null>(null)
+  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; isOnline?: boolean; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
-  const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
-  const [searchQuery, setSearchQuery] = React.useState('')
-  const [isLoadingPlayers, setIsLoadingPlayers] = React.useState(true)
-
-  // Mobile layout state: show list or details pane
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [countdown, setCountdown] = React.useState(90)
+  // Stable refs — avoid interval leaks caused by state deps in useCallback
+  const selectedPlayerIdRef = React.useRef<string | null>(null)
+  const filterDateRef = React.useRef<Date | undefined>(undefined)
+  const statsScopeRef = React.useRef<'today' | 'lifetime'>('today')
+  const isInitialMountRef = React.useRef(true)
 
-  // History data states
   const [gamePlays, setGamePlays] = React.useState<Array<{
     id: string
     game: string
@@ -75,25 +74,46 @@ export default function PlayersPage() {
   const toggleSpinExpand = (spinId: string) => {
     setExpandedSpins(prev => ({ ...prev, [spinId]: !prev[spinId] }))
   }
-
-  const [pointsHistory, setPointsHistory] = React.useState<Array<{
-    id: string
-    type: 'deposit' | 'withdraw'
-    amount: number
-    balanceAfter: number
-    date: string
-  }>>([])
+  const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; balanceAfter: number; date: string }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
-
-  // Scope state for Performance Summary Bar: 'today' | 'lifetime'
+  const [activeTab, setActiveTab] = React.useState<'games' | 'points' | 'profit'>('games')
+  const [profitSummary, setProfitSummary] = React.useState({ todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 })
+  const [profitPlayers, setProfitPlayers] = React.useState<Array<{
+    id: string
+    username: string
+    isActive: boolean
+    balance: number
+    totalPlays: number
+    totalBets: number
+    totalWins: number
+    netPnl: number
+    marginPct: number
+    lastPlayedAt: string
+  }>>([])
+  
+  // Filter & Scope States
   const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
-
-  // Filter states
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
   const [filterOutcome, setFilterOutcome] = React.useState<'all' | 'WON' | 'LOST'>('all')
   const [filterMode, setFilterMode] = React.useState<'all' | 'SINGLE' | 'DOUBLE' | 'TRIPLE'>('all')
 
-  // Pagination states
+  // Point transfer modal state
+  const [activeTransferModal, setActiveTransferModal] = React.useState<'deposit' | 'withdraw' | null>(null)
+  const [transferAmount, setTransferAmount] = React.useState('')
+  const [isTransferring, setIsTransferring] = React.useState(false)
+  const [transferError, setTransferError] = React.useState<string | null>(null)
+
+  // Status toggle state
+  const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
+
+  // Password reset modal state
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false)
+  const [newPassword, setNewPassword] = React.useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false)
+  const [passwordError, setPasswordError] = React.useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = React.useState<string | null>(null)
+  const [showPassword, setShowPassword] = React.useState(false)
+
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 5
@@ -132,6 +152,7 @@ export default function PlayersPage() {
   // Filtered games list
   const filteredGames = React.useMemo(() => {
     return gamePlays.filter(spin => {
+      // Date Filter
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-US', {
           timeZone: 'Asia/Kolkata',
@@ -142,10 +163,12 @@ export default function PlayersPage() {
         if (!spin.date.includes(filterDateStr)) return false
       }
 
+      // Outcome Filter
       if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
         return false
       }
 
+      // Mode Filter
       if (filterMode !== 'all' && !spin.mode.toUpperCase().includes(filterMode)) {
         return false
       }
@@ -180,33 +203,6 @@ export default function PlayersPage() {
     return filteredPoints.slice(start, start + itemsPerPage)
   }, [filteredPoints, pointsPage])
 
-  // Create Player modal state
-  const [isOpen, setIsOpen] = React.useState(false)
-  const [isLoading, setIsLoading] = React.useState(false)
-  const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
-
-  // Point transfer state
-  const [activeTransferModal, setActiveTransferModal] = React.useState<'deposit' | 'withdraw' | null>(null)
-  const [transferAmount, setTransferAmount] = React.useState('')
-  const [isTransferring, setIsTransferring] = React.useState(false)
-  const [transferError, setTransferError] = React.useState<string | null>(null)
-
-  // Status toggle state
-  const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
-
-  // Password reset state
-  const [isPasswordResetOpen, setIsPasswordResetOpen] = React.useState(false)
-  const [newPassword, setNewPassword] = React.useState('')
-  const [confirmPassword, setConfirmPassword] = React.useState('')
-  const [isResettingPassword, setIsResettingPassword] = React.useState(false)
-  const [resetPasswordError, setResetPasswordError] = React.useState<string | null>(null)
-  const [resetPasswordSuccess, setResetPasswordSuccess] = React.useState<string | null>(null)
-
-  const [showCreatePassword, setShowCreatePassword] = React.useState(false)
-  const [showNewPassword, setShowNewPassword] = React.useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
-
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
     setGamesPage(1)
@@ -217,21 +213,26 @@ export default function PlayersPage() {
         setGamePlays(res.gamePlays)
         setPointsHistory(res.pointsHistory)
       }
-    }).catch(() => setIsLoadingHistory(false))
+    })
   }, [])
 
-  const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(90)
-  // Stable ref — tracks selected player ID without being a useCallback dependency
-  const selectedPlayerIdRef = React.useRef<string | null>(null)
-
-  const loadPlayers = React.useCallback((opts?: { silent?: boolean; reloadHistory?: boolean }) => {
-    const silent = opts?.silent ?? false
+  const loadAgentDetails = React.useCallback((opts?: { showIndicator?: boolean; reloadHistory?: boolean }) => {
+    const showIndicator = opts?.showIndicator ?? false
     const reloadHistory = opts?.reloadHistory ?? false
-    if (!silent) setIsRefreshing(true)
-    getPlayersAction().then((res) => {
-      if (!silent) setIsRefreshing(false)
-      setIsLoadingPlayers(false)
+    if (showIndicator) setIsRefreshing(true)
+    Promise.all([
+      getAgentDetailAction(agentUsername),
+      getAgentProfitReportAction({
+        targetAgentId: resolvedAgentIdRef.current || agentUsername,
+        datePreset: statsScopeRef.current,
+        filterDate: filterDateRef.current ? filterDateRef.current.toISOString() : undefined
+      })
+    ]).then(([res, resProf]) => {
+      if (showIndicator) setIsRefreshing(false)
+      if (res.agent) setAgentInfo(res.agent)
+      // Store the resolved UUID so other actions (transfer, toggle, password) can use it
+      if (res.resolvedAgentId) resolvedAgentIdRef.current = res.resolvedAgentId
+      else if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
       if (res.players) {
         setPlayers(res.players)
         const targetId = selectedPlayerIdRef.current
@@ -239,7 +240,7 @@ export default function PlayersPage() {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
-            // Only reload history on explicit request (manual refresh / player select), NOT on silent auto-tick
+            // Only reload history on explicit request, NOT on silent auto-tick
             if (reloadHistory) loadPlayerHistory(updated.id)
           }
         } else if (res.players.length > 0) {
@@ -248,35 +249,49 @@ export default function PlayersPage() {
           loadPlayerHistory(res.players[0].id)
         }
       }
-    }).catch(() => {
-      if (!silent) setIsRefreshing(false)
-      setIsLoadingPlayers(false)
-    })
-  }, [loadPlayerHistory]) // Stable — no selectedPlayer?.id dep, no interval leak
+      if (resProf) {
+        setProfitSummary(resProf.summary)
+        setProfitPlayers(resProf.players)
+      }
+    }).catch(() => { if (showIndicator) setIsRefreshing(false) })
+  }, [agentUsername, loadPlayerHistory]) // Stable — agentUsername from params, loadPlayerHistory has [] deps
+
+  // Keep filter refs in sync so stable loadAgentDetails always reads latest values
+  React.useEffect(() => {
+    filterDateRef.current = filterDate
+    statsScopeRef.current = statsScope
+    // Skip the initial mount — main effect below handles it
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false
+      return
+    }
+    // Re-fetch profit report whenever user changes date/scope filter
+    loadAgentDetails({ showIndicator: false, reloadHistory: false })
+  }, [filterDate, statsScope, loadAgentDetails])
 
   React.useEffect(() => {
-    loadPlayers({ reloadHistory: true }) // initial load: players + history
+    loadAgentDetails({ showIndicator: false, reloadHistory: true }) // initial: full load
 
     // 1s countdown tick — UI only, no DB fetch
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 90 : prev - 1))
     }, 1000)
 
-    // 90s data interval — silent, list only (no history cascade)
+    // 90s data interval — silent, balances + player list only (no history cascade)
     const dataInterval = setInterval(() => {
       setCountdown(90)
-      loadPlayers({ silent: true })
+      loadAgentDetails({ showIndicator: false })
     }, 90000)
 
     return () => {
       clearInterval(countdownTick)
       clearInterval(dataInterval)
     }
-  }, [loadPlayers])
+  }, [loadAgentDetails])
 
   const handleManualRefresh = async () => {
     setCountdown(90)
-    loadPlayers({ reloadHistory: true })
+    loadAgentDetails({ showIndicator: true, reloadHistory: true })
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
@@ -290,50 +305,54 @@ export default function PlayersPage() {
     setIsLoadingHistory(true)
     setGamePlays([])
     setPointsHistory([])
-    setFilterDate(undefined)
-    setFilterOutcome('all')
-    setFilterMode('all')
     setGamesPage(1)
     setPointsPage(1)
     loadPlayerHistory(player.id)
   }
 
-  const handleCreatePlayer = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleToggleAgentStatus = async () => {
+    if (!agentInfo) return
+    setIsTogglingStatus(true)
+    const res = await toggleAgentStatusAction(resolvedAgentIdRef.current, agentInfo.status)
+    setIsTogglingStatus(false)
+    if (res.success && res.newStatus) {
+      setAgentInfo({ ...agentInfo, status: res.newStatus })
+      loadAgentDetails({ showIndicator: false, reloadHistory: false })
+    }
+  }
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
-    setErrorMessage(null)
-    setSuccessMessage(null)
+    setIsUpdatingPassword(true)
+    setPasswordError(null)
+    setPasswordSuccess(null)
 
-    const formData = new FormData(e.currentTarget)
-    const username = formData.get('username') as string
+    const res = await updateAgentPasswordAction(resolvedAgentIdRef.current, newPassword)
 
-    const res = await createPlayerAction(formData)
-
-    setIsLoading(false)
+    setIsUpdatingPassword(false)
     if (res.error) {
-      setErrorMessage(res.error)
+      setPasswordError(res.error)
     } else {
-      setSuccessMessage(`Player "@${username}" registered successfully!`)
-      loadPlayers({ reloadHistory: true })
+      setPasswordSuccess('Agent password updated successfully!')
       setTimeout(() => {
-        setIsOpen(false)
-        setSuccessMessage(null)
+        setIsPasswordModalOpen(false)
+        setNewPassword('')
+        setPasswordSuccess(null)
       }, 1200)
     }
   }
 
   const handleTransferPoints = async (type: 'deposit' | 'withdraw') => {
-    if (!selectedPlayer) return
     const amountNum = parseFloat(transferAmount)
     if (isNaN(amountNum) || amountNum <= 0) {
-      setTransferError('Please enter a valid coin amount greater than 0.')
+      setTransferError('Please enter a valid amount greater than 0.')
       return
     }
 
     setIsTransferring(true)
     setTransferError(null)
 
-    const res = await transferPointsAction(selectedPlayer.id, amountNum, type)
+    const res = await transferPointsAction(resolvedAgentIdRef.current, amountNum, type)
 
     setIsTransferring(false)
     if (res.error) {
@@ -341,559 +360,374 @@ export default function PlayersPage() {
     } else {
       setActiveTransferModal(null)
       setTransferAmount('')
-      loadPlayers({ reloadHistory: true })
+      loadAgentDetails({ showIndicator: false, reloadHistory: false })
     }
   }
-
-  const handleToggleStatus = async () => {
-    if (!selectedPlayer) return
-    const nextStatus = selectedPlayer.status === 'Active' ? 'Disabled' : 'Active'
-    setIsTogglingStatus(true)
-
-    const res = await togglePlayerStatusAction(selectedPlayer.id, nextStatus)
-
-    setIsTogglingStatus(false)
-    if (!res.error) {
-      loadPlayers({ reloadHistory: true })
-    }
-  }
-
-  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!selectedPlayer) return
-    if (newPassword.length < 6) {
-      setResetPasswordError('Password must be at least 6 characters long.')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setResetPasswordError('Passwords do not match.')
-      return
-    }
-
-    setIsResettingPassword(true)
-    setResetPasswordError(null)
-
-    const res = await resetPlayerPasswordAction(selectedPlayer.id, newPassword)
-
-    setIsResettingPassword(false)
-    if (res.error) {
-      setResetPasswordError(res.error)
-    } else {
-      setResetPasswordSuccess('Password updated successfully!')
-      setTimeout(() => {
-        setIsPasswordResetOpen(false)
-        setNewPassword('')
-        setConfirmPassword('')
-        setResetPasswordSuccess(null)
-      }, 1200)
-    }
-  }
-
-  const filteredPlayers = players.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.username.toLowerCase().includes(searchQuery.toLowerCase())
-  )
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
-          <div className="flex items-center space-x-2">
-            <div className="p-1 rounded-lg bg-primary/10 text-primary border border-primary/20">
-              <Users className="h-4 w-4" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-3">
+          <Link 
+            href="/superadmin/agents" 
+            className="p-2 rounded-xl bg-card border border-border/80 text-foreground hover:bg-secondary/80 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div>
+            <div className="flex items-center space-x-2">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+                {agentInfo ? agentInfo.name : 'Agent Details'}
+              </h1>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black ${
+                agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+              }`}>
+                {agentInfo?.status || 'Active'}
+              </span>
             </div>
-            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-foreground">
-              Player Accounts
-            </h1>
-            <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
-              {players.length} Total
-            </span>
+            <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs flex items-center space-x-2 font-mono">
+              <span>@{agentInfo ? agentInfo.username : '...'}</span>
+              <span>&bull;</span>
+              <span className="text-[10px]">ID: {agentInfo?.id || agentUsername}</span>
+            </p>
           </div>
-          <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs hidden sm:block">
-            Manage player balances, reset passwords, track gameplay history and cashier points.
-          </p>
         </div>
 
-        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+        {/* High-Contrast Quick Action Controls & Refresh Bar */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Auto-Sync ({countdown}s)
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
-            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+            <RefreshCw className={`mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
-
-          {/* Add Player Modal */}
-          <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogTrigger className="flex-1 sm:flex-none h-8 sm:h-10 px-3 sm:px-4 font-extrabold bg-primary text-primary-foreground hover:bg-primary/95 shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
-              <Plus className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Add Player
+          {/* Deposit Modal */}
+          <Dialog
+            open={activeTransferModal === 'deposit'}
+            onOpenChange={(open) => {
+              setActiveTransferModal(open ? 'deposit' : null)
+              setTransferAmount('')
+              setTransferError(null)
+            }}
+          >
+            <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center border-0">
+              <ArrowUpRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Deposit
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[400px] bg-card border-border/80 text-foreground shadow-2xl rounded-2xl p-5">
-            <DialogHeader className="space-y-1">
-              <DialogTitle className="text-lg font-black">Register New Player</DialogTitle>
-              <DialogDescription className="text-muted-foreground text-xs">
-                Create a new player account for your agent sub-network.
-              </DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={handleCreatePlayer} className="space-y-3 pt-2">
-              {errorMessage && (
-                <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20 flex items-center">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 shrink-0 animate-ping" />
-                  {errorMessage}
+            <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
+              <DialogHeader>
+                <DialogTitle className="font-black text-lg">Deposit Coins to Agent</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Issue coins to {agentInfo?.name}&apos;s account.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                {transferError && (
+                  <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                    {transferError}
+                  </div>
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground font-semibold">Current Balance:</span>
+                  <span className="font-mono font-black text-success-text">{formatCurrency(agentInfo?.balance || 0)}</span>
                 </div>
-              )}
-              {successMessage && (
-                <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
-                  {successMessage}
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <Label htmlFor="name" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Player Name
-                </Label>
-                <Input
-                  id="name"
-                  name="name"
-                  placeholder="e.g. Rahul Sharma"
-                  className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="username" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Username
-                </Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs text-muted-foreground/70 font-mono">@</span>
-                  <Input
-                    id="username"
-                    name="username"
-                    placeholder="player_rahul"
-                    className="pl-8 h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
-                    required
+                <div className="space-y-1">
+                  <Label htmlFor="agent-deposit-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
+                  <Input 
+                    id="agent-deposit-amount" 
+                    type="number" 
+                    placeholder="e.g. 1000" 
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
                   />
                 </div>
               </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="password" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showCreatePassword ? "text" : "password"}
-                    placeholder="At least 6 characters"
-                    className="h-10 bg-background/60 border-border text-foreground pr-10 text-xs rounded-lg"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCreatePassword(!showCreatePassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
-                    aria-label={showCreatePassword ? "Hide password" : "Show password"}
-                  >
-                    {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
               <DialogFooter className="pt-2">
-                <Button type="submit" disabled={isLoading} className="w-full h-10 font-extrabold text-xs rounded-lg shadow-md cursor-pointer">
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {isLoading ? 'Registering Player...' : 'Create Player Account'}
+                <Button 
+                  onClick={() => handleTransferPoints('deposit')} 
+                  disabled={isTransferring}
+                  className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold cursor-pointer rounded-lg text-xs"
+                >
+                  {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isTransferring ? 'Processing...' : 'Confirm Deposit'}
                 </Button>
               </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+
+          {/* Withdraw Modal */}
+          <Dialog
+            open={activeTransferModal === 'withdraw'}
+            onOpenChange={(open) => {
+              setActiveTransferModal(open ? 'withdraw' : null)
+              setTransferAmount('')
+              setTransferError(null)
+            }}
+          >
+            <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-secondary/80 hover:bg-secondary text-amber-400 border border-amber-500/30 font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
+              <ArrowDownRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Withdraw
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
+              <DialogHeader>
+                <DialogTitle className="font-black text-lg">Withdraw Coins from Agent</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Retrieve coins from {agentInfo?.name}&apos;s account back to cashier pool.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                {transferError && (
+                  <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                    {transferError}
+                  </div>
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground font-semibold">Current Balance:</span>
+                  <span className="font-mono font-black text-danger-text">{formatCurrency(agentInfo?.balance || 0)}</span>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent-withdraw-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
+                  <Input 
+                    id="agent-withdraw-amount" 
+                    type="number" 
+                    placeholder="e.g. 500" 
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
+                  />
+                </div>
+              </div>
+              <DialogFooter className="pt-2">
+                <Button 
+                  onClick={() => handleTransferPoints('withdraw')} 
+                  disabled={isTransferring}
+                  variant="destructive"
+                  className="w-full h-10 font-extrabold cursor-pointer rounded-lg text-xs"
+                >
+                  {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Change Password Modal */}
+          <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+            <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-secondary/60 hover:bg-secondary border border-border text-foreground font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
+              <Key className="mr-1 h-3.5 w-3.5" /> Password
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
+              <DialogHeader>
+                <DialogTitle className="font-black text-lg">Update Agent Password</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Set a new password for {agentInfo?.name}.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleUpdatePassword} className="space-y-3 py-2">
+                {passwordError && (
+                  <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                    {passwordError}
+                  </div>
+                )}
+                {passwordSuccess && (
+                  <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
+                    {passwordSuccess}
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label htmlFor="new-password text-[10px]">New Password</Label>
+                  <div className="relative">
+                    <Input 
+                      id="new-password" 
+                      type={showPassword ? "text" : "password"} 
+                      placeholder="••••••••" 
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg"
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
+                    >
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <DialogFooter className="pt-2">
+                  <Button type="submit" disabled={isUpdatingPassword} className="w-full h-10 font-extrabold cursor-pointer text-xs rounded-lg">
+                    {isUpdatingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {isUpdatingPassword ? 'Updating Password...' : 'Update Password'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Block / Unblock Agent Button */}
+          <Button 
+            onClick={handleToggleAgentStatus}
+            disabled={isTogglingStatus}
+            variant="outline"
+            className={`h-8 sm:h-10 px-2.5 sm:px-3 font-extrabold cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center ${
+              agentInfo?.status === 'Active' 
+                ? 'border-red-500/40 text-red-400 hover:bg-red-500/10' 
+                : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
+            }`}
+          >
+            {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
+              agentInfo?.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
+            )}
+            {agentInfo?.status === 'Active' ? 'Block' : 'Unblock'}
+          </Button>
         </div>
       </div>
 
-      {/* Compact Grid Layout (3 cols left vs 9 cols right) */}
+      {/* Stats Metric Strip (Ultra-Compact 3-Column Grid on Mobile) */}
+      <div className="grid gap-1.5 sm:gap-3 grid-cols-3">
+        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-emerald-500/30 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+              Coins
+            </span>
+            <div className="hidden sm:flex p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+              <Coins className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-1 sm:mt-2">
+            {isRefreshing ? (
+              <div className="h-5 sm:h-7 w-16 sm:w-24 bg-secondary/80 rounded animate-pulse my-0.5" />
+            ) : (
+              <div className="text-xs sm:text-2xl font-mono font-black text-foreground tracking-tight truncate">
+                {formatCurrency(agentInfo?.balance || 0)}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 hidden sm:block">Available for allocation</p>
+          </div>
+        </Card>
+
+        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-primary/30 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+              Players
+            </span>
+            <div className="hidden sm:flex p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+              <Users className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-1 sm:mt-2">
+            {isRefreshing ? (
+              <div className="h-5 sm:h-7 w-10 sm:w-12 bg-secondary/80 rounded animate-pulse my-0.5" />
+            ) : (
+              <div className="text-xs sm:text-2xl font-mono font-black text-foreground tracking-tight">
+                {players.length}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 hidden sm:block">Sub-registered network</p>
+          </div>
+        </Card>
+
+        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-amber-500/30 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+              Status
+            </span>
+            <div className="hidden sm:flex p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+              <Activity className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-1 sm:mt-2">
+            <span className={`inline-flex items-center rounded-full px-1.5 sm:px-2.5 py-0.2 sm:py-0.5 text-[8px] sm:text-[10px] font-black uppercase ${
+              agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+            }`}>
+              {agentInfo?.status || 'Active'}
+            </span>
+            <p className="text-[10px] text-muted-foreground font-medium mt-1 hidden sm:block">Operational status</p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Main Player & History Layout Grid (3:9 Ratio) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 min-h-[600px]">
         {/* --- LEFT SIDE: COMPACT PLAYERS LIST (md:col-span-3) --- */}
         <div className={`md:col-span-3 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
-            <Input 
-              placeholder="Search players..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 bg-card border-border/80 text-foreground text-xs rounded-xl focus:border-primary/50 shadow-xs" 
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-2.5 text-[10px] text-muted-foreground hover:text-foreground font-bold"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+          <div className="p-3 bg-card border border-border/80 rounded-2xl shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center space-x-1.5">
+                <Users className="h-3.5 w-3.5 text-primary" />
+                <span>Agent Players</span>
+              </h3>
+              <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
+                {players.length} total
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Active directory under this agency.</p>
 
-          {/* Compact Player Cards List Container */}
-          <div className="space-y-1.5 max-h-[620px] overflow-y-auto pr-0.5 custom-scrollbar">
-            {isLoadingPlayers ? (
-              [1, 2, 3, 4, 5].map((i) => (
-                <Card key={i} className="p-2.5 border-border/60 bg-card/60 animate-pulse space-y-1.5 rounded-xl">
-                  <div className="flex justify-between items-center">
-                    <div className="h-3.5 bg-secondary/80 rounded w-1/3" />
-                    <div className="h-3.5 bg-secondary/60 rounded-full w-12" />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="h-3 bg-secondary/60 rounded w-1/4" />
-                    <div className="h-3.5 bg-secondary/80 rounded w-16" />
-                  </div>
-                </Card>
-              ))
-            ) : filteredPlayers.length > 0 ? (
-              filteredPlayers.map((player) => {
-                const isSelected = selectedPlayer?.id === player.id
-                const isPlayerOnline = player.isOnline && player.status === 'Active'
-                return (
-                  <button
-                    key={player.id}
-                    onClick={() => handleSelectPlayer(player)}
-                    className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col space-y-1 ${
-                      isSelected
-                        ? 'bg-primary/10 border-primary shadow-xs text-foreground'
-                        : 'bg-card border-border/70 hover:bg-secondary/40 text-foreground'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 min-w-0">
-                        <div className="relative shrink-0">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] ${
-                            isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
-                          }`}>
-                            {player.name[0]?.toUpperCase()}
-                          </div>
-                          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
-                            isPlayerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-                          }`} />
-                        </div>
-                        <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
-                      </div>
-                      <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
-                        player.status === 'Active'
-                          ? 'bg-success-bg text-success-text border border-emerald-500/20'
-                          : 'bg-danger-bg text-danger-text border border-red-500/20'
-                      }`}>
-                        {player.status}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
-                      <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
-                      {isRefreshing || isLoadingPlayers ? (
-                        <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
-                      ) : (
-                        <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
-                      )}
-                    </div>
-                  </button>
-                )
-              })
-            ) : (
-              <div className="p-6 text-center text-xs text-muted-foreground font-medium bg-card rounded-xl border border-border">
-                No players found.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* --- RIGHT SIDE: MAIN PLAYER DETAILS & HISTORY (md:col-span-9) --- */}
-        <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
-          {selectedPlayer ? (
-            <div className="space-y-3">
-              {/* Selected Player Header Card (ULTRA COMPACT) */}
-              <Card className="border-border/80 bg-card p-3 sm:p-3.5 rounded-2xl shadow-md space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  {/* Player Avatar, Name & Live Sync Status */}
-                  <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-0.5 custom-scrollbar pt-1">
+              {players.length > 0 ? (
+                players.map((player) => {
+                  const isSelected = selectedPlayer?.id === player.id
+                  const isPlayerOnline = player.isOnline && player.status === 'Active'
+                  return (
                     <button
-                      onClick={() => setShowMobileDetail(false)}
-                      className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none shrink-0"
-                      aria-label="Back to players list"
+                      key={player.id}
+                      onClick={() => handleSelectPlayer(player)}
+                      className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col space-y-1 ${
+                        isSelected
+                          ? 'bg-primary/10 border-primary shadow-xs text-foreground'
+                          : 'bg-card border-border/70 hover:bg-secondary/40 text-foreground'
+                      }`}
                     >
-                      <ArrowLeft className="h-4 w-4" />
-                    </button>
-
-                    <div className="relative shrink-0">
-                      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm">
-                        {selectedPlayer.name[0]?.toUpperCase()}
-                      </div>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
-                        selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-                      }`} />
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <h2 className="text-sm sm:text-base font-black text-foreground truncate">{selectedPlayer.name}</h2>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black shrink-0 ${
-                          selectedPlayer.status === 'Active'
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <div className="relative shrink-0">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] ${
+                              isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
+                            }`}>
+                              {player.name[0]?.toUpperCase()}
+                            </div>
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
+                              isPlayerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                            }`} />
+                          </div>
+                          <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
+                        </div>
+                        <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
+                          player.status === 'Active'
                             ? 'bg-success-bg text-success-text border border-emerald-500/20'
                             : 'bg-danger-bg text-danger-text border border-red-500/20'
                         }`}>
-                          {selectedPlayer.status}
+                          {player.status}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-2 text-[10px] font-mono">
-                        <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
-                        <span className="text-muted-foreground/60">&bull;</span>
-                        {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
-                          <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
-                            Real-Time Sync Active
-                          </span>
+
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
+                        <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
+                        {isRefreshing ? (
+                          <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
                         ) : (
-                          <span className="inline-flex items-center text-red-400/80 font-bold text-[9px]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1" />
-                            Player Offline
-                          </span>
+                          <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
                         )}
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Balance Summary Pill */}
-                  <div className="bg-secondary/40 border border-border/60 px-3 py-1.5 rounded-xl flex items-center justify-between sm:justify-end space-x-2.5 shrink-0">
-                    <div className="text-left sm:text-right">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                        Coins Balance
-                      </span>
-                      {isRefreshing || isLoadingPlayers ? (
-                        <div className="h-5 w-16 bg-secondary/80 rounded animate-pulse mt-0.5" />
-                      ) : (
-                        <span className="text-base font-mono font-black text-foreground">
-                          {formatCurrency(selectedPlayer.balance)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="p-1 rounded-lg bg-primary/10 text-primary">
-                      <Coins className="h-3.5 w-3.5" />
-                    </div>
-                  </div>
+                    </button>
+                  )
+                })
+              ) : (
+                <div className="p-6 text-center text-xs text-muted-foreground font-medium">
+                  No players registered under this agent.
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
 
-                {/* Quick Actions Bar (Compact Buttons: h-8) */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-border/50">
-                  {/* Deposit Modal */}
-                  <Dialog open={activeTransferModal === 'deposit'} onOpenChange={(open) => {
-                    setActiveTransferModal(open ? 'deposit' : null)
-                    setTransferAmount('')
-                    setTransferError(null)
-                  }}>
-                    <DialogTrigger className="w-full h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-sm cursor-pointer rounded-lg text-[11px] flex items-center justify-center border-0">
-                      <ArrowUpRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Deposit Coins
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
-                      <DialogHeader>
-                        <DialogTitle className="font-black text-lg">Deposit Coins</DialogTitle>
-                        <DialogDescription className="text-xs text-muted-foreground">
-                          Issue cashier coins to {selectedPlayer.name} (@{selectedPlayer.username}).
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-3 py-2">
-                        {transferError && (
-                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                            {transferError}
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <Label htmlFor="deposit-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Amount (Coins)
-                          </Label>
-                          <Input 
-                            id="deposit-amount" 
-                            type="number" 
-                            placeholder="e.g. 500" 
-                            value={transferAmount}
-                            onChange={(e) => setTransferAmount(e.target.value)}
-                            className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button 
-                          onClick={() => handleTransferPoints('deposit')} 
-                          disabled={isTransferring}
-                          className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold cursor-pointer rounded-lg text-xs"
-                        >
-                          {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          {isTransferring ? 'Processing...' : 'Confirm Deposit'}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Withdraw Modal */}
-                  <Dialog open={activeTransferModal === 'withdraw'} onOpenChange={(open) => {
-                    setActiveTransferModal(open ? 'withdraw' : null)
-                    setTransferAmount('')
-                    setTransferError(null)
-                  }}>
-                    <DialogTrigger className="w-full h-8 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center bg-transparent">
-                      <ArrowDownRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Withdraw
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
-                      <DialogHeader>
-                        <DialogTitle className="font-black text-lg">Withdraw Coins</DialogTitle>
-                        <DialogDescription className="text-xs text-muted-foreground">
-                          Deduct cashier coins from {selectedPlayer.name} (@{selectedPlayer.username}).
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-3 py-2">
-                        {transferError && (
-                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                            {transferError}
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <Label htmlFor="withdraw-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Amount (Coins)
-                          </Label>
-                          <Input 
-                            id="withdraw-amount" 
-                            type="number" 
-                            placeholder="e.g. 200" 
-                            value={transferAmount}
-                            onChange={(e) => setTransferAmount(e.target.value)}
-                            className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button 
-                          onClick={() => handleTransferPoints('withdraw')} 
-                          disabled={isTransferring}
-                          className="w-full h-10 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-extrabold cursor-pointer rounded-lg text-xs"
-                        >
-                          {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          {isTransferring ? 'Processing...' : 'Confirm Withdrawal'}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Reset Password Modal */}
-                  <Dialog 
-                    open={isPasswordResetOpen}
-                    onOpenChange={(open) => {
-                      setIsPasswordResetOpen(open)
-                      setNewPassword('')
-                      setConfirmPassword('')
-                      setResetPasswordError(null)
-                      setResetPasswordSuccess(null)
-                      setShowNewPassword(false)
-                      setShowConfirmPassword(false)
-                    }}
-                  >
-                    <DialogTrigger className="w-full h-8 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-[11px] font-extrabold rounded-lg flex items-center justify-center bg-transparent">
-                      <KeyRound className="mr-1 h-3.5 w-3.5" /> Password
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
-                      <DialogHeader>
-                        <DialogTitle className="font-black text-lg">Reset Player Password</DialogTitle>
-                        <DialogDescription className="text-xs text-muted-foreground">
-                          Set a new password for {selectedPlayer.name}.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={handleResetPassword} className="space-y-3 py-2">
-                        {resetPasswordError && (
-                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                            {resetPasswordError}
-                          </div>
-                        )}
-                        {resetPasswordSuccess && (
-                          <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
-                            {resetPasswordSuccess}
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <Label htmlFor="new-password text-[10px]">New Password</Label>
-                          <div className="relative">
-                            <Input 
-                              id="new-password" 
-                              type={showNewPassword ? "text" : "password"} 
-                              placeholder="At least 6 characters" 
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg" 
-                              required
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowNewPassword(!showNewPassword)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
-                            >
-                              {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="confirm-password text-[10px]">Confirm Password</Label>
-                          <div className="relative">
-                            <Input 
-                              id="confirm-password" 
-                              type={showConfirmPassword ? "text" : "password"} 
-                              placeholder="Confirm new password" 
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg" 
-                              required
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
-                            >
-                              {showConfirmPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <DialogFooter className="pt-2">
-                          <Button 
-                            type="submit" 
-                            disabled={isResettingPassword}
-                            className="w-full h-10 font-extrabold cursor-pointer text-xs rounded-lg"
-                          >
-                            {isResettingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            {isResettingPassword ? 'Updating Password...' : 'Save New Password'}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Status Toggle Button */}
-                  <Button
-                    onClick={handleToggleStatus}
-                    disabled={isTogglingStatus}
-                    variant="outline"
-                    className={`w-full h-8 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center ${
-                      selectedPlayer.status === 'Active'
-                        ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
-                        : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
-                    }`}
-                  >
-                    {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
-                      selectedPlayer.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    {selectedPlayer.status === 'Active' ? 'Disable Player' : 'Activate Player'}
-                  </Button>
-                </div>
-              </Card>
-
+        {/* --- RIGHT SIDE: PLAYER HISTORY (md:col-span-9) --- */}
+        <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
+          {selectedPlayer ? (
+            <div className="space-y-3">
               {/* 📊 SLIM HIGH-DENSITY PERFORMANCE METRIC STRIP */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between px-1">
@@ -979,35 +813,55 @@ export default function PlayersPage() {
                 )}
               </div>
 
-              {/* History Section Container with Filter Toolbar */}
               <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
-                {/* Filter Toolbar (Date Picker + Quick Filters) */}
-                <div className="p-3 border-b border-border/60 bg-secondary/10 flex flex-wrap items-center justify-between gap-2.5">
-                  {/* Left Side: Tabs */}
-                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5">
+                {/* Header Bar with Live Sync Indicator */}
+                <div className="p-3 sm:p-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-secondary/10">
+                  <div className="flex items-center space-x-2.5">
                     <button
-                      onClick={() => setActiveTab('games')}
-                      className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
-                        activeTab === 'games' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                      onClick={() => setShowMobileDetail(false)}
+                      className="md:hidden p-1.5 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 focus:outline-none"
+                      aria-label="Back to players list"
                     >
-                      <Gamepad2 className="h-3.5 w-3.5 text-primary" />
-                      <span>Game Plays</span>
-                      <span className="text-[10px] text-muted-foreground">({filteredGames.length})</span>
+                      <ArrowLeft className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => setActiveTab('points')}
-                      className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
-                        activeTab === 'points' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <Coins className="h-3.5 w-3.5 text-amber-400" />
-                      <span>Coins History</span>
-                      <span className="text-[10px] text-muted-foreground">({filteredPoints.length})</span>
-                    </button>
+
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm">
+                        {selectedPlayer.name[0]?.toUpperCase()}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
+                        selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                      }`} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-xs sm:text-sm font-black text-foreground leading-tight truncate">
+                          History of {selectedPlayer.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 py-0.2 rounded font-bold">
+                          {formatCurrency(selectedPlayer.balance)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-[10px] font-mono">
+                        <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
+                        <span className="text-muted-foreground/60">&bull;</span>
+                        {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
+                          <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
+                            Real-Time Sync Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center text-red-400/80 font-bold text-[9px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1" />
+                            Player Offline
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Right Side: Date Picker & Quick Filter Pills */}
+                  {/* Date Filter & Quick Filter Pills */}
                   <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
                     {/* Today / Lifetime Quick Date Presets */}
                     <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
@@ -1033,7 +887,6 @@ export default function PlayersPage() {
                       </button>
                     </div>
 
-                    {/* Date Picker Popover */}
                     <Popover>
                       <PopoverTrigger className="h-8 px-2.5 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-xl flex items-center justify-center cursor-pointer">
                         <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -1050,11 +903,10 @@ export default function PlayersPage() {
                     </Popover>
 
                     {filterDate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setFilterDate(undefined)}
-                        className="h-8 px-2 text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => setFilterDate(undefined)} 
+                        className="h-8 px-2 text-[10px] text-muted-foreground hover:text-foreground font-bold cursor-pointer"
                       >
                         <X className="mr-1 h-3 w-3" /> Clear
                       </Button>
@@ -1096,22 +948,68 @@ export default function PlayersPage() {
                   </div>
                 </div>
 
-                {/* Tab Content Display */}
-                <div className="overflow-hidden">
+                {/* Tab Controls */}
+                <div className="flex border-b border-border/60 bg-secondary/20">
+                <button
+                  onClick={() => setActiveTab('games')}
+                  className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
+                    activeTab === 'games' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Gamepad2 className="h-3.5 w-3.5 text-primary" />
+                  <span>Game Plays</span>
                   {isLoadingHistory ? (
-                    <div className="p-4 space-y-2.5">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
-                          <div className="h-3.5 bg-secondary/80 rounded w-1/4" />
-                          <div className="h-3.5 bg-secondary/60 rounded w-1/3" />
-                          <div className="h-3.5 bg-secondary/70 rounded w-1/6" />
-                          <div className="h-3.5 bg-secondary/80 rounded w-1/5" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : activeTab === 'games' ? (
-                    filteredGames.length > 0 ? (
-                      <>
+                    <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">({filteredGames.length})</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('points')}
+                  className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
+                    activeTab === 'points' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Coins className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Coins History</span>
+                  {isLoadingHistory ? (
+                    <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">({pointsHistory.length})</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('profit')}
+                  className={`flex-1 py-2.5 text-xs font-extrabold transition-all flex items-center justify-center space-x-1.5 border-b-2 ${
+                    activeTab === 'profit' ? 'border-primary text-foreground bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>P&L Audit</span>
+                  {isLoadingHistory ? (
+                    <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">({profitPlayers.length})</span>
+                  )}
+                </button>
+              </div>
+
+              {/* Content Body */}
+              <div className="overflow-hidden min-h-[380px]">
+                {isLoadingHistory ? (
+                  <div className="p-4 space-y-2.5">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
+                        <div className="h-3.5 bg-secondary/80 rounded w-1/4" />
+                        <div className="h-3.5 bg-secondary/60 rounded w-1/3" />
+                        <div className="h-3.5 bg-secondary/70 rounded w-1/6" />
+                        <div className="h-3.5 bg-secondary/80 rounded w-1/5" />
+                      </div>
+                    ))}
+                  </div>
+                ) : activeTab === 'games' ? (
+                  filteredGames.length > 0 ? (
+                    <>
                         {/* --- MOBILE CARDS VIEW (< sm) --- */}
                         <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
                           {paginatedGames.map((spin) => {
@@ -1119,6 +1017,7 @@ export default function PlayersPage() {
                             const singleCount = Object.keys(spin.singleBets || {}).length
                             const doubleCount = Object.keys(spin.doubleBets || {}).length
                             const tripleCount = Object.keys(spin.tripleBets || {}).length
+                            const isWon = spin.win > 0
 
                             return (
                               <Card key={spin.id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
@@ -1130,9 +1029,9 @@ export default function PlayersPage() {
                                   </div>
                                   <div className="flex items-center space-x-2">
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                      spin.status === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+                                      isWon ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
                                     }`}>
-                                      {spin.status}
+                                      {isWon ? 'WON' : 'LOST'}
                                     </span>
                                     <button
                                       onClick={() => toggleSpinExpand(spin.id)}
@@ -1336,7 +1235,7 @@ export default function PlayersPage() {
                                       </TableCell>
                                     </TableRow>
 
-                                    {/* Expanded Desktop Panel */}
+                                    {/* Expanded Desktop Breakdown Panel */}
                                     {isExpanded && (
                                       <TableRow className="border-border bg-secondary/10 hover:bg-secondary/10">
                                         <TableCell colSpan={9} className="p-3 sm:p-4">
@@ -1465,8 +1364,8 @@ export default function PlayersPage() {
                         No game play history recorded for the selected filter.
                       </div>
                     )
-                  ) : (
-                    filteredPoints.length > 0 ? (
+                  ) : activeTab === 'points' ? (
+                      filteredPoints.length > 0 ? (
                       <>
                         <Table>
                           <TableHeader>
@@ -1519,7 +1418,80 @@ export default function PlayersPage() {
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
-                        No coin transactions recorded for the selected filter.
+                        No coin transactions recorded for this player.
+                      </div>
+                    )
+                  ) : (
+                    /* activeTab === 'profit' Player P/L Audit View */
+                    profitPlayers.length > 0 ? (
+                      <div className="p-3 space-y-3">
+                        {/* Summary Micro Bar */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-secondary/20 p-2.5 rounded-xl border border-border/50 text-xs">
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Today&apos;s P/L</span>
+                            <span className={`font-mono font-black ${profitSummary.todaysPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.todaysPnl >= 0 ? '+' : ''}{formatCurrency(profitSummary.todaysPnl)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Lifetime P/L</span>
+                            <span className={`font-mono font-black ${profitSummary.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.lifetimePnl >= 0 ? '+' : ''}{formatCurrency(profitSummary.lifetimePnl)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Bets</span>
+                            <span className="font-mono font-bold text-foreground">{formatCurrency(profitSummary.totalVolume)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase block">House Margin</span>
+                            <span className={`font-mono font-black ${profitSummary.netMarginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.netMarginPct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Player P/L Table */}
+                        <Table>
+                          <TableHeader className="bg-secondary/30">
+                            <TableRow>
+                              <TableHead className="text-[10px] uppercase font-black">Player</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-center">Plays</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Bets (In)</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Wins (Out)</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Net P/L (+/-)</TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-right">Margin %</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody className="divide-y divide-border/60">
+                            {profitPlayers.map((p) => (
+                              <TableRow key={p.id} className="hover:bg-secondary/20 transition-colors">
+                                <TableCell className="py-2">
+                                  <span className="font-mono text-xs font-black text-foreground">@{p.username}</span>
+                                </TableCell>
+                                <TableCell className="py-2 text-center font-mono text-xs text-muted-foreground font-bold">
+                                  {p.totalPlays}
+                                </TableCell>
+                                <TableCell className="py-2 text-right font-mono text-xs text-foreground font-bold">
+                                  {formatCurrency(p.totalBets)}
+                                </TableCell>
+                                <TableCell className="py-2 text-right font-mono text-xs text-amber-500 font-bold">
+                                  {formatCurrency(p.totalWins)}
+                                </TableCell>
+                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                  {p.netPnl >= 0 ? '+' : ''}{formatCurrency(p.netPnl)}
+                                </TableCell>
+                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                  {p.marginPct.toFixed(1)}%
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="p-10 text-center text-xs text-muted-foreground font-medium">
+                        No profit/loss data recorded for this agent.
                       </div>
                     )
                   )}
