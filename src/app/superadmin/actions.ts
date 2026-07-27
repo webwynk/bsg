@@ -298,7 +298,43 @@ export async function getLatestGameDrawsAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Fetch game_history (individual player spin bets)
+    // Fetch round_bets (multiplayer round bets placed by players)
+    let roundBetsDraws: any[] = []
+    try {
+      const { data: rbRows } = await supabaseAdmin
+        .from('round_bets')
+        .select('*, profiles(username), game_rounds(red, green, black, status)')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (rbRows) {
+        roundBetsDraws = rbRows.map(row => {
+          const round = row.game_rounds || {}
+          const red = round.red ?? 0
+          const green = round.green ?? 0
+          const black = round.black ?? 0
+          const resNum = red * 100 + green * 10 + black
+          const winAmt = Number(row.win_amount || 0)
+          const stakeAmt = Number(row.total_stake || 0)
+
+          return {
+            id: row.id,
+            game: 'Triple Chance',
+            resultNumber: resNum,
+            redDigit: red,
+            greenDigit: green,
+            blackDigit: black,
+            betAmount: stakeAmt,
+            winAmount: winAmt,
+            status: winAmt > 0 ? 'WON' : 'LOST',
+            playerUsername: row.profiles?.username || 'player',
+            createdAt: row.created_at
+          }
+        })
+      }
+    } catch (_) {}
+
+    // Fetch game_history (legacy single-player spin bets)
     const { data: historyRows } = await supabaseAdmin
       .from('game_history')
       .select('*')
@@ -363,8 +399,8 @@ export async function getLatestGameDrawsAction() {
       }
     })
 
-    // Merge both streams, deduplicate by ID, and sort by createdAt DESC
-    const allDraws = [...historyDraws, ...roundDraws]
+    // Merge all streams, deduplicate by ID, and sort by createdAt DESC
+    const allDraws = [...roundBetsDraws, ...historyDraws, ...roundDraws]
       .filter((item, index, self) => index === self.findIndex(t => t.id === item.id))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 10)
