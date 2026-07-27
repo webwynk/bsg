@@ -209,8 +209,8 @@ export default function AgentDetailPage({ params }: Props) {
     })
   }, [])
 
-  const loadAgentDetails = React.useCallback(() => {
-    setIsRefreshing(true)
+  const loadAgentDetails = React.useCallback((showIndicator: boolean = false) => {
+    if (showIndicator) setIsRefreshing(true)
     Promise.all([
       getAgentDetailAction(agentId),
       getAgentProfitReportAction({ targetAgentId: agentId, datePreset: statsScope, filterDate: filterDate ? filterDate.toISOString() : undefined })
@@ -235,15 +235,15 @@ export default function AgentDetailPage({ params }: Props) {
   }, [agentId, selectedPlayer?.id, loadPlayerHistory, filterDate, statsScope])
 
   React.useEffect(() => {
-    loadAgentDetails()
+    loadAgentDetails(false)
     const interval = setInterval(() => {
-      loadAgentDetails()
+      loadAgentDetails(false)
     }, 30000)
     return () => clearInterval(interval)
   }, [loadAgentDetails])
 
   const handleManualRefresh = async () => {
-    loadAgentDetails()
+    loadAgentDetails(true)
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {

@@ -56,8 +56,8 @@ export default function CoinsIssuedPage() {
     })
   }, [])
 
-  const loadData = React.useCallback(() => {
-    setIsLoading(true)
+  const loadData = React.useCallback((isInitial: boolean = false) => {
+    if (isInitial) setIsLoading(true)
 
     let startDate: string | undefined = undefined
     let endDate: string | undefined = undefined
@@ -107,16 +107,16 @@ export default function CoinsIssuedPage() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
   React.useEffect(() => {
-    loadData()
+    loadData(true)
     const interval = setInterval(() => {
-      loadData()
+      loadData(false)
     }, 30000)
     return () => clearInterval(interval)
   }, [loadData])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadData()
+    loadData(false)
     setTimeout(() => setIsRefreshing(false), 600)
   }
 

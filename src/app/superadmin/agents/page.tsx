@@ -45,8 +45,8 @@ export default function AgentsPage() {
 
   const itemsPerPage = 10
 
-  const loadAgents = React.useCallback((isSilent: boolean = false) => {
-    if (!isSilent) setIsLoadingAgents(true)
+  const loadAgents = React.useCallback((isInitial: boolean = false) => {
+    if (isInitial) setIsLoadingAgents(true)
     getAgentsAction().then((res) => {
       setIsLoadingAgents(false)
       if (res.agents) {
@@ -56,9 +56,9 @@ export default function AgentsPage() {
   }, [])
 
   React.useEffect(() => {
-    loadAgents()
+    loadAgents(true)
     const interval = setInterval(() => {
-      loadAgents(true)
+      loadAgents(false)
     }, 30000)
     return () => clearInterval(interval)
   }, [loadAgents])
