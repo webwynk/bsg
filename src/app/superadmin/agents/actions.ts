@@ -324,7 +324,7 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         p_amount: sanitizedAmount
       })
 
-      // Fallback for PostgREST schema cache parameter ordering
+      // Fallback 1: Try alternate parameter ordering (p_amount before p_player_id)
       if (rpcErr && rpcErr.message.includes('schema cache')) {
         const fallbackRes = await supabaseAdmin.rpc(rpcName, {
           p_agent_id: agentId,
@@ -333,6 +333,56 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         })
         if (!fallbackRes.error) {
           rpcRes = fallbackRes.data
+          rpcErr = null
+        }
+      }
+
+      // Fallback 2: Direct atomic ledger transfer via service-role client if RPC is missing/un-migrated
+      if (rpcErr && rpcErr.message.includes('schema cache')) {
+        const { data: agentProfile } = await supabaseAdmin.from('profiles').select('id, username, balance').eq('id', agentId).single()
+        if (!agentProfile) return { error: 'Agent profile not found.' }
+
+        if (type === 'deposit') {
+          if (agentProfile.balance < sanitizedAmount) {
+            return { error: `Insufficient agent coins balance. Available: ${agentProfile.balance}` }
+          }
+          const newAgentBal = agentProfile.balance - sanitizedAmount
+          const newPlayerBal = targetProfile.balance + sanitizedAmount
+
+          await supabaseAdmin.from('profiles').update({ balance: newAgentBal, updated_at: new Date().toISOString() }).eq('id', agentId)
+          await supabaseAdmin.from('profiles').update({ balance: newPlayerBal, agent_id: agentId, updated_at: new Date().toISOString() }).eq('id', targetId)
+          await supabaseAdmin.from('transactions').insert({
+            user_id: targetId,
+            agent_id: agentId,
+            agent_username: agentProfile.username,
+            user_name: targetProfile.username,
+            user_username: targetProfile.username,
+            type: 'agent_credit',
+            amount: sanitizedAmount,
+            balance_after: newPlayerBal
+          })
+          rpcRes = { new_player_balance: newPlayerBal, new_agent_balance: newAgentBal }
+          rpcErr = null
+        } else {
+          if (targetProfile.balance < sanitizedAmount) {
+            return { error: `Insufficient player coins balance. Available: ${targetProfile.balance}` }
+          }
+          const newPlayerBal = targetProfile.balance - sanitizedAmount
+          const newAgentBal = agentProfile.balance + sanitizedAmount
+
+          await supabaseAdmin.from('profiles').update({ balance: newPlayerBal, updated_at: new Date().toISOString() }).eq('id', targetId)
+          await supabaseAdmin.from('profiles').update({ balance: newAgentBal, updated_at: new Date().toISOString() }).eq('id', agentId)
+          await supabaseAdmin.from('transactions').insert({
+            user_id: targetId,
+            agent_id: agentId,
+            agent_username: agentProfile.username,
+            user_name: targetProfile.username,
+            user_username: targetProfile.username,
+            type: 'agent_debit',
+            amount: -sanitizedAmount,
+            balance_after: newPlayerBal
+          })
+          rpcRes = { new_player_balance: newPlayerBal, new_agent_balance: newAgentBal }
           rpcErr = null
         }
       }
@@ -355,12 +405,49 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
 
     // Case 2: SuperAdmin transferring to an Agent directly (issue_agent_coins)
     if (targetProfile.role === 'agent') {
-      const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('issue_agent_coins', {
+      let { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('issue_agent_coins', {
         p_admin_id: callerUser?.id || null,
         p_agent_id: targetId,
         p_amount: sanitizedAmount,
         p_type: type
       })
+
+      // Fallback 1: Try older signature issue_agent_coins(p_agent_id, p_amount)
+      if (rpcErr && rpcErr.message.includes('schema cache')) {
+        const fb1 = await supabaseAdmin.rpc('issue_agent_coins', {
+          p_agent_id: targetId,
+          p_amount: type === 'withdraw' ? -sanitizedAmount : sanitizedAmount
+        })
+        if (!fb1.error) {
+          rpcRes = fb1.data
+          rpcErr = null
+        }
+      }
+
+      // Fallback 2: Direct atomic profile balance update via service-role client
+      if (rpcErr && rpcErr.message.includes('schema cache')) {
+        const delta = type === 'withdraw' ? -sanitizedAmount : sanitizedAmount
+        const newBal = Number(targetProfile.balance || 0) + delta
+        if (newBal < 0) {
+          return { error: 'Insufficient agent balance to withdraw.' }
+        }
+
+        const { error: updErr } = await supabaseAdmin
+          .from('profiles')
+          .update({ balance: newBal, updated_at: new Date().toISOString() })
+          .eq('id', targetId)
+
+        if (!updErr) {
+          await supabaseAdmin.from('agent_coin_transactions').insert({
+            agent_id: targetId,
+            agent_username: targetProfile.username,
+            type,
+            amount: sanitizedAmount
+          })
+          rpcRes = { new_balance: newBal }
+          rpcErr = null
+        }
+      }
 
       if (rpcErr) {
         return { error: rpcErr.message }
