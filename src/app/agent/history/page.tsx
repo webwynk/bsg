@@ -30,8 +30,10 @@ export default function HistoryPage() {
 
   const itemsPerPage = 10
 
-  const loadHistory = React.useCallback(() => {
-    setIsLoading(true)
+  const [countdown, setCountdown] = React.useState(60)
+
+  const loadHistory = React.useCallback((isInitial = false) => {
+    if (isInitial) setIsLoading(true) // skeleton only on first load
     getAgentTransactionHistoryAction().then((res) => {
       setIsLoading(false)
       if (res.transactions) {
@@ -42,16 +44,27 @@ export default function HistoryPage() {
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadHistory()
+    setCountdown(60)
+    loadHistory(false) // no skeleton on manual refresh
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
   React.useEffect(() => {
-    loadHistory()
-    const interval = setInterval(() => {
-      loadHistory()
-    }, 30000)
-    return () => clearInterval(interval)
+    loadHistory(true) // initial: show skeleton
+
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
+    }, 1000)
+
+    const dataInterval = setInterval(() => {
+      setCountdown(60)
+      loadHistory(false) // silent: no skeleton
+    }, 60000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(dataInterval)
+    }
   }, [loadHistory])
 
   const handleResetFilters = () => {
@@ -124,7 +137,7 @@ export default function HistoryPage() {
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
@@ -139,7 +152,7 @@ export default function HistoryPage() {
             <span>Total Volume</span>
             <Coins className="h-3.5 w-3.5 text-primary shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-base font-black font-mono text-foreground mt-0.5 truncate">
@@ -153,7 +166,7 @@ export default function HistoryPage() {
             <span>Deposited</span>
             <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-base font-black font-mono text-emerald-500 mt-0.5 truncate">
@@ -167,7 +180,7 @@ export default function HistoryPage() {
             <span>Withdrawn</span>
             <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-base font-black font-mono text-amber-500 mt-0.5 truncate">

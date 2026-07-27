@@ -32,6 +32,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [countdown, setCountdown] = React.useState(60)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Blocked'>('all')
@@ -57,14 +58,25 @@ export default function AgentsPage() {
 
   React.useEffect(() => {
     loadAgents(true)
-    const interval = setInterval(() => {
+
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
+    }, 1000)
+
+    const dataInterval = setInterval(() => {
+      setCountdown(60)
       loadAgents(false)
-    }, 30000)
-    return () => clearInterval(interval)
+    }, 60000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(dataInterval)
+    }
   }, [loadAgents])
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
+    setCountdown(60)
     loadAgents(false)
     setTimeout(() => setIsRefreshing(false), 600)
   }
@@ -136,7 +148,7 @@ export default function AgentsPage() {
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="flex-1 sm:flex-none h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

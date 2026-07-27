@@ -51,6 +51,7 @@ export default function SuperAdminDashboard() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
+  const [countdown, setCountdown] = React.useState(60)
 
   // Log Filter, Search & Pagination states
   const [logCategory, setLogCategory] = React.useState<'ALL' | 'System' | 'Transaction' | 'Security'>('ALL')
@@ -121,10 +122,20 @@ export default function SuperAdminDashboard() {
 
   React.useEffect(() => {
     fetchMetrics(true)
+
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
+    }, 1000)
+
     const autoPoll = setInterval(() => {
+      setCountdown(60)
       fetchMetrics(false)
-    }, 30000)
-    return () => clearInterval(autoPoll)
+    }, 60000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(autoPoll)
+    }
   }, [])
 
   // Filtered & Paginated Logs
@@ -171,7 +182,7 @@ export default function SuperAdminDashboard() {
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button 
             onClick={handleManualRefresh} 
@@ -198,7 +209,7 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
             <div className="mt-0.5 sm:mt-1.5">
-              {isLoadingMetrics || isRefreshing ? (
+              {isLoadingMetrics ? (
                 <div className="h-5 sm:h-6 w-14 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
               ) : (
                 <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-emerald-500 flex items-center justify-between">
@@ -223,7 +234,7 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
           <div className="mt-0.5 sm:mt-1.5">
-            {isLoadingMetrics || isRefreshing ? (
+            {isLoadingMetrics ? (
               <div className="h-5 sm:h-6 w-12 sm:w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
               <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-foreground truncate">
@@ -310,7 +321,7 @@ export default function SuperAdminDashboard() {
             <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
               Bets Placed
             </span>
-            {isLoadingMetrics || isRefreshing ? (
+            {isLoadingMetrics ? (
               <div className="h-5 sm:h-6 w-14 sm:w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
               <div className="text-xs sm:text-xl font-black font-mono text-foreground truncate">
@@ -325,7 +336,7 @@ export default function SuperAdminDashboard() {
             <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
               Coins Bet (In)
             </span>
-            {isLoadingMetrics || isRefreshing ? (
+            {isLoadingMetrics ? (
               <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
               <div className="text-xs sm:text-xl font-black font-mono text-foreground truncate">
@@ -340,7 +351,7 @@ export default function SuperAdminDashboard() {
             <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
               Coins Won (Out)
             </span>
-            {isLoadingMetrics || isRefreshing ? (
+            {isLoadingMetrics ? (
               <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
               <div className="text-xs sm:text-xl font-black font-mono text-amber-500 truncate">
@@ -355,7 +366,7 @@ export default function SuperAdminDashboard() {
             <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
               Net Lost (House P/L)
             </span>
-            {isLoadingMetrics || isRefreshing ? (
+            {isLoadingMetrics ? (
               <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
             ) : (
               <div className={`text-xs sm:text-xl font-black font-mono truncate ${(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>

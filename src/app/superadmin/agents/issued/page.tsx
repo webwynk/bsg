@@ -37,6 +37,16 @@ export default function CoinsIssuedPage() {
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalItems, setTotalItems] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [countdown, setCountdown] = React.useState(60)
+
+  // Stable refs — avoids useCallback dep on filter state (interval leak fix)
+  const selectedAgentIdRef = React.useRef('all')
+  const selectedTypeRef = React.useRef<'all' | 'deposit' | 'withdraw'>('all')
+  const filterDateRef = React.useRef<Date | undefined>(undefined)
+  const datePresetRef = React.useRef<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
+  const currentPageRef = React.useRef(1)
+  const isInitialMountRef = React.useRef(true)
 
   // Filters state
   const [selectedAgentId, setSelectedAgentId] = React.useState('all')
@@ -61,16 +71,18 @@ export default function CoinsIssuedPage() {
 
     let startDate: string | undefined = undefined
     let endDate: string | undefined = undefined
+    const fp = filterDateRef.current
+    const dp = datePresetRef.current
 
-    if (filterDate) {
-      startDate = filterDate.toISOString()
-      endDate = filterDate.toISOString()
-    } else if (datePreset === 'today') {
+    if (fp) {
+      startDate = fp.toISOString()
+      endDate = fp.toISOString()
+    } else if (dp === 'today') {
       const now = new Date()
       const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       const istTodayStart = new Date(`${istTodayString}T00:00:00+05:30`)
       startDate = istTodayStart.toISOString()
-    } else if (datePreset === 'yesterday') {
+    } else if (dp === 'yesterday') {
       const now = new Date()
       const istYesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
       const istYestString = istYesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -78,20 +90,20 @@ export default function CoinsIssuedPage() {
       const istYestEnd = new Date(`${istYestString}T23:59:59.999+05:30`)
       startDate = istYestStart.toISOString()
       endDate = istYestEnd.toISOString()
-    } else if (datePreset === '7days') {
+    } else if (dp === '7days') {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       startDate = sevenDaysAgo.toISOString()
-    } else if (datePreset === '30days') {
+    } else if (dp === '30days') {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       startDate = thirtyDaysAgo.toISOString()
     }
 
     getAgentCoinTransactionsAction({
-      agentId: selectedAgentId,
-      type: selectedType,
+      agentId: selectedAgentIdRef.current,
+      type: selectedTypeRef.current,
       startDate,
       endDate,
-      page: currentPage,
+      page: currentPageRef.current,
       limit: itemsPerPage
     }).then((res) => {
       setIsLoading(false)
@@ -102,20 +114,43 @@ export default function CoinsIssuedPage() {
         setSummary(res.summary)
       }
     }).catch(() => setIsLoading(false))
-  }, [selectedAgentId, selectedType, filterDate, datePreset, currentPage])
+  }, []) // stable — reads all filters from refs
 
-  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  // Sync refs + re-fetch on any filter/page change
+  React.useEffect(() => {
+    selectedAgentIdRef.current = selectedAgentId
+    selectedTypeRef.current = selectedType
+    filterDateRef.current = filterDate
+    datePresetRef.current = datePreset
+    currentPageRef.current = currentPage
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false
+      return
+    }
+    loadData(false)
+  }, [selectedAgentId, selectedType, filterDate, datePreset, currentPage, loadData])
 
   React.useEffect(() => {
     loadData(true)
-    const interval = setInterval(() => {
-      loadData(false)
-    }, 30000)
-    return () => clearInterval(interval)
+
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
+    }, 1000)
+
+    const dataInterval = setInterval(() => {
+      setCountdown(60)
+      loadData(false) // silent: no skeleton
+    }, 60000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(dataInterval)
+    }
   }, [loadData])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
+    setCountdown(60)
     loadData(false)
     setTimeout(() => setIsRefreshing(false), 600)
   }
@@ -156,7 +191,7 @@ export default function CoinsIssuedPage() {
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh

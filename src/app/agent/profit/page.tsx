@@ -42,8 +42,14 @@ export default function AgentProfitPage() {
 
   const [isLoading, setIsLoading] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [countdown, setCountdown] = React.useState(60)
 
-  // Filters & Pagination State
+  // Stable refs — avoids useCallback dep on filter state (interval leak fix)
+  const datePresetRef = React.useRef<'today' | '7days' | '30days' | 'lifetime'>('today')
+  const filterDateRef = React.useRef<Date | undefined>(undefined)
+  const searchQueryRef = React.useRef('')
+  const currentPageRef = React.useRef(1)
+  const isInitialMountRef = React.useRef(true)
   const [datePreset, setDatePreset] = React.useState<'today' | '7days' | '30days' | 'lifetime'>('today')
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -52,13 +58,13 @@ export default function AgentProfitPage() {
   const [totalItems, setTotalItems] = React.useState(0)
   const itemsPerPage = 10
 
-  const loadProfitReport = React.useCallback(() => {
-    setIsLoading(true)
+  const loadProfitReport = React.useCallback((isInitial = false) => {
+    if (isInitial) setIsLoading(true) // skeleton only on first load
     getAgentProfitReportAction({
-      datePreset,
-      filterDate: filterDate ? filterDate.toISOString() : undefined,
-      searchQuery,
-      page: currentPage,
+      datePreset: datePresetRef.current,
+      filterDate: filterDateRef.current ? filterDateRef.current.toISOString() : undefined,
+      searchQuery: searchQueryRef.current,
+      page: currentPageRef.current,
       limit: itemsPerPage
     }).then((res) => {
       setIsLoading(false)
@@ -69,19 +75,43 @@ export default function AgentProfitPage() {
         setTotalItems(res.totalItems)
       }
     }).catch(() => setIsLoading(false))
-  }, [datePreset, filterDate, searchQuery, currentPage])
+  }, []) // stable — reads filters from refs, not state
+
+  // Sync refs + re-fetch on filter/page change
+  React.useEffect(() => {
+    datePresetRef.current = datePreset
+    filterDateRef.current = filterDate
+    searchQueryRef.current = searchQuery
+    currentPageRef.current = currentPage
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false
+      return
+    }
+    loadProfitReport(false)
+  }, [datePreset, filterDate, searchQuery, currentPage, loadProfitReport])
 
   React.useEffect(() => {
-    loadProfitReport()
-    const interval = setInterval(() => {
-      loadProfitReport()
-    }, 30000)
-    return () => clearInterval(interval)
+    loadProfitReport(true) // initial: show skeleton
+
+    const countdownTick = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
+    }, 1000)
+
+    const dataInterval = setInterval(() => {
+      setCountdown(60)
+      loadProfitReport(false) // silent: no skeleton
+    }, 60000)
+
+    return () => {
+      clearInterval(countdownTick)
+      clearInterval(dataInterval)
+    }
   }, [loadProfitReport])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadProfitReport()
+    setCountdown(60)
+    loadProfitReport(false) // no skeleton on manual refresh
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
@@ -120,7 +150,7 @@ export default function AgentProfitPage() {
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync (30s)
+            Auto-Sync ({countdown}s)
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh
@@ -136,7 +166,7 @@ export default function AgentProfitPage() {
             <span>Today&apos;s P/L</span>
             <Activity className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.todaysPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
@@ -152,7 +182,7 @@ export default function AgentProfitPage() {
             <span>Lifetime P/L</span>
             <Award className="h-3.5 w-3.5 text-primary shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
@@ -168,7 +198,7 @@ export default function AgentProfitPage() {
             <span>Total Bets (In)</span>
             <ArrowUpRight className="h-3.5 w-3.5 text-blue-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate">
@@ -184,7 +214,7 @@ export default function AgentProfitPage() {
             <span>Total Wins (Out)</span>
             <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate">
@@ -200,7 +230,7 @@ export default function AgentProfitPage() {
             <span>House Margin</span>
             <Percent className="h-3.5 w-3.5 text-purple-400 shrink-0 hidden sm:block" />
           </div>
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.netMarginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
@@ -310,7 +340,7 @@ export default function AgentProfitPage() {
 
         {/* 📋 Player P/L Audit Table (Desktop Table / Mobile Card Layout) */}
         <div className="rounded-xl border border-border/80 overflow-hidden bg-card">
-          {isLoading || isRefreshing ? (
+          {isLoading ? (
             <div className="p-4 space-y-2.5">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
