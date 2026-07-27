@@ -318,11 +318,24 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
       }
 
       const rpcName = type === 'deposit' ? 'transfer_coins_agent_to_player' : 'withdraw_coins_player_to_agent'
-      const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc(rpcName, {
+      let { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc(rpcName, {
         p_agent_id: agentId,
         p_player_id: targetId,
         p_amount: sanitizedAmount
       })
+
+      // Fallback for PostgREST schema cache parameter ordering
+      if (rpcErr && rpcErr.message.includes('schema cache')) {
+        const fallbackRes = await supabaseAdmin.rpc(rpcName, {
+          p_agent_id: agentId,
+          p_amount: sanitizedAmount,
+          p_player_id: targetId
+        })
+        if (!fallbackRes.error) {
+          rpcRes = fallbackRes.data
+          rpcErr = null
+        }
+      }
 
       if (rpcErr) {
         return { error: rpcErr.message }
