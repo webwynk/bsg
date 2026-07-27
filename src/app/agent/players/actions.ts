@@ -163,7 +163,33 @@ export async function createPlayerAction(formData: FormData) {
   return { success: true, user: data.user }
 }
 
-export async function togglePlayerStatusAction(playerId: string, currentStatus: string) {
+async function resolveUserIdentifier(supabaseAdmin: any, identifier: string): Promise<string | null> {
+  if (!identifier) return null
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
+  if (isUuid) return identifier
+
+  try {
+    const { data: lookup } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .ilike('username', identifier)
+      .single()
+    if (lookup?.id) return lookup.id
+  } catch (_) {}
+
+  try {
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+    const matched = (usersData?.users || []).find((u: any) =>
+      u.user_metadata?.username?.toLowerCase() === identifier.toLowerCase() ||
+      u.email?.toLowerCase().split('@')[0] === identifier.toLowerCase()
+    )
+    if (matched?.id) return matched.id
+  } catch (_) {}
+
+  return null
+}
+
+export async function togglePlayerStatusAction(playerIdentifier: string, currentStatus: string) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -174,6 +200,9 @@ export async function togglePlayerStatusAction(playerId: string, currentStatus: 
 
     const supabase = await createServerClient()
     const { data: { user: callerUser } } = await supabase.auth.getUser()
+
+    const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
+    if (!playerId) return { error: 'Player account not found.' }
 
     const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
     const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
@@ -204,17 +233,22 @@ export async function togglePlayerStatusAction(playerId: string, currentStatus: 
   return { error: 'Service Role Key not configured.' }
 }
 
-export async function getPlayerDetailHistoryAction(playerId: string) {
+export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
-  if (!serviceRoleKey || !supabaseUrl || !playerId) {
+  if (!serviceRoleKey || !supabaseUrl || !playerIdentifier) {
     return { gamePlays: [], pointsHistory: [] }
   }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   })
+
+  const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
+  if (!playerId) {
+    return { gamePlays: [], pointsHistory: [] }
+  }
 
   // 1. Fetch game plays from public.game_history
   let gamePlays: Array<{
@@ -344,8 +378,8 @@ export async function getPlayerDetailHistoryAction(playerId: string) {
   return { gamePlays, pointsHistory }
 }
 
-export async function resetPlayerPasswordAction(playerId: string, newPassword: string) {
-  if (!playerId || !newPassword || newPassword.trim().length < 6) {
+export async function resetPlayerPasswordAction(playerIdentifier: string, newPassword: string) {
+  if (!playerIdentifier || !newPassword || newPassword.trim().length < 6) {
     return { error: 'Password must be at least 6 characters.' }
   }
 
@@ -356,6 +390,9 @@ export async function resetPlayerPasswordAction(playerId: string, newPassword: s
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
+
+    const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
+    if (!playerId) return { error: 'Player account not found.' }
 
     const supabase = await createServerClient()
     const { data: { user: callerUser } } = await supabase.auth.getUser()

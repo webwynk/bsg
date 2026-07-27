@@ -51,6 +51,32 @@ export async function getAgentsAction() {
   return { agents: [] }
 }
 
+async function resolveUserIdentifier(supabaseAdmin: any, identifier: string): Promise<string | null> {
+  if (!identifier || identifier === 'all') return identifier
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
+  if (isUuid) return identifier
+
+  try {
+    const { data: lookup } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .ilike('username', identifier)
+      .single()
+    if (lookup?.id) return lookup.id
+  } catch (_) {}
+
+  try {
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+    const matched = (usersData?.users || []).find((u: any) =>
+      u.user_metadata?.username?.toLowerCase() === identifier.toLowerCase() ||
+      u.email?.toLowerCase().split('@')[0] === identifier.toLowerCase()
+    )
+    if (matched?.id) return matched.id
+  } catch (_) {}
+
+  return null
+}
+
 export async function getAgentDetailAction(agentIdentifier: string) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -62,33 +88,9 @@ export async function getAgentDetailAction(agentIdentifier: string) {
       })
 
       // Step 1: Resolve username → UUID (case-insensitive + auth listUsers fallback)
-      let agentId = agentIdentifier
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentIdentifier)
-      
-      if (!isUuid) {
-        // Try profiles table lookup with ilike (case-insensitive)
-        const { data: lookup } = await supabaseAdmin
-          .from('profiles')
-          .select('id')
-          .ilike('username', agentIdentifier)
-          .single()
-
-        if (lookup?.id) {
-          agentId = lookup.id
-        } else {
-          // Fallback: search Auth listUsers by username or email prefix
-          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-          const matchedUser = (usersData?.users || []).find(u => 
-            u.user_metadata?.username?.toLowerCase() === agentIdentifier.toLowerCase() ||
-            u.email?.toLowerCase().split('@')[0] === agentIdentifier.toLowerCase()
-          )
-
-          if (matchedUser) {
-            agentId = matchedUser.id
-          } else {
-            return { agent: null, players: [], resolvedAgentId: null, error: 'Agent not found' }
-          }
-        }
+      const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
+      if (!agentId) {
+        return { agent: null, players: [], resolvedAgentId: null, error: 'Agent not found' }
       }
 
       // Step 2: Run sub-queries in parallel
@@ -260,10 +262,10 @@ export async function createAgentAction(formData: FormData) {
   return { success: true, user: data.user }
 }
 
-export async function transferPointsAction(targetId: string, amount: number, type: 'deposit' | 'withdraw') {
+export async function transferPointsAction(targetIdentifier: string, amount: number, type: 'deposit' | 'withdraw') {
   const sanitizedAmount = Math.round((amount || 0) * 100) / 100
 
-  if (!targetId || isNaN(sanitizedAmount) || sanitizedAmount <= 0) {
+  if (!targetIdentifier || isNaN(sanitizedAmount) || sanitizedAmount <= 0) {
     return { error: 'Please enter a valid positive amount.' }
   }
 
@@ -274,6 +276,11 @@ export async function transferPointsAction(targetId: string, amount: number, typ
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
+
+    const targetId = await resolveUserIdentifier(supabaseAdmin, targetIdentifier)
+    if (!targetId) {
+      return { error: 'Target account not found.' }
+    }
 
     const { data: targetUserData, error: getTargetError } = await supabaseAdmin.auth.admin.getUserById(targetId)
     if (getTargetError || !targetUserData?.user) {
@@ -482,7 +489,10 @@ export async function getAgentCoinTransactionsAction(params?: {
     .select('*', { count: 'exact' })
 
   if (params?.agentId && params.agentId !== 'all') {
-    query = query.eq('agent_id', params.agentId)
+    const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)
+    if (resolvedAgentId) {
+      query = query.eq('agent_id', resolvedAgentId)
+    }
   }
 
   if (params?.type && params.type !== 'all') {
@@ -575,7 +585,7 @@ export async function getAgentCoinTransactionsAction(params?: {
   }
 }
 
-export async function toggleAgentStatusAction(agentId: string, currentStatus: string) {
+export async function toggleAgentStatusAction(agentIdentifier: string, currentStatus: string) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -583,6 +593,9 @@ export async function toggleAgentStatusAction(agentId: string, currentStatus: st
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
+
+    const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
+    if (!agentId) return { error: 'Agent not found.' }
 
     const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
     
@@ -636,7 +649,7 @@ export async function toggleAgentStatusAction(agentId: string, currentStatus: st
   return { error: 'Service Role Key not configured.' }
 }
 
-export async function updateAgentPasswordAction(agentId: string, newPassword: string) {
+export async function updateAgentPasswordAction(agentIdentifier: string, newPassword: string) {
   if (!newPassword || newPassword.length < 6) {
     return { error: 'Password must be at least 6 characters.' }
   }
@@ -648,6 +661,9 @@ export async function updateAgentPasswordAction(agentId: string, newPassword: st
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
+
+    const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
+    if (!agentId) return { error: 'Agent not found.' }
 
     const { data: agentUserData } = await supabaseAdmin.auth.admin.getUserById(agentId)
     const agentUsername = agentUserData?.user?.user_metadata?.username || 'agent'
@@ -662,7 +678,6 @@ export async function updateAgentPasswordAction(agentId: string, newPassword: st
 
     await logAuditEventAction('Security', `Updated password for Agent @${agentUsername}`)
     revalidatePath('/superadmin/agents')
-    revalidatePath(`/superadmin/agents/${agentId}`)
     return { success: true }
   }
 
