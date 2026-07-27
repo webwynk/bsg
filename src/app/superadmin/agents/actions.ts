@@ -344,6 +344,7 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         const newAgentBalance = Math.max(0, agentBalance - sanitizedAmount)
         const newPlayerBalance = targetBalance + sanitizedAmount
 
+        // Sync both Auth user_metadata AND public.profiles table
         await supabaseAdmin.auth.admin.updateUserById(agentId, {
           user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
         })
@@ -355,6 +356,26 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
             balance: newPlayerBalance 
           }
         })
+
+        try {
+          await Promise.all([
+            supabaseAdmin.from('profiles').upsert({
+              id: agentId,
+              username: agentUsername,
+              role: 'agent',
+              balance: newAgentBalance,
+              is_active: agentUser.user_metadata?.status !== 'Blocked'
+            }),
+            supabaseAdmin.from('profiles').upsert({
+              id: targetId,
+              username: targetUsername,
+              role: 'player',
+              agent_id: agentId,
+              balance: newPlayerBalance,
+              is_active: targetUser.user_metadata?.status !== 'Blocked'
+            })
+          ])
+        } catch (_) {}
 
         // Insert transaction record into public.transactions table
         try {
@@ -374,7 +395,6 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         revalidatePath('/agent/players')
         revalidatePath('/agent/history')
         revalidatePath('/superadmin/agents')
-        revalidatePath('/superadmin/agents')
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
       } else {
         // STRICT OVERDRAFT CHECK: Agent cannot withdraw more than player's available balance!
@@ -387,6 +407,7 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         const newPlayerBalance = Math.max(0, targetBalance - sanitizedAmount)
         const newAgentBalance = agentBalance + sanitizedAmount
 
+        // Sync both Auth user_metadata AND public.profiles table
         await supabaseAdmin.auth.admin.updateUserById(targetId, {
           user_metadata: { 
             ...targetUser.user_metadata, 
@@ -398,6 +419,26 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         await supabaseAdmin.auth.admin.updateUserById(agentId, {
           user_metadata: { ...agentUser.user_metadata, balance: newAgentBalance }
         })
+
+        try {
+          await Promise.all([
+            supabaseAdmin.from('profiles').upsert({
+              id: agentId,
+              username: agentUsername,
+              role: 'agent',
+              balance: newAgentBalance,
+              is_active: agentUser.user_metadata?.status !== 'Blocked'
+            }),
+            supabaseAdmin.from('profiles').upsert({
+              id: targetId,
+              username: targetUsername,
+              role: 'player',
+              agent_id: agentId,
+              balance: newPlayerBalance,
+              is_active: targetUser.user_metadata?.status !== 'Blocked'
+            })
+          ])
+        } catch (_) {}
 
         // Insert transaction record into public.transactions table
         try {
@@ -417,7 +458,6 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
         revalidatePath('/agent/players')
         revalidatePath('/agent/history')
         revalidatePath('/superadmin/agents')
-        revalidatePath('/superadmin/agents')
         return { success: true, newBalance: newPlayerBalance, agentBalance: newAgentBalance }
       }
     }
@@ -432,6 +472,7 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
     const delta = type === 'deposit' ? sanitizedAmount : -sanitizedAmount
     const newBalance = Math.max(0, targetBalance + delta)
 
+    // Sync both Auth user_metadata AND public.profiles table
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
       user_metadata: {
         ...targetUser.user_metadata,
@@ -442,6 +483,16 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
     if (updateError) {
       return { error: updateError.message }
     }
+
+    try {
+      await supabaseAdmin.from('profiles').upsert({
+        id: targetId,
+        username: targetUsername,
+        role: 'agent',
+        balance: newBalance,
+        is_active: targetUser.user_metadata?.status !== 'Blocked'
+      })
+    } catch (_) {}
 
     // Insert into agent_coin_transactions table for ledger tracking
     try {
@@ -458,7 +509,6 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
     await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Agent @${targetUsername}`)
     revalidatePath('/superadmin/agents')
     revalidatePath('/superadmin/agents/issued')
-    revalidatePath(`/superadmin/agents/${targetId}`)
     return { success: true, newBalance }
   }
 
