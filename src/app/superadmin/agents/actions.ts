@@ -20,7 +20,7 @@ export async function getAgentsAction() {
         .select('id, username, balance, is_active')
         .eq('role', 'agent')
 
-      if (!profErr && profiles && profiles.length > 0) {
+      if (!profErr && profiles) {
         const agents = profiles.map(p => ({
           id: p.id,
           name: p.username || 'Agent',
