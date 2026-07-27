@@ -382,6 +382,7 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
           await supabaseAdmin.from('transactions').insert({
             user_id: targetId,
             agent_id: agentId,
+            agent_username: agentUsername,
             user_name: targetUser.user_metadata?.full_name || targetUsername,
             user_username: targetUsername,
             type: 'agent_credit',
@@ -445,6 +446,7 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
           await supabaseAdmin.from('transactions').insert({
             user_id: targetId,
             agent_id: agentId,
+            agent_username: agentUsername,
             user_name: targetUser.user_metadata?.full_name || targetUsername,
             user_username: targetUsername,
             type: 'agent_debit',

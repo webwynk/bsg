@@ -127,20 +127,34 @@ export async function getAgentTransactionHistoryAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { data: txns } = await supabaseAdmin
-      .from('transactions')
-      .select('*')
-      .eq('agent_id', authUser.id)
-      .order('created_at', { ascending: false })
+    const [playerTxnsRes, adminTxnsRes] = await Promise.all([
+      supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id),
+      supabaseAdmin.from('agent_coin_transactions').select('*').eq('agent_id', authUser.id)
+    ])
 
-    const formatted = (txns || []).map(tx => ({
+    const playerTxns = (playerTxnsRes.data || []).map(tx => ({
       id: tx.id,
       type: (tx.type === 'agent_credit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
       amount: Math.abs(Number(tx.amount)),
-      target: tx.user_username || 'player',
+      target: `@${tx.user_username || 'player'}`,
       status: 'Success',
-      date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+      created_at: tx.created_at,
+      date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     }))
+
+    const adminTxns = (adminTxnsRes.data || []).map(tx => ({
+      id: tx.id,
+      type: (tx.type === 'deposit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+      amount: Math.abs(Number(tx.amount)),
+      target: 'Superadmin',
+      status: 'Success',
+      created_at: tx.created_at,
+      date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    }))
+
+    const formatted = [...playerTxns, ...adminTxns].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
 
     return { transactions: formatted }
   } catch (err) {
