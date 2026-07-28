@@ -345,8 +345,11 @@ export async function getLatestGameDrawsAction() {
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
         }
 
+        const profileObj = Array.isArray(b.profiles) ? (b.profiles[0] || {}) : (b.profiles || {})
+        const username = profileObj.username || 'player'
+
         return {
-          username: b.profiles?.username || 'player',
+          username,
           betAmount: Number(b.total_stake || 0),
           winAmount: winAmt,
           status: winAmt > 0 ? 'WON' : 'LOST'

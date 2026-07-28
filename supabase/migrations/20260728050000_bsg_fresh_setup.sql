@@ -405,38 +405,51 @@ END;
 $$;
 
 -- H. get_my_round_result (self-resolving: calculates win + credits balance on first call)
-CREATE OR REPLACE FUNCTION public.get_my_round_result(p_round_id UUID)
+CREATE OR REPLACE FUNCTION public.get_my_round_result(p_round_id TEXT)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_user_id   UUID    := auth.uid();
-  v_bet       public.triple_chance_bets;
-  v_round     public.triple_chance_rounds;
-  v_balance   NUMERIC;
-  v_s_win     NUMERIC := 0;
-  v_d_win     NUMERIC := 0;
-  v_t_win     NUMERIC := 0;
-  v_total_win NUMERIC := 0;
-  v_s_key     TEXT;
-  v_d_key     TEXT;
-  v_t_key     TEXT;
-  v_s_bet     NUMERIC;
-  v_d_bet     NUMERIC;
-  v_t_bet     NUMERIC;
-  v_agent_id  UUID;
+  v_user_id    UUID    := auth.uid();
+  v_bet        public.triple_chance_bets;
+  v_round      public.triple_chance_rounds;
+  v_balance    NUMERIC;
+  v_s_win      NUMERIC := 0;
+  v_d_win      NUMERIC := 0;
+  v_t_win      NUMERIC := 0;
+  v_total_win  NUMERIC := 0;
+  v_s_key      TEXT;
+  v_d_key      TEXT;
+  v_t_key      TEXT;
+  v_s_bet      NUMERIC;
+  v_d_bet      NUMERIC;
+  v_t_bet      NUMERIC;
+  v_agent_id   UUID;
+  v_round_uuid UUID;
 BEGIN
   IF v_user_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
 
+  IF p_round_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_round_uuid := p_round_id::UUID;
+  ELSE
+    SELECT id INTO v_round_uuid FROM public.triple_chance_rounds
+      WHERE round_number = (REGEXP_REPLACE(p_round_id, '[^0-9]', '', 'g'))::BIGINT
+      LIMIT 1;
+  END IF;
+
+  IF v_round_uuid IS NULL THEN
+    SELECT balance INTO v_balance FROM public.profiles WHERE id = v_user_id;
+    RETURN jsonb_build_object('placed_bet', false, 'win_amount', 0, 'total_stake', 0, 'balance', v_balance);
+  END IF;
+
   SELECT * INTO v_bet FROM public.triple_chance_bets
-    WHERE round_id = p_round_id AND user_id = v_user_id;
+    WHERE round_id = v_round_uuid AND user_id = v_user_id;
 
   IF NOT FOUND THEN
     SELECT balance INTO v_balance FROM public.profiles WHERE id = v_user_id;
     RETURN jsonb_build_object('placed_bet', false, 'win_amount', 0, 'total_stake', 0, 'balance', v_balance);
   END IF;
 
-  -- Already resolved — just return stored values
   IF v_bet.is_resolved THEN
     SELECT balance INTO v_balance FROM public.profiles WHERE id = v_user_id;
     RETURN jsonb_build_object(
@@ -451,17 +464,15 @@ BEGIN
     );
   END IF;
 
-  -- Not yet resolved: fetch round result and calculate win
-  SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = p_round_id;
+  SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = v_round_uuid;
   IF v_round IS NULL OR v_round.red IS NULL THEN
     SELECT balance INTO v_balance FROM public.profiles WHERE id = v_user_id;
     RETURN jsonb_build_object('placed_bet', true, 'win_amount', 0, 'is_resolved', false, 'balance', v_balance);
   END IF;
 
-  -- Build win keys matching Flutter client logic
-  v_s_key := v_round.black::TEXT;                                             -- e.g. '7'
-  v_d_key := v_round.green::TEXT || v_round.black::TEXT;                     -- e.g. '42'
-  v_t_key := v_round.red::TEXT || v_round.green::TEXT || v_round.black::TEXT;-- e.g. '742'
+  v_s_key := v_round.black::TEXT;
+  v_d_key := v_round.green::TEXT || v_round.black::TEXT;
+  v_t_key := v_round.red::TEXT || v_round.green::TEXT || v_round.black::TEXT;
 
   v_s_bet := COALESCE((v_bet.single_bets ->> v_s_key)::NUMERIC, COALESCE((v_bet.single_bets ->> (v_s_key::INT)::TEXT)::NUMERIC, 0));
   
@@ -484,16 +495,14 @@ BEGIN
 
   SELECT agent_id INTO v_agent_id FROM public.profiles WHERE id = v_user_id;
 
-  -- Mark bet as resolved + store win amounts
   UPDATE public.triple_chance_bets SET
     single_win  = v_s_win,
     double_win  = v_d_win,
     triple_win  = v_t_win,
     win_amount  = v_total_win,
     is_resolved = true
-  WHERE round_id = p_round_id AND user_id = v_user_id;
+  WHERE id = v_bet.id;
 
-  -- Credit win to balance and log transaction (only if player won something)
   IF v_total_win > 0 THEN
     UPDATE public.profiles
       SET balance = balance + v_total_win, updated_at = NOW()

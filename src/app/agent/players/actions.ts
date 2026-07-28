@@ -284,7 +284,8 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
 
     if (roundBets && roundBets.length > 0) {
       gamePlays = roundBets.map(p => {
-        const round = p.triple_chance_rounds || {}
+        const roundRaw = p.triple_chance_rounds
+        const round = Array.isArray(roundRaw) ? (roundRaw[0] || {}) : (roundRaw || {})
         const red = round.red !== null && round.red !== undefined ? Number(round.red) : null
         const green = round.green !== null && round.green !== undefined ? Number(round.green) : null
         const black = round.black !== null && round.black !== undefined ? Number(round.black) : null
@@ -308,25 +309,29 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         if (parts.length > 0) selText = parts.join(' | ')
 
         // Compute exact win math matching Flutter game engine
-        let winAmt = Number(p.win_amount || 0)
+        let winAmt = 0
         if (red !== null && green !== null && black !== null) {
           const sKey = `${black}`
-          const dKey = `${green}${black}`
-          const tKey = `${red}${green}${black}`
+          const dKeyPadded = `${green}${black}`.padStart(2, '0')
+          const dKeyUnpadded = (green * 10 + black).toString()
+          const tKeyPadded = `${red}${green}${black}`.padStart(3, '0')
+          const tKeyUnpadded = (red * 100 + green * 10 + black).toString()
 
           const sBet = Number(singleBetsObj[sKey] || singleBetsObj[parseInt(sKey, 10).toString()] || 0)
           const dBet = Number(
-            doubleBetsObj[dKey] || 
-            doubleBetsObj[dKey.padStart(2, '0')] || 
-            doubleBetsObj[parseInt(dKey, 10).toString()] || 0
+            doubleBetsObj[dKeyPadded] || 
+            doubleBetsObj[dKeyUnpadded] || 
+            doubleBetsObj[parseInt(dKeyPadded, 10).toString()] || 0
           )
           const tBet = Number(
-            tripleBetsObj[tKey] || 
-            tripleBetsObj[tKey.padStart(3, '0')] || 
-            tripleBetsObj[parseInt(tKey, 10).toString()] || 0
+            tripleBetsObj[tKeyPadded] || 
+            tripleBetsObj[tKeyUnpadded] || 
+            tripleBetsObj[parseInt(tKeyPadded, 10).toString()] || 0
           )
 
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
+        } else {
+          winAmt = Number(p.win_amount || 0)
         }
 
         const rawId = p.round_id || p.id || ''
