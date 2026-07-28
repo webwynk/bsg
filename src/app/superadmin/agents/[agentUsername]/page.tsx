@@ -40,7 +40,7 @@ export default function AgentDetailPage({ params }: Props) {
   const { agentUsername } = React.use(params)
   const resolvedAgentIdRef = React.useRef<string>('') // UUID resolved from username by server action
   
-  const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string } | null>(null)
+  const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string; joinedDate?: string } | null>(null)
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; isOnline?: boolean; gamePlays: number }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
@@ -389,7 +389,7 @@ export default function AgentDetailPage({ params }: Props) {
             <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs flex items-center space-x-2 font-mono">
               <span>@{agentInfo ? agentInfo.username : '...'}</span>
               <span>&bull;</span>
-              <span className="text-[10px]">ID: {agentInfo?.id || agentUsername}</span>
+              <span className="text-[10px]">Joined: {agentInfo?.joinedDate || 'Jul 28, 2026'}</span>
             </p>
           </div>
         </div>
@@ -586,66 +586,66 @@ export default function AgentDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Stats Metric Strip (Ultra-Compact 3-Column Grid on Mobile) */}
-      <div className="grid gap-1.5 sm:gap-3 grid-cols-3">
-        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-emerald-500/30 transition-all flex flex-col justify-between">
+      {/* Stats Metric Strip (Compact Modern 3-Column Grid) */}
+      <div className="grid gap-2 sm:gap-3 grid-cols-3">
+        <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-emerald-500/30 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate">
               Coins
             </span>
-            <div className="hidden sm:flex p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-              <Coins className="h-4 w-4" />
+            <div className="hidden sm:flex p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+              <Coins className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2">
+          <div className="flex items-baseline justify-between mt-1">
             {isRefreshing ? (
-              <div className="h-5 sm:h-7 w-16 sm:w-24 bg-secondary/80 rounded animate-pulse my-0.5" />
+              <div className="h-5 w-16 bg-secondary/80 rounded animate-pulse" />
             ) : (
-              <div className="text-xs sm:text-2xl font-mono font-black text-foreground tracking-tight truncate">
+              <div className="text-xs sm:text-lg font-mono font-black text-foreground tracking-tight truncate">
                 {formatCurrency(agentInfo?.balance || 0)}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 hidden sm:block">Available for allocation</p>
+            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Available for allocation</span>
           </div>
         </Card>
 
-        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-primary/30 transition-all flex flex-col justify-between">
+        <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-primary/30 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate">
               Players
             </span>
-            <div className="hidden sm:flex p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
-              <Users className="h-4 w-4" />
+            <div className="hidden sm:flex p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+              <Users className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2">
+          <div className="flex items-baseline justify-between mt-1">
             {isRefreshing ? (
-              <div className="h-5 sm:h-7 w-10 sm:w-12 bg-secondary/80 rounded animate-pulse my-0.5" />
+              <div className="h-5 w-10 bg-secondary/80 rounded animate-pulse" />
             ) : (
-              <div className="text-xs sm:text-2xl font-mono font-black text-foreground tracking-tight">
+              <div className="text-xs sm:text-lg font-mono font-black text-foreground tracking-tight">
                 {players.length}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 hidden sm:block">Sub-registered network</p>
+            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Sub-registered network</span>
           </div>
         </Card>
 
-        <Card className="bg-card border border-border/80 p-2 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs hover:border-amber-500/30 transition-all flex flex-col justify-between">
+        <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-amber-500/30 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate">
               Status
             </span>
-            <div className="hidden sm:flex p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
-              <Activity className="h-4 w-4" />
+            <div className="hidden sm:flex p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+              <Activity className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2">
-            <span className={`inline-flex items-center rounded-full px-1.5 sm:px-2.5 py-0.2 sm:py-0.5 text-[8px] sm:text-[10px] font-black uppercase ${
+          <div className="flex items-center justify-between mt-1">
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
               agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
             }`}>
               {agentInfo?.status || 'Active'}
             </span>
-            <p className="text-[10px] text-muted-foreground font-medium mt-1 hidden sm:block">Operational status</p>
+            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Operational status</span>
           </div>
         </Card>
       </div>

@@ -94,26 +94,28 @@ export async function getAgentDetailAction(agentIdentifier: string) {
       }
 
       // Step 2: Run sub-queries in parallel
-      const [agentProfileRes, sessRes, playersRes] = await Promise.all([
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('id', agentId).single(),
+      const [agentProfileRes, sessRes, playersRes, authUserRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active, created_at').eq('id', agentId).single(),
         supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', agentId)
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active, created_at').eq('agent_id', agentId),
+        supabaseAdmin.auth.admin.getUserById(agentId)
       ])
 
       const sessions = sessRes.data || null
+      const authUser = authUserRes?.data?.user
       const now = new Date().getTime()
 
       // Extract agent info (profiles primary -> Auth fallback)
       let ap = agentProfileRes.data
       if (!ap) {
-        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(agentId)
-        if (userData?.user) {
-          const u = userData.user
+        if (authUser) {
+          const u = authUser
           ap = {
             id: u.id,
             username: u.user_metadata?.username || u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
             balance: Number(u.user_metadata?.balance || 0),
-            is_active: u.user_metadata?.status !== 'Blocked'
+            is_active: u.user_metadata?.status !== 'Blocked',
+            created_at: u.created_at
           }
           // Self-heal profiles table
           try {
@@ -167,13 +169,23 @@ export async function getAgentDetailAction(agentIdentifier: string) {
           })
       }
 
+      const displayName = authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || ap.username || 'Agent'
+      const rawJoined = ap.created_at || authUser?.created_at
+      const joinedDate = rawJoined ? new Date(rawJoined).toLocaleDateString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) : 'Jul 28, 2026'
+
       return {
         agent: {
           id: ap.id,
-          name: ap.username || 'Agent',
+          name: displayName,
           username: ap.username || '',
           balance: Number(ap.balance || 0),
-          status: ap.is_active ? 'Active' : 'Blocked'
+          status: ap.is_active ? 'Active' : 'Blocked',
+          joinedDate
         },
         players: agentPlayers,
         resolvedAgentId: agentId
