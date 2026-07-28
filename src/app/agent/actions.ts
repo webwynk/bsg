@@ -31,7 +31,7 @@ export async function getAgentDashboardDataAction() {
         supabaseAdmin.from('profiles').select('username, balance').eq('id', authUser.id).maybeSingle(),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', authUser.id),
         supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStartISO),
-        supabaseAdmin.from('transactions').select('*, user:profiles!transactions_user_id_fkey(username)').or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`).order('created_at', { ascending: false }).limit(5)
+        supabaseAdmin.from('transactions').select('*').or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`).order('created_at', { ascending: false }).limit(20)
       ])
 
       // Fetch all auth users to extract full_name metadata
@@ -97,7 +97,7 @@ export async function getAgentDashboardDataAction() {
         }
       }
 
-      // Format last 5 cashier transactions
+      // Format last 20 cashier transactions
       let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; targetUsername: string; date: string }> = []
       if (txnsRes.data && txnsRes.data.length > 0) {
         recentTransactions = txnsRes.data
@@ -111,8 +111,9 @@ export async function getAgentDashboardDataAction() {
             let targetUsername = 'Superadmin'
 
             if (isPlayerTx) {
+              const playerProf = (playersProfRes.data || []).find(p => p.id === tx.user_id)
               const playerUser = allUsers.find(u => u.id === tx.user_id)
-              const pUsername = tx.user?.username || playerUser?.user_metadata?.username || 'player'
+              const pUsername = playerProf?.username || playerUser?.user_metadata?.username || 'player'
               targetName = playerUser?.user_metadata?.full_name || playerUser?.user_metadata?.name || pUsername
               targetUsername = `@${pUsername.replace(/^@+/, '')}`
             }
@@ -123,7 +124,13 @@ export async function getAgentDashboardDataAction() {
               amount: Math.abs(amt),
               target: targetName,
               targetUsername: targetUsername,
-              date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+              date: new Date(tx.created_at).toLocaleString('en-US', {
+                timeZone: 'Asia/Kolkata',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
             }
           })
       }
