@@ -73,15 +73,28 @@ export async function getAgentDashboardDataAction() {
           }))
       }
 
-      // Calculate today's bets, wins, and net profit/loss from game_history (IST timezone 00:00:00+)
+      const playerIds = (playersProfRes.data || []).map(p => p.id)
+
       let todaysBets = 0
       let todaysWins = 0
       let todaysProfitLoss = 0
 
-      if (spinsRes.data && spinsRes.data.length > 0) {
-        todaysBets = spinsRes.data.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
-        todaysWins = spinsRes.data.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
-        todaysProfitLoss = todaysBets - todaysWins
+      if (playerIds.length > 0) {
+        const { data: todayBetsData } = await supabaseAdmin
+          .from('triple_chance_bets')
+          .select('total_stake, win_amount')
+          .in('user_id', playerIds)
+          .gte('created_at', todayStartISO)
+
+        if (todayBetsData && todayBetsData.length > 0) {
+          todaysBets = todayBetsData.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
+          todaysWins = todayBetsData.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+          todaysProfitLoss = todaysBets - todaysWins
+        } else if (spinsRes.data && spinsRes.data.length > 0) {
+          todaysBets = spinsRes.data.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
+          todaysWins = spinsRes.data.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
+          todaysProfitLoss = todaysBets - todaysWins
+        }
       }
 
       // Format last 5 cashier transactions
