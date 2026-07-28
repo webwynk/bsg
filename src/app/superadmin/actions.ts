@@ -303,17 +303,17 @@ export async function getLatestGameDrawsAction() {
     try {
       const { data: rbRows } = await supabaseAdmin
         .from('triple_chance_bets')
-        .select('*, profiles(username), triple_chance_rounds(red, green, black, status)')
+        .select('*, profiles(username), triple_chance_rounds(red_digit, green_digit, black_digit, result_number, status)')
         .order('created_at', { ascending: false })
         .limit(10)
 
       if (rbRows) {
         roundBetsDraws = rbRows.map(row => {
           const round = row.triple_chance_rounds || {}
-          const red = round.red ?? 0
-          const green = round.green ?? 0
-          const black = round.black ?? 0
-          const resNum = red * 100 + green * 10 + black
+          const red = round.red_digit ?? round.red ?? 0
+          const green = round.green_digit ?? round.green ?? 0
+          const black = round.black_digit ?? round.black ?? 0
+          const resNum = round.result_number ?? (red * 100 + green * 10 + black)
           const winAmt = Number(row.win_amount || 0)
           const stakeAmt = Number(row.total_stake || 0)
 

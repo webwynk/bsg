@@ -277,7 +277,7 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     // Primary source: round_bets joined with game_rounds
     const { data: roundBets } = await supabaseAdmin
       .from('triple_chance_bets')
-      .select('*, triple_chance_rounds(red, green, black, status)')
+      .select('*, triple_chance_rounds(red_digit, green_digit, black_digit, result_number, status)')
       .eq('user_id', playerId)
       .order('created_at', { ascending: false })
       .limit(50)
@@ -285,10 +285,10 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     if (roundBets && roundBets.length > 0) {
       gamePlays = roundBets.map(p => {
         const round = p.triple_chance_rounds || {}
-        const red = round.red ?? null
-        const green = round.green ?? null
-        const black = round.black ?? null
-        const resultNumber = (red !== null && green !== null && black !== null) ? (red * 100 + green * 10 + black) : 0
+        const red = round.red_digit ?? round.red ?? null
+        const green = round.green_digit ?? round.green ?? null
+        const black = round.black_digit ?? round.black ?? null
+        const resultNumber = round.result_number ?? ((red !== null && green !== null && black !== null) ? (red * 100 + green * 10 + black) : 0)
 
         const singleBetsObj = p.single_bets || {}
         const doubleBetsObj = p.double_bets || {}
