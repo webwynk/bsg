@@ -328,9 +328,17 @@ export async function getLatestGameDrawsAction() {
         const doubleBetsObj = (b.double_bets || {}) as Record<string, number>
         const tripleBetsObj = (b.triple_bets || {}) as Record<string, number>
 
-        const sBet = Number(singleBetsObj[sKey] || 0)
-        const dBet = Number(doubleBetsObj[dKey] || doubleBetsObj[dKey.padStart(2, '0')] || 0)
-        const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
+        const sBet = Number(singleBetsObj[sKey] || singleBetsObj[parseInt(sKey, 10).toString()] || 0)
+        const dBet = Number(
+          doubleBetsObj[dKey] || 
+          doubleBetsObj[dKey.padStart(2, '0')] || 
+          doubleBetsObj[parseInt(dKey, 10).toString()] || 0
+        )
+        const tBet = Number(
+          tripleBetsObj[tKey] || 
+          tripleBetsObj[tKey.padStart(3, '0')] || 
+          tripleBetsObj[parseInt(tKey, 10).toString()] || 0
+        )
 
         let winAmt = Number(b.win_amount || 0)
         if (red !== null && green !== null && black !== null) {

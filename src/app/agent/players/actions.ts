@@ -314,15 +314,25 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
           const dKey = `${green}${black}`
           const tKey = `${red}${green}${black}`
 
-          const sBet = Number(singleBetsObj[sKey] || 0)
-          const dBet = Number(doubleBetsObj[dKey] || doubleBetsObj[dKey.padStart(2, '0')] || 0)
-          const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
+          const sBet = Number(singleBetsObj[sKey] || singleBetsObj[parseInt(sKey, 10).toString()] || 0)
+          const dBet = Number(
+            doubleBetsObj[dKey] || 
+            doubleBetsObj[dKey.padStart(2, '0')] || 
+            doubleBetsObj[parseInt(dKey, 10).toString()] || 0
+          )
+          const tBet = Number(
+            tripleBetsObj[tKey] || 
+            tripleBetsObj[tKey.padStart(3, '0')] || 
+            tripleBetsObj[parseInt(tKey, 10).toString()] || 0
+          )
 
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
         }
 
+        const unifiedHandId = p.round_id ? p.round_id.substring(0, 8) : p.id.substring(0, 8)
+
         return {
-          id: p.id.substring(0, 8),
+          id: unifiedHandId,
           game: 'Triple Chance',
           mode: modeLabel,
           selections: selText,
