@@ -15,30 +15,35 @@ export async function getAgentsAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      const { data: profiles, error: profErr } = await supabaseAdmin
-        .from('profiles')
-        .select('id, username, balance, is_active')
-        .eq('role', 'agent')
+      const [profRes, usersRes] = await Promise.all([
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('role', 'agent'),
+        supabaseAdmin.auth.admin.listUsers()
+      ])
 
-      if (!profErr && profiles) {
-        const agents = profiles.map(p => ({
-          id: p.id,
-          name: p.username || 'Agent',
-          username: p.username || '',
-          balance: Number(p.balance || 0),
-          status: p.is_active ? 'Active' : 'Blocked'
-        }))
+      const profiles = profRes.data
+      const allUsers = usersRes.data?.users || []
+
+      if (profiles && profiles.length > 0) {
+        const agents = profiles.map(p => {
+          const u = allUsers.find(user => user.id === p.id)
+          const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || p.username || 'Agent'
+          return {
+            id: p.id,
+            name: fullName,
+            username: p.username || '',
+            balance: Number(p.balance || 0),
+            status: p.is_active ? 'Active' : 'Blocked'
+          }
+        })
         return { agents }
       }
 
-      // Fallback to Auth listUsers if profiles table is empty
-      const { data, error } = await supabaseAdmin.auth.admin.listUsers()
-      if (!error && data?.users) {
-        const agents = data.users
+      if (allUsers.length > 0) {
+        const agents = allUsers
           .filter(u => u.user_metadata?.role === 'agent')
           .map(u => ({
             id: u.id,
-            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
+            name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Agent',
             username: u.user_metadata?.username || u.email?.split('@')[0] || '',
             balance: u.user_metadata?.balance || 0,
             status: u.user_metadata?.status || 'Active'
@@ -245,7 +250,7 @@ export async function createAgentAction(formData: FormData) {
       } catch (_) {}
     }
 
-    await logAuditEventAction('System', `Created new Agent account @${username}`)
+    await logAuditEventAction('System', `Created new Agent account ${name} (@${username})`)
     revalidatePath('/superadmin/agents')
     return { success: true, user: data.user }
   }
@@ -570,13 +575,18 @@ export async function getAgentCoinTransactionsAction(params?: {
     })
   }
 
+  const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+  const allUsers = usersData?.users || []
+
   const transactions = (data || []).map(tx => {
     const amt = Number(tx.amount || 0)
     const isDep = amt >= 0
+    const u = allUsers.find(user => user.id === tx.user_id)
+    const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || tx.user?.username || 'Agent'
     return {
       id: tx.id,
       agentId: tx.user_id,
-      agentName: tx.user?.username || 'Agent',
+      agentName: fullName,
       agentUsername: tx.user?.username || 'agent',
       type: (isDep ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
       amount: Math.abs(amt),
