@@ -505,7 +505,7 @@ export default function SuperAdminLiveGamePage() {
                           className={`hover:bg-secondary/40 transition-colors ${hasMultiple ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-secondary/30' : ''}`}
                         >
                           <td className="py-2.5 px-3 text-muted-foreground text-[11px] font-sans">{formattedTime}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground text-[10px]">{draw.id.slice(0, 8)}...</td>
+                          <td className="py-2.5 px-3 text-muted-foreground text-[10px]">...{draw.id.slice(-8)}</td>
                           <td className="py-2.5 px-3 font-bold text-foreground font-sans">
                             <span className="flex items-center space-x-1">
                               <span>{draw.playerUsername}</span>

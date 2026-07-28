@@ -329,7 +329,8 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
         }
 
-        const unifiedHandId = p.round_id ? p.round_id.substring(0, 8) : p.id.substring(0, 8)
+        const rawId = p.round_id || p.id || ''
+        const unifiedHandId = rawId.length > 8 ? '...' + rawId.slice(-8) : rawId
 
         return {
           id: unifiedHandId,
