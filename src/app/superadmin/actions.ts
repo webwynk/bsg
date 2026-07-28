@@ -99,11 +99,11 @@ export async function getSystemOverviewMetricsAction() {
       const todayStartISO = istTodayStart.toISOString()
       // Execute all database queries in parallel via Promise.all
       const [profilesRes, txnsRes, roundBetsRes, todayRoundBetsRes, gameHistRes] = await Promise.all([
-        supabaseAdmin.from('profiles').select('role, balance'),
-        supabaseAdmin.from('transactions').select('amount').eq('type', 'admin_adjustment').gte('amount', 0).gte('created_at', todayStartISO),
-        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount'),
-        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').gte('created_at', todayStartISO),
-        supabaseAdmin.from('game_history').select('bet_amount, win_amount')
+        supabaseAdmin.from('profiles').select('role, balance').range(0, 999999),
+        supabaseAdmin.from('transactions').select('amount').eq('type', 'admin_adjustment').gte('amount', 0).gte('created_at', todayStartISO).range(0, 999999),
+        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').range(0, 999999),
+        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').gte('created_at', todayStartISO).range(0, 999999),
+        supabaseAdmin.from('game_history').select('bet_amount, win_amount').range(0, 999999)
       ])
 
       let totalCoins = 0
