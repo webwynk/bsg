@@ -173,7 +173,7 @@ BEGIN
 END;
 $$;
 
--- B. update_user_heartbeat (called every 25s — checks is_active + session)
+-- B. update_user_heartbeat (called every 15s-25s — checks is_active + session + returns live balance)
 CREATE OR REPLACE FUNCTION public.update_user_heartbeat(
   p_user_id      UUID,
   p_session_token TEXT
@@ -183,9 +183,10 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
   v_is_active BOOLEAN;
+  v_balance   NUMERIC;
   v_token     TEXT;
 BEGIN
-  SELECT is_active INTO v_is_active FROM public.profiles WHERE id = p_user_id;
+  SELECT is_active, balance INTO v_is_active, v_balance FROM public.profiles WHERE id = p_user_id;
   IF NOT FOUND OR NOT v_is_active THEN
     RETURN jsonb_build_object('allowed', false, 'reason', 'account_blocked');
   END IF;
@@ -194,7 +195,7 @@ BEGIN
     RETURN jsonb_build_object('allowed', false, 'reason', 'session_displaced');
   END IF;
   UPDATE public.active_sessions SET last_seen_at = NOW() WHERE user_id = p_user_id;
-  RETURN jsonb_build_object('allowed', true);
+  RETURN jsonb_build_object('allowed', true, 'balance', v_balance);
 END;
 $$;
 
@@ -463,8 +464,18 @@ BEGIN
   v_t_key := v_round.red::TEXT || v_round.green::TEXT || v_round.black::TEXT;-- e.g. '742'
 
   v_s_bet := COALESCE((v_bet.single_bets ->> v_s_key)::NUMERIC, 0);
-  v_d_bet := COALESCE((v_bet.double_bets ->> v_d_key)::NUMERIC, 0);
-  v_t_bet := COALESCE((v_bet.triple_bets ->> v_t_key)::NUMERIC, 0);
+  
+  v_d_bet := COALESCE(
+    (v_bet.double_bets ->> v_d_key)::NUMERIC,
+    COALESCE((v_bet.double_bets ->> LPAD(v_d_key, 2, '0'))::NUMERIC,
+    COALESCE((v_bet.double_bets ->> (v_d_key::INT)::TEXT)::NUMERIC, 0))
+  );
+
+  v_t_bet := COALESCE(
+    (v_bet.triple_bets ->> v_t_key)::NUMERIC,
+    COALESCE((v_bet.triple_bets ->> LPAD(v_t_key, 3, '0'))::NUMERIC,
+    COALESCE((v_bet.triple_bets ->> (v_t_key::INT)::TEXT)::NUMERIC, 0))
+  );
 
   v_s_win     := v_s_bet * 9;
   v_d_win     := v_d_bet * 90;
