@@ -21,7 +21,8 @@ import { getAgentDashboardDataAction } from './actions'
 
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
-  const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }>>([])
+  const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; targetUsername?: string; date: string }>>([])
+  const [agentInfo, setAgentInfo] = React.useState<{ name: string; username: string; joinedDate: string } | null>(null)
   const [balance, setBalance] = React.useState(0)
   const [todaysBets, setTodaysBets] = React.useState(0)
   const [todaysWins, setTodaysWins] = React.useState(0)
@@ -53,6 +54,13 @@ export default function AgentDashboard() {
         setTodaysBets(resDash.todaysBets || 0)
         setTodaysWins(resDash.todaysWins || 0)
         setTodaysProfitLoss(resDash.todaysProfitLoss || 0)
+        if (resDash.name) {
+          setAgentInfo({
+            name: resDash.name,
+            username: resDash.username || 'agent',
+            joinedDate: resDash.joinedDate || 'Jul 28, 2026'
+          })
+        }
         if (resDash.recentTransactions) {
           setRecentTransactions(resDash.recentTransactions)
         }
@@ -137,16 +145,25 @@ export default function AgentDashboard() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
-      {/* Top Page Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card border border-border/80 rounded-2xl shadow-xs">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
-            <Coins className="h-4 w-4" />
+      {/* Top Page Header Bar (Agent Profile Badge) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-card border border-border/80 rounded-2xl shadow-xs">
+        <div className="flex items-center space-x-3">
+          <div className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+            <Coins className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground">Agent Cashier</h1>
-            <p className="text-muted-foreground text-xs leading-tight hidden sm:block">
-              Quick coin transfers, player management, and cashier activity snapshot.
+            <div className="flex items-center space-x-2">
+              <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground">
+                {agentInfo?.name || 'Agent Cashier'}
+              </h1>
+              <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-primary/10 text-primary border border-primary/20 uppercase tracking-wider">
+                Agent Back-Office
+              </span>
+            </div>
+            <p className="text-muted-foreground text-xs leading-tight font-mono mt-0.5 flex flex-wrap items-center gap-2">
+              <span className="font-bold text-foreground/80">@{agentInfo?.username || 'agent'}</span>
+              <span>&bull;</span>
+              <span className="text-muted-foreground">Joined: {agentInfo?.joinedDate || 'Jul 28, 2026'}</span>
             </p>
           </div>
         </div>
@@ -429,8 +446,13 @@ export default function AgentDashboard() {
                 <TableBody>
                   {paginatedTransactions.map((txn) => (
                     <TableRow key={txn.id} className="border-border hover:bg-secondary/30 transition-colors">
-                      <TableCell className="font-bold text-foreground text-xs py-2">
-                        {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                      <TableCell className="py-2">
+                        <div>
+                          <div className="font-bold text-foreground text-xs">{txn.target}</div>
+                          {txn.target !== 'Superadmin' && txn.targetUsername && (
+                            <div className="text-[10px] text-muted-foreground font-mono">{txn.targetUsername}</div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-[11px] text-muted-foreground font-mono py-2">
                         {txn.date}

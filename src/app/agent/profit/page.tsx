@@ -29,6 +29,7 @@ export default function AgentProfitPage() {
   })
   const [players, setPlayers] = React.useState<Array<{
     id: string
+    name?: string
     username: string
     isActive: boolean
     balance: number
@@ -364,7 +365,10 @@ export default function AgentProfitPage() {
                   <div key={p.id} className="p-3 space-y-2 hover:bg-secondary/20 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-black text-xs text-foreground font-mono">@{p.username}</span>
+                        <div>
+                          <div className="font-bold text-xs text-foreground">{p.name || p.username}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">@{p.username}</div>
+                        </div>
                         <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
                           p.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                         }`}>
@@ -414,7 +418,10 @@ export default function AgentProfitPage() {
                       <TableRow key={p.id} className="hover:bg-secondary/20 transition-colors">
                         <TableCell className="py-2.5">
                           <div className="flex items-center space-x-2">
-                            <span className="font-black text-xs text-foreground font-mono">@{p.username}</span>
+                            <div>
+                              <div className="font-bold text-xs text-foreground">{p.name || p.username}</div>
+                              <div className="text-[10px] text-muted-foreground font-mono">@{p.username}</div>
+                            </div>
                             <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
                               p.isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
                             }`}>

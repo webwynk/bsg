@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
@@ -140,13 +140,16 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     const netMarginPct = totalVolume > 0 ? (filteredPnl / totalVolume) * 100 : 0
 
     // Build combined player dictionary (profiles + auth.users)
-    const playerDict: Record<string, { username: string; isActive: boolean; balance: number }> = {}
+    const playerDict: Record<string, { name: string; username: string; isActive: boolean; balance: number }> = {}
 
     // First populate from profiles table
     if (profilesRes.data) {
       profilesRes.data.forEach(p => {
+        const u = authUsersRes.data?.users?.find(user => user.id === p.id)
+        const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || p.username || 'Player'
         playerDict[p.id] = {
-          username: p.username || 'Player',
+          name: fullName,
+          username: p.username || '',
           isActive: p.is_active ?? true,
           balance: Number(p.balance || 0)
         }
@@ -158,8 +161,11 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       authUsersRes.data.users.forEach(u => {
         const meta = u.user_metadata || {}
         if (meta.role === 'player' && (meta.agent_id === agentId || !playerDict[u.id])) {
+          const pUsername = meta.username || u.email?.split('@')[0] || 'player'
+          const pName = meta.full_name || meta.name || pUsername
           playerDict[u.id] = {
-            username: meta.username || meta.full_name || u.email?.split('@')[0] || 'Player',
+            name: pName,
+            username: pUsername,
             isActive: meta.status !== 'Blocked',
             balance: Number(meta.balance || 0)
           }
@@ -188,13 +194,14 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     const allPlayerIds = Array.from(new Set([...Object.keys(playerDict), ...Object.keys(playerStatsMap)]))
 
     let playerBreakdowns = allPlayerIds.map(uid => {
-      const info = playerDict[uid] || { username: `Player (${uid.substring(0, 6)})`, isActive: true, balance: 0 }
+      const info = playerDict[uid] || { name: `Player (${uid.substring(0, 6)})`, username: `player_${uid.substring(0, 6)}`, isActive: true, balance: 0 }
       const stats = playerStatsMap[uid] || { totalPlays: 0, totalBets: 0, totalWins: 0, lastPlayedAt: '' }
       const netPnl = stats.totalBets - stats.totalWins
       const marginPct = stats.totalBets > 0 ? (netPnl / stats.totalBets) * 100 : 0
 
       return {
         id: uid,
+        name: info.name,
         username: info.username,
         isActive: info.isActive,
         balance: info.balance,

@@ -34,26 +34,40 @@ export async function getAgentDashboardDataAction() {
         supabaseAdmin.from('transactions').select('*, user:profiles!transactions_user_id_fkey(username)').or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`).order('created_at', { ascending: false }).limit(5)
       ])
 
+      // Fetch all auth users to extract full_name metadata
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+      const allUsers = usersData?.users || []
+
       const balance = agentProfRes.data ? Number(agentProfRes.data.balance || 0) : (authUser.user_metadata?.balance || 0)
       const username = agentProfRes.data?.username || authUser.user_metadata?.username || authUser.email?.split('@')[0] || 'agent'
+      const agentName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || username
+      const rawJoined = authUser.created_at
+      const joinedDate = rawJoined ? new Date(rawJoined).toLocaleDateString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) : 'Jul 28, 2026'
 
       // Player list for dropdown and count
       let players: Array<{ id: string; name: string; username: string; balance: number }> = []
       if (playersProfRes.data && playersProfRes.data.length > 0) {
-        players = playersProfRes.data.map(p => ({
-          id: p.id,
-          name: p.username || 'Player',
-          username: p.username || '',
-          balance: Number(p.balance || 0)
-        }))
+        players = playersProfRes.data.map(p => {
+          const u = allUsers.find(user => user.id === p.id)
+          const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || p.username || 'Player'
+          return {
+            id: p.id,
+            name: fullName,
+            username: p.username || '',
+            balance: Number(p.balance || 0)
+          }
+        })
       } else {
-        // Fallback to Auth listUsers if profiles table is empty
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        players = (usersData?.users || [])
+        players = allUsers
           .filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === authUser.id)
           .map(u => ({
             id: u.id,
-            name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
+            name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Player',
             username: u.user_metadata?.username || u.email?.split('@')[0] || '',
             balance: u.user_metadata?.balance || 0
           }))
@@ -71,7 +85,7 @@ export async function getAgentDashboardDataAction() {
       }
 
       // Format last 5 cashier transactions
-      let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }> = []
+      let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; targetUsername: string; date: string }> = []
       if (txnsRes.data && txnsRes.data.length > 0) {
         recentTransactions = txnsRes.data
           .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
@@ -79,14 +93,23 @@ export async function getAgentDashboardDataAction() {
             const amt = Number(tx.amount || 0)
             const isDep = tx.type === 'agent_topup' || tx.type === 'agent_credit' || tx.type === 'deposit' || (tx.type === 'admin_adjustment' && amt >= 0)
             const isPlayerTx = tx.agent_id === authUser.id && tx.user_id !== authUser.id
-            const rawTarget = isPlayerTx ? (tx.user?.username || 'player') : 'Superadmin'
-            const targetName = rawTarget.replace(/^@+/, '')
+            
+            let targetName = 'Superadmin'
+            let targetUsername = 'Superadmin'
+
+            if (isPlayerTx) {
+              const playerUser = allUsers.find(u => u.id === tx.user_id)
+              const pUsername = tx.user?.username || playerUser?.user_metadata?.username || 'player'
+              targetName = playerUser?.user_metadata?.full_name || playerUser?.user_metadata?.name || pUsername
+              targetUsername = `@${pUsername.replace(/^@+/, '')}`
+            }
 
             return {
               id: tx.id,
               type: (isDep ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
               amount: Math.abs(amt),
               target: targetName,
+              targetUsername: targetUsername,
               date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
             }
           })
@@ -96,7 +119,9 @@ export async function getAgentDashboardDataAction() {
         balance,
         playersCount: players.length,
         players,
+        name: agentName,
         username,
+        joinedDate,
         todaysBets,
         todaysWins,
         todaysProfitLoss,
@@ -109,7 +134,9 @@ export async function getAgentDashboardDataAction() {
     balance: authUser.user_metadata?.balance || 0,
     playersCount: 0,
     players: [],
+    name: authUser.user_metadata?.full_name || authUser.user_metadata?.username || 'agent',
     username: authUser.user_metadata?.username || 'agent',
+    joinedDate: 'Jul 28, 2026',
     todaysBets: 0,
     todaysWins: 0,
     todaysProfitLoss: 0,
@@ -137,18 +164,20 @@ export async function getAgentTransactionHistoryAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const [profRes, txnsRes] = await Promise.all([
+    const [profRes, txnsRes, usersRes] = await Promise.all([
       supabaseAdmin.from('profiles').select('balance').eq('id', authUser.id).single(),
       supabaseAdmin
         .from('transactions')
         .select('*, user:profiles!transactions_user_id_fkey(username), agent:profiles!transactions_agent_id_fkey(username)')
         .or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`)
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(100),
+      supabaseAdmin.auth.admin.listUsers()
     ])
 
     const balance = Number(profRes.data?.balance || 0)
     const txnsData = txnsRes.data
+    const allUsers = usersRes.data?.users || []
 
     if (txnsRes.error || !txnsData) {
       return { balance, transactions: [] }
@@ -161,8 +190,13 @@ export async function getAgentTransactionHistoryAction() {
         const isSuperadminTxn = tx.user_id === authUser.id
 
         let target = 'Superadmin'
+        let targetUsername = 'Superadmin'
+
         if (isAgentPlayerTxn) {
-          target = (tx.user?.username || 'player').replace(/^@+/, '')
+          const playerUser = allUsers.find(u => u.id === tx.user_id)
+          const pUsername = tx.user?.username || playerUser?.user_metadata?.username || 'player'
+          target = playerUser?.user_metadata?.full_name || playerUser?.user_metadata?.name || pUsername
+          targetUsername = `@${pUsername.replace(/^@+/, '')}`
         }
 
         const amt = Number(tx.amount || 0)
@@ -179,6 +213,7 @@ export async function getAgentTransactionHistoryAction() {
           type: txType,
           amount: Math.abs(amt),
           target,
+          targetUsername,
           status: 'Success',
           created_at: tx.created_at,
           date: new Date(tx.created_at).toLocaleString('en-US', {
@@ -193,7 +228,7 @@ export async function getAgentTransactionHistoryAction() {
       })
 
     return { balance, transactions: formatted }
-  } catch (err) {
-    return { balance: 0, transactions: [] }
-  }
+  } catch (_) {}
+
+  return { balance: 0, transactions: [] }
 }

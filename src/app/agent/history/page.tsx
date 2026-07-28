@@ -26,6 +26,7 @@ export default function HistoryPage() {
     type: 'deposit' | 'withdraw'
     amount: number
     target: string
+    targetUsername?: string
     date: string
     status: string
   }>>([])
@@ -372,8 +373,13 @@ export default function HistoryPage() {
                         {txn.type === 'deposit' ? 'Deposit' : 'Withdraw'}
                       </span>
                     </TableCell>
-                    <TableCell className="text-foreground font-bold text-xs py-2">
-                      {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                    <TableCell className="py-2">
+                      <div>
+                        <div className="font-bold text-foreground text-xs">{txn.target}</div>
+                        {txn.target !== 'Superadmin' && txn.targetUsername && (
+                          <div className="text-[10px] text-muted-foreground font-mono">{txn.targetUsername}</div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className={`text-right font-mono font-black text-xs py-2 ${
                       txn.type === 'deposit' ? 'text-emerald-500' : 'text-red-500'
@@ -444,8 +450,11 @@ export default function HistoryPage() {
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
                 <div>
                   <span className="font-extrabold text-foreground text-xs block">
-                    {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                    {txn.target}
                   </span>
+                  {txn.target !== 'Superadmin' && txn.targetUsername && (
+                    <span className="text-[10px] text-muted-foreground font-mono block">{txn.targetUsername}</span>
+                  )}
                   <span className="text-[10px] text-muted-foreground font-mono">{txn.date}</span>
                 </div>
                 <div className="text-right">
