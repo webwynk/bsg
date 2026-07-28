@@ -468,7 +468,7 @@ export default function SuperAdminLiveGamePage() {
                 <thead>
                   <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
                     <th className="py-2.5 px-3">Timestamp</th>
-                    <th className="py-2.5 px-3">Draw ID</th>
+                    <th className="py-2.5 px-3">Hand ID</th>
                     <th className="py-2.5 px-3">Player</th>
                     <th className="py-2.5 px-3">Digits (R • G • B)</th>
                     <th className="py-2.5 px-3">3-Digit Outcome</th>

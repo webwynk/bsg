@@ -1355,7 +1355,7 @@ export default function PlayersPage() {
                             <TableHeader>
                               <TableRow className="border-border hover:bg-transparent bg-secondary/20">
                                 <TableHead className="w-8"></TableHead>
-                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Spin ID</TableHead>
+                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Hand ID</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[100px]">Game</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[120px]">Mode</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
