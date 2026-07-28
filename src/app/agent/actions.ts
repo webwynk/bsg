@@ -27,11 +27,10 @@ export async function getAgentDashboardDataAction() {
       const todayStartISO = istTodayStart.toISOString()
 
       // Execute all sub-queries in parallel via Promise.all
-      const [agentProfRes, playersProfRes, spinsRes, txnsRes] = await Promise.all([
+      const [agentProfRes, playersProfRes, spinsRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('username, balance').eq('id', authUser.id).maybeSingle(),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', authUser.id),
-        supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStartISO),
-        supabaseAdmin.from('transactions').select('*').or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`).order('created_at', { ascending: false }).limit(20)
+        supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStartISO)
       ])
 
       // Fetch all auth users to extract full_name metadata
@@ -74,6 +73,27 @@ export async function getAgentDashboardDataAction() {
       }
 
       const playerIds = (playersProfRes.data || []).map(p => p.id)
+      const allTargetUserIds = [authUser.id, ...playerIds]
+
+      // Fetch last 20 transactions for agent & agent's players
+      let txnsData: any[] = []
+      try {
+        const { data: rawTxns } = await supabaseAdmin
+          .from('transactions')
+          .select('*')
+          .or(`agent_id.eq.${authUser.id},user_id.in.(${allTargetUserIds.join(',')})`)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        txnsData = rawTxns || []
+      } catch (_) {
+        const { data: fallbackTxns } = await supabaseAdmin
+          .from('transactions')
+          .select('*')
+          .eq('agent_id', authUser.id)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        txnsData = fallbackTxns || []
+      }
 
       let todaysBets = 0
       let todaysWins = 0
@@ -99,20 +119,20 @@ export async function getAgentDashboardDataAction() {
 
       // Format last 20 cashier transactions
       let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; targetUsername: string; date: string }> = []
-      if (txnsRes.data && txnsRes.data.length > 0) {
-        recentTransactions = txnsRes.data
+      if (txnsData && txnsData.length > 0) {
+        recentTransactions = txnsData
           .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
           .map(tx => {
             const amt = Number(tx.amount || 0)
             const isDep = tx.type === 'agent_topup' || tx.type === 'agent_credit' || tx.type === 'deposit' || (tx.type === 'admin_adjustment' && amt >= 0)
-            const isPlayerTx = tx.agent_id === authUser.id && tx.user_id !== authUser.id
+            
+            const playerProf = (playersProfRes.data || []).find(p => p.id === tx.user_id)
+            const playerUser = allUsers.find(u => u.id === tx.user_id)
             
             let targetName = 'Superadmin'
             let targetUsername = 'Superadmin'
 
-            if (isPlayerTx) {
-              const playerProf = (playersProfRes.data || []).find(p => p.id === tx.user_id)
-              const playerUser = allUsers.find(u => u.id === tx.user_id)
+            if (playerProf || (playerUser && playerUser.id !== authUser.id)) {
               const pUsername = playerProf?.username || playerUser?.user_metadata?.username || 'player'
               targetName = playerUser?.user_metadata?.full_name || playerUser?.user_metadata?.name || pUsername
               targetUsername = `@${pUsername.replace(/^@+/, '')}`
