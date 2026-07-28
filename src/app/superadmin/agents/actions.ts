@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
@@ -354,10 +354,8 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
           await supabaseAdmin.from('transactions').insert({
             user_id: targetId,
             agent_id: agentId,
-            agent_username: agentProfile.username,
-            user_name: targetProfile.username,
-            user_username: targetProfile.username,
-            type: 'agent_credit',
+            game_name: 'system',
+            type: 'agent_topup',
             amount: sanitizedAmount,
             balance_after: newPlayerBal
           })
@@ -375,10 +373,8 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
           await supabaseAdmin.from('transactions').insert({
             user_id: targetId,
             agent_id: agentId,
-            agent_username: agentProfile.username,
-            user_name: targetProfile.username,
-            user_username: targetProfile.username,
-            type: 'agent_debit',
+            game_name: 'system',
+            type: 'agent_deduct',
             amount: -sanitizedAmount,
             balance_after: newPlayerBal
           })
@@ -438,11 +434,13 @@ export async function transferPointsAction(targetIdentifier: string, amount: num
           .eq('id', targetId)
 
         if (!updErr) {
-          await supabaseAdmin.from('agent_coin_transactions').insert({
-            agent_id: targetId,
-            agent_username: targetProfile.username,
-            type,
-            amount: sanitizedAmount
+          await supabaseAdmin.from('transactions').insert({
+            user_id: targetId,
+            agent_id: callerUser?.id || null,
+            game_name: 'system',
+            type: 'admin_adjustment',
+            amount: delta,
+            balance_after: newBal
           })
           rpcRes = { new_balance: newBal }
           rpcErr = null
@@ -485,18 +483,23 @@ export async function getAgentCoinTransactionsAction(params?: {
   })
 
   let query = supabaseAdmin
-    .from('agent_coin_transactions')
-    .select('*', { count: 'exact' })
+    .from('transactions')
+    .select('*, user:profiles!transactions_user_id_fkey(username)', { count: 'exact' })
+    .in('type', ['admin_adjustment', 'deposit', 'withdraw'])
 
   if (params?.agentId && params.agentId !== 'all') {
     const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)
     if (resolvedAgentId) {
-      query = query.eq('agent_id', resolvedAgentId)
+      query = query.eq('user_id', resolvedAgentId)
     }
   }
 
   if (params?.type && params.type !== 'all') {
-    query = query.eq('type', params.type)
+    if (params.type === 'deposit') {
+      query = query.gte('amount', 0)
+    } else if (params.type === 'withdraw') {
+      query = query.lt('amount', 0)
+    }
   }
 
   if (params?.startDate) {
@@ -523,13 +526,15 @@ export async function getAgentCoinTransactionsAction(params?: {
     return { transactions: [], totalItems: 0, totalPages: 1, summary: { totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 } }
   }
 
-  // Query summary totals for full filtered dataset
+  // Summary calculations
   let summaryQuery = supabaseAdmin
-    .from('agent_coin_transactions')
-    .select('type, amount')
+    .from('transactions')
+    .select('amount')
+    .in('type', ['admin_adjustment', 'deposit', 'withdraw'])
 
   if (params?.agentId && params.agentId !== 'all') {
-    summaryQuery = summaryQuery.eq('agent_id', params.agentId)
+    const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)
+    if (resolvedAgentId) summaryQuery = summaryQuery.eq('user_id', resolvedAgentId)
   }
   if (params?.startDate) {
     const startIso = new Date(params.startDate).toISOString()
@@ -547,28 +552,33 @@ export async function getAgentCoinTransactionsAction(params?: {
   let totalWithdrawn = 0
   if (summaryData) {
     summaryData.forEach(item => {
-      if (item.type === 'deposit') totalDeposited += Number(item.amount)
-      if (item.type === 'withdraw') totalWithdrawn += Number(item.amount)
+      const amt = Number(item.amount || 0)
+      if (amt > 0) totalDeposited += amt
+      else totalWithdrawn += Math.abs(amt)
     })
   }
 
-  const transactions = (data || []).map(tx => ({
-    id: tx.id,
-    agentId: tx.agent_id,
-    agentName: tx.agent_name,
-    agentUsername: tx.agent_username,
-    type: tx.type,
-    amount: Number(tx.amount),
-    createdAt: tx.created_at,
-    date: new Date(tx.created_at).toLocaleString('en-US', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }))
+  const transactions = (data || []).map(tx => {
+    const amt = Number(tx.amount || 0)
+    const isDep = amt >= 0
+    return {
+      id: tx.id,
+      agentId: tx.user_id,
+      agentName: tx.user?.username || 'Agent',
+      agentUsername: tx.user?.username || 'agent',
+      type: (isDep ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+      amount: Math.abs(amt),
+      createdAt: tx.created_at,
+      date: new Date(tx.created_at).toLocaleString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+  })
 
   const totalItems = count || 0
   const totalPages = Math.ceil(totalItems / limit) || 1

@@ -31,7 +31,7 @@ export async function getAgentDashboardDataAction() {
         supabaseAdmin.from('profiles').select('username, balance').eq('id', authUser.id).maybeSingle(),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', authUser.id),
         supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStartISO),
-        supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id).order('created_at', { ascending: false }).limit(5)
+        supabaseAdmin.from('transactions').select('*, user:profiles!transactions_user_id_fkey(username)').or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`).order('created_at', { ascending: false }).limit(5)
       ])
 
       const balance = agentProfRes.data ? Number(agentProfRes.data.balance || 0) : (authUser.user_metadata?.balance || 0)
@@ -73,13 +73,22 @@ export async function getAgentDashboardDataAction() {
       // Format last 5 cashier transactions
       let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string }> = []
       if (txnsRes.data && txnsRes.data.length > 0) {
-        recentTransactions = txnsRes.data.map(tx => ({
-          id: tx.id,
-          type: tx.type === 'agent_credit' ? 'deposit' : 'withdraw',
-          amount: Math.abs(Number(tx.amount)),
-          target: tx.user_username || 'player',
-          date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
-        }))
+        recentTransactions = txnsRes.data
+          .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
+          .map(tx => {
+            const amt = Number(tx.amount || 0)
+            const isDep = tx.type === 'agent_topup' || tx.type === 'agent_credit' || tx.type === 'deposit' || (tx.type === 'admin_adjustment' && amt >= 0)
+            const isPlayerTx = tx.agent_id === authUser.id && tx.user_id !== authUser.id
+            const targetName = isPlayerTx ? `@${tx.user?.username || 'player'}` : 'Superadmin'
+
+            return {
+              id: tx.id,
+              type: (isDep ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+              amount: Math.abs(amt),
+              target: targetName,
+              date: new Date(tx.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
+            }
+          })
       }
 
       return {
@@ -127,42 +136,55 @@ export async function getAgentTransactionHistoryAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const agentUsername = authUser.user_metadata?.username || authUser.email?.split('@')[0] || ''
+    const { data: txnsData, error } = await supabaseAdmin
+      .from('transactions')
+      .select('*, user:profiles!transactions_user_id_fkey(username), agent:profiles!transactions_agent_id_fkey(username)')
+      .or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`)
+      .order('created_at', { ascending: false })
+      .limit(100)
 
-    const [playerTxnsRes, adminTxnsRes] = await Promise.all([
-      agentUsername
-        ? supabaseAdmin.from('transactions').select('*').or(`agent_id.eq.${authUser.id},agent_username.ilike.${agentUsername}`)
-        : supabaseAdmin.from('transactions').select('*').eq('agent_id', authUser.id),
-      agentUsername
-        ? supabaseAdmin.from('agent_coin_transactions').select('*').or(`agent_id.eq.${authUser.id},agent_username.ilike.${agentUsername}`)
-        : supabaseAdmin.from('agent_coin_transactions').select('*').eq('agent_id', authUser.id)
-    ])
+    if (error || !txnsData) {
+      return { transactions: [] }
+    }
 
-    const playerTxns = (playerTxnsRes.data || [])
-      .filter(tx => tx.type === 'agent_credit' || tx.type === 'agent_debit' || tx.type === 'deposit' || tx.type === 'withdraw' || tx.type === 'withdrawal')
-      .map(tx => ({
-        id: tx.id,
-        type: (tx.type === 'agent_credit' || tx.type === 'deposit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-        amount: Math.abs(Number(tx.amount)),
-        target: `@${tx.user_username || tx.user_name || 'player'}`,
-        status: 'Success',
-        created_at: tx.created_at,
-        date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-      }))
+    const formatted = txnsData
+      .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
+      .map(tx => {
+        const isAgentPlayerTxn = tx.agent_id === authUser.id && tx.user_id !== authUser.id
+        const isSuperadminTxn = tx.user_id === authUser.id
 
-    const adminTxns = (adminTxnsRes.data || []).map(tx => ({
-      id: tx.id,
-      type: (tx.type === 'deposit' ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-      amount: Math.abs(Number(tx.amount)),
-      target: 'Superadmin',
-      status: 'Success',
-      created_at: tx.created_at,
-      date: new Date(tx.created_at).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    }))
+        let target = 'System'
+        if (isAgentPlayerTxn) {
+          target = `@${tx.user?.username || 'player'}`
+        } else if (isSuperadminTxn) {
+          target = 'Superadmin'
+        }
 
-    const formatted = [...playerTxns, ...adminTxns].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
+        const amt = Number(tx.amount || 0)
+        let txType: 'deposit' | 'withdraw' = 'deposit'
+        if (tx.type === 'agent_topup' || tx.type === 'agent_credit' || (tx.type === 'admin_adjustment' && amt >= 0)) {
+          txType = 'deposit'
+        } else if (tx.type === 'agent_deduct' || tx.type === 'agent_debit' || (tx.type === 'admin_adjustment' && amt < 0)) {
+          txType = 'withdraw'
+        }
+
+        return {
+          id: tx.id,
+          type: txType,
+          amount: Math.abs(amt),
+          target,
+          status: 'Success',
+          created_at: tx.created_at,
+          date: new Date(tx.created_at).toLocaleString('en-US', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }
+      })
 
     return { transactions: formatted }
   } catch (err) {

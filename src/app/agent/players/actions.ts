@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
@@ -408,20 +408,20 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     const { data: txns } = await supabaseAdmin
       .from('transactions')
       .select('*')
-      .or(`user_id.eq.${playerId},user_username.ilike.${playerIdentifier}`)
+      .eq('user_id', playerId)
       .order('created_at', { ascending: false })
       .limit(50)
 
     if (txns && txns.length > 0) {
       pointsHistory = txns
-        .filter(tx => tx.type !== 'bet_stake' && tx.type !== 'bet_payout' && tx.type !== 'bet' && tx.type !== 'win')
+        .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
         .map(tx => {
-          const typeLower = (tx.type || '').toLowerCase()
-          const isDeposit = typeLower.includes('credit') || typeLower.includes('deposit') || Number(tx.amount || 0) > 0
+          const amt = Number(tx.amount || 0)
+          const isDeposit = tx.type === 'agent_topup' || tx.type === 'agent_credit' || tx.type === 'deposit' || amt > 0
           return {
             id: tx.id.substring(0, 8),
             type: (isDeposit ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-            amount: Math.abs(Number(tx.amount || 0)),
+            amount: Math.abs(amt),
             balanceAfter: Number(tx.balance_after || 0),
             date: new Date(tx.created_at).toLocaleString('en-US', {
               timeZone: 'Asia/Kolkata',

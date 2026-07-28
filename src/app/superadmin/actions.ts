@@ -100,7 +100,7 @@ export async function getSystemOverviewMetricsAction() {
       // Execute all database queries in parallel via Promise.all
       const [profilesRes, txnsRes, roundBetsRes, todayRoundBetsRes, gameHistRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('role, balance'),
-        supabaseAdmin.from('agent_coin_transactions').select('amount').eq('type', 'deposit').gte('created_at', todayStartISO),
+        supabaseAdmin.from('transactions').select('amount').in('type', ['admin_adjustment', 'agent_topup', 'deposit']).gte('amount', 0).gte('created_at', todayStartISO),
         supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount'),
         supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').gte('created_at', todayStartISO),
         supabaseAdmin.from('game_history').select('bet_amount, win_amount')
