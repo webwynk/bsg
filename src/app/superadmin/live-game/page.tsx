@@ -17,8 +17,16 @@ import {
   Gamepad2
 } from 'lucide-react'
 
+interface PlayerBet {
+  username: string
+  betAmount: number
+  winAmount: number
+  status: string
+}
+
 interface GameDraw {
   id: string
+  roundNumber?: number
   game: string
   resultNumber: number
   redDigit: number
@@ -26,8 +34,10 @@ interface GameDraw {
   blackDigit: number
   betAmount: number
   winAmount: number
+  playerCount?: number
   status: string
   playerUsername: string
+  playerBets?: PlayerBet[]
   createdAt: string
 }
 
@@ -48,6 +58,7 @@ export default function SuperAdminLiveGamePage() {
   const [activeRound, setActiveRound] = useState<ActiveRound | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
   const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'game2' | 'game3'>('triple_chance')
   const [nowTime, setNowTime] = useState(Date.now())
   
@@ -474,7 +485,7 @@ export default function SuperAdminLiveGamePage() {
                       </td>
                     </tr>
                   ) : paginatedDraws.length > 0 ? (
-                    paginatedDraws.map(draw => {
+                    paginatedDraws.flatMap(draw => {
                       const formattedTime = draw.createdAt ? new Date(draw.createdAt).toLocaleString('en-IN', {
                         timeZone: 'Asia/Kolkata',
                         hour: '2-digit',
@@ -484,11 +495,27 @@ export default function SuperAdminLiveGamePage() {
                         month: 'short'
                       }) : '—'
 
-                      return (
-                        <tr key={draw.id} className="hover:bg-secondary/30 transition-colors">
+                      const isExpanded = expandedDrawId === draw.id;
+                      const hasMultiple = draw.playerBets && draw.playerBets.length > 0;
+
+                      return [
+                        <tr
+                          key={draw.id}
+                          onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.id)}
+                          className={`hover:bg-secondary/40 transition-colors ${hasMultiple ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-secondary/30' : ''}`}
+                        >
                           <td className="py-2.5 px-3 text-muted-foreground text-[11px] font-sans">{formattedTime}</td>
                           <td className="py-2.5 px-3 text-muted-foreground text-[10px]">{draw.id.slice(0, 8)}...</td>
-                          <td className="py-2.5 px-3 font-bold text-foreground font-sans">@{draw.playerUsername}</td>
+                          <td className="py-2.5 px-3 font-bold text-foreground font-sans">
+                            <span className="flex items-center space-x-1">
+                              <span>{draw.playerUsername}</span>
+                              {hasMultiple && (
+                                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">
+                                  {isExpanded ? '▲ Hide' : '▼ Details'}
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="py-2.5 px-3">
                             <div className="flex items-center space-x-1.5 font-bold text-xs">
                               <span className="text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">{draw.redDigit}</span>
@@ -507,8 +534,32 @@ export default function SuperAdminLiveGamePage() {
                           <td className={`py-2.5 px-3 text-right font-extrabold ${draw.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
                             {draw.winAmount > 0 ? `+${formatCurrency(draw.winAmount)}` : '0 Coins'}
                           </td>
-                        </tr>
-                      )
+                        </tr>,
+                        isExpanded && draw.playerBets && draw.playerBets.length > 0 && (
+                          <tr key={`${draw.id}-expanded`} className="bg-secondary/20 border-b border-border/40">
+                            <td colSpan={7} className="p-3">
+                              <div className="bg-background/90 rounded-xl p-3 border border-border/60 space-y-2">
+                                <div className="text-[11px] font-bold text-primary flex items-center justify-between border-b border-border/40 pb-1.5">
+                                  <span>Participating Player Breakdown ({draw.playerBets.length} Players)</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-sans">
+                                  {draw.playerBets.map((pb, idx) => (
+                                    <div key={idx} className="flex items-center justify-between bg-secondary/40 px-2.5 py-1.5 rounded-lg border border-border/30">
+                                      <span className="font-bold text-foreground">@{pb.username}</span>
+                                      <div className="flex items-center space-x-2 text-[11px] font-mono">
+                                        <span className="text-muted-foreground">Bet: {formatCurrency(pb.betAmount)}</span>
+                                        <span className={pb.winAmount > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
+                                          {pb.winAmount > 0 ? `+${formatCurrency(pb.winAmount)}` : '0'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      ]
                     })
                   ) : (
                     <tr>
@@ -529,29 +580,62 @@ export default function SuperAdminLiveGamePage() {
                   Loading game draws...
                 </div>
               ) : paginatedDraws.length > 0 ? (
-                paginatedDraws.map(draw => (
-                  <div key={draw.id} className="p-3 rounded-xl bg-secondary/30 border border-border/80 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground">@{draw.playerUsername}</span>
-                      <span className="font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded text-xs border border-primary/20">
-                        {draw.resultNumber.toString().padStart(3, '0')}
-                      </span>
-                    </div>
+                paginatedDraws.map(draw => {
+                  const isExpanded = expandedDrawId === draw.id;
+                  const hasMultiple = draw.playerBets && draw.playerBets.length > 0;
 
-                    <div className="flex items-center justify-between text-[11px]">
-                      <div className="flex items-center space-x-1 font-mono font-bold">
-                        <span className="text-red-400">{draw.redDigit}</span>
-                        <span className="text-muted-foreground/40">•</span>
-                        <span className="text-emerald-400">{draw.greenDigit}</span>
-                        <span className="text-muted-foreground/40">•</span>
-                        <span className="text-foreground">{draw.blackDigit}</span>
+                  return (
+                    <div
+                      key={draw.id}
+                      onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.id)}
+                      className={`p-3 rounded-xl bg-secondary/30 border border-border/80 space-y-2 text-xs ${hasMultiple ? 'cursor-pointer' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-bold text-foreground">{draw.playerUsername}</span>
+                          {hasMultiple && (
+                            <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">
+                              {isExpanded ? '▲ Hide' : '▼ Details'}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded text-xs border border-primary/20">
+                          {draw.resultNumber.toString().padStart(3, '0')}
+                        </span>
                       </div>
-                      <span className={`font-extrabold ${draw.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                        {draw.winAmount > 0 ? `+${formatCurrency(draw.winAmount)}` : '0 Coins'}
-                      </span>
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center space-x-1 font-mono font-bold">
+                          <span className="text-red-400">{draw.redDigit}</span>
+                          <span className="text-muted-foreground/40">•</span>
+                          <span className="text-emerald-400">{draw.greenDigit}</span>
+                          <span className="text-muted-foreground/40">•</span>
+                          <span className="text-foreground">{draw.blackDigit}</span>
+                        </div>
+                        <span className={`font-extrabold ${draw.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                          {draw.winAmount > 0 ? `+${formatCurrency(draw.winAmount)}` : '0 Coins'}
+                        </span>
+                      </div>
+
+                      {isExpanded && draw.playerBets && draw.playerBets.length > 0 && (
+                        <div className="pt-2 border-t border-border/40 space-y-1.5">
+                          <div className="text-[10px] font-bold text-primary">Participating Players ({draw.playerBets.length})</div>
+                          {draw.playerBets.map((pb, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-background/80 p-2 rounded-lg border border-border/40 text-[11px]">
+                              <span className="font-bold text-foreground">@{pb.username}</span>
+                              <div className="flex items-center space-x-2 font-mono">
+                                <span className="text-muted-foreground">Bet: {formatCurrency(pb.betAmount)}</span>
+                                <span className={pb.winAmount > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
+                                  {pb.winAmount > 0 ? `+${formatCurrency(pb.winAmount)}` : '0'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <div className="p-4 text-center text-muted-foreground text-xs">
                   No game draws found.

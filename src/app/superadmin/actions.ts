@@ -298,103 +298,59 @@ export async function getLatestGameDrawsAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Fetch round_bets (multiplayer round bets placed by players)
-    let roundBetsDraws: any[] = []
-    try {
-      const { data: rbRows } = await supabaseAdmin
-        .from('triple_chance_bets')
-        .select('*, profiles(username), triple_chance_rounds(red, green, black, status)')
-        .order('created_at', { ascending: false })
-        .limit(20)
-
-      if (rbRows) {
-        roundBetsDraws = rbRows.map(row => {
-          const round = row.triple_chance_rounds || {}
-          const red = Number(round.red ?? 0)
-          const green = Number(round.green ?? 0)
-          const black = Number(round.black ?? 0)
-          const resNum = red * 100 + green * 10 + black
-          const winAmt = Number(row.win_amount || 0)
-          const stakeAmt = Number(row.total_stake || 0)
-
-          return {
-            id: row.id,
-            game: 'Triple Chance',
-            resultNumber: resNum,
-            redDigit: red,
-            greenDigit: green,
-            blackDigit: black,
-            betAmount: stakeAmt,
-            winAmount: winAmt,
-            status: winAmt > 0 ? 'WON' : 'LOST',
-            playerUsername: row.profiles?.username || 'player',
-            createdAt: row.created_at
-          }
-        })
-      }
-    } catch (_) {}
-
-    // Fetch game_history (legacy single-player spin bets)
-    const { data: historyRows } = await supabaseAdmin
-      .from('game_history')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20)
-
-    // Fetch game_rounds (server global synchronized round results)
+    // Fetch recent global rounds (up to 20)
     let roundRows: any[] = []
     try {
       const { data } = await supabaseAdmin
         .from('triple_chance_rounds')
-        .select('*')
+        .select('*, triple_chance_bets(*, profiles(username))')
         .order('created_at', { ascending: false })
         .limit(20)
       roundRows = data || []
     } catch (_) {}
 
-    const historyDraws = (historyRows || []).map(row => {
-      const resNum = (row.result_number !== null && row.result_number !== undefined)
-        ? Number(row.result_number)
-        : 0
-      const resStr = resNum.toString().padStart(3, '0')
-      const red = row.red_digit !== null && row.red_digit !== undefined ? row.red_digit : parseInt(resStr[0], 10)
-      const green = row.green_digit !== null && row.green_digit !== undefined ? row.green_digit : parseInt(resStr[1], 10)
-      const black = row.black_digit !== null && row.black_digit !== undefined ? row.black_digit : parseInt(resStr[2], 10)
-
-      return {
-        id: row.id,
-        game: row.game_name || 'Triple Chance',
-        resultNumber: resNum,
-        redDigit: red,
-        greenDigit: green,
-        blackDigit: black,
-        betAmount: Number(row.bet_amount || 0),
-        winAmount: Number(row.win_amount || 0),
-        status: row.status || (Number(row.win_amount || 0) > 0 ? 'WON' : 'LOST'),
-        playerUsername: row.user_username || row.user_name || 'player',
-        createdAt: row.created_at
-      }
-    })
-
-    const roundDraws = (roundRows || []).map(row => {
-      const red = row.red !== null && row.red !== undefined ? row.red : 0
-      const green = row.green !== null && row.green !== undefined ? row.green : 0
-      const black = row.black !== null && row.black !== undefined ? row.black : 0
+    // Transform rounds into aggregated draw objects
+    const aggregatedDraws = roundRows.map(row => {
+      const red = row.red !== null && row.red !== undefined ? Number(row.red) : 0
+      const green = row.green !== null && row.green !== undefined ? Number(row.green) : 0
+      const black = row.black !== null && row.black !== undefined ? Number(row.black) : 0
       const resNum = (row.result_number !== null && row.result_number !== undefined)
         ? Number(row.result_number)
         : (red * 100 + green * 10 + black)
 
+      const bets = (row.triple_chance_bets || []) as any[]
+      const playerCount = bets.length
+      const totalWagered = bets.reduce((acc, b) => acc + Number(b.total_stake || 0), 0)
+      const totalPayout = bets.reduce((acc, b) => acc + Number(b.win_amount || 0), 0)
+
+      let playerUsername = 'System (No Bets)'
+      if (playerCount === 1) {
+        playerUsername = bets[0].profiles?.username ? `@${bets[0].profiles.username}` : '@player1'
+      } else if (playerCount > 1) {
+        playerUsername = `👥 ${playerCount} Players`
+      }
+
+      const playerBets = bets.map(b => ({
+        username: b.profiles?.username || 'player',
+        betAmount: Number(b.total_stake || 0),
+        winAmount: Number(b.win_amount || 0),
+        status: Number(b.win_amount || 0) > 0 ? 'WON' : 'LOST'
+      }))
+
       return {
         id: row.id || `round_${row.round_number}`,
+        roundNumber: row.round_number,
         game: 'Triple Chance',
         resultNumber: resNum,
         redDigit: red,
         greenDigit: green,
         blackDigit: black,
-        betAmount: 0,
-        winAmount: 0,
-        status: row.status || 'COMPLETED',
-        playerUsername: 'System (No Bets)',
+        betAmount: totalWagered,
+        winAmount: totalPayout,
+        playerCount,
+        status: totalPayout > 0 ? 'WON' : (totalWagered > 0 ? 'LOST' : 'COMPLETED'),
+        playerUsername,
+        playerBets,
         createdAt: row.created_at || row.scheduled_at || new Date().toISOString()
       }
     })
@@ -421,13 +377,7 @@ export async function getLatestGameDrawsAction() {
       }
     } catch (_) {}
 
-    // Merge all streams, deduplicate by ID, and sort by createdAt DESC
-    const allDraws = [...roundBetsDraws, ...historyDraws, ...roundDraws]
-      .filter((item, index, self) => index === self.findIndex(t => t.id === item.id))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 20)
-
-    return { draws: allDraws, activeRound }
+    return { draws: aggregatedDraws, activeRound }
   } catch (_) {
     return { draws: [], activeRound: null }
   }
