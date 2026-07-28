@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
@@ -94,7 +94,7 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
 
     // Build history queries for round_bets (primary multiplayer source)
     let roundQuery = supabaseAdmin
-      .from('round_bets')
+      .from('triple_chance_bets')
       .select('user_id, total_stake, win_amount, created_at, profiles!inner(agent_id)')
       .eq('profiles.agent_id', agentId)
 
@@ -107,8 +107,8 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
 
     // Execute queries in parallel
     const [allRoundsRes, todayRoundsRes, filteredRoundsRes, allHistRes, todayHistRes, filteredHistRes, profilesRes, authUsersRes] = await Promise.all([
-      supabaseAdmin.from('round_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId),
-      supabaseAdmin.from('round_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId).gte('created_at', todayStartISO),
+      supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId),
+      supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId).gte('created_at', todayStartISO),
       roundQuery,
       supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId),
       supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId).gte('created_at', todayStartISO),
@@ -249,3 +249,4 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     }
   }
 }
+

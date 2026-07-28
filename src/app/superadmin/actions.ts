@@ -101,8 +101,8 @@ export async function getSystemOverviewMetricsAction() {
       const [profilesRes, txnsRes, roundBetsRes, todayRoundBetsRes, gameHistRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('role, balance'),
         supabaseAdmin.from('agent_coin_transactions').select('amount').eq('type', 'deposit').gte('created_at', todayStartISO),
-        supabaseAdmin.from('round_bets').select('total_stake, win_amount'),
-        supabaseAdmin.from('round_bets').select('total_stake, win_amount').gte('created_at', todayStartISO),
+        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount'),
+        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').gte('created_at', todayStartISO),
         supabaseAdmin.from('game_history').select('bet_amount, win_amount')
       ])
 
@@ -302,14 +302,14 @@ export async function getLatestGameDrawsAction() {
     let roundBetsDraws: any[] = []
     try {
       const { data: rbRows } = await supabaseAdmin
-        .from('round_bets')
-        .select('*, profiles(username), game_rounds(red, green, black, status)')
+        .from('triple_chance_bets')
+        .select('*, profiles(username), triple_chance_rounds(red, green, black, status)')
         .order('created_at', { ascending: false })
         .limit(10)
 
       if (rbRows) {
         roundBetsDraws = rbRows.map(row => {
-          const round = row.game_rounds || {}
+          const round = row.triple_chance_rounds || {}
           const red = round.red ?? 0
           const green = round.green ?? 0
           const black = round.black ?? 0
@@ -345,7 +345,7 @@ export async function getLatestGameDrawsAction() {
     let roundRows: any[] = []
     try {
       const { data } = await supabaseAdmin
-        .from('game_rounds')
+        .from('triple_chance_rounds')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(10)
@@ -399,14 +399,37 @@ export async function getLatestGameDrawsAction() {
       }
     })
 
+    // Fetch active round telemetry via get_current_round RPC
+    let activeRound: any = null
+    try {
+      const { data: curRoundData } = await supabaseAdmin.rpc('get_current_round')
+      if (curRoundData) {
+        const red = curRoundData.red ?? 0
+        const green = curRoundData.green ?? 0
+        const black = curRoundData.black ?? 0
+        activeRound = {
+          roundNumber: curRoundData.round_number,
+          roundId: curRoundData.round_id,
+          redDigit: red,
+          greenDigit: green,
+          blackDigit: black,
+          resultNumber: red * 100 + green * 10 + black,
+          status: curRoundData.status,
+          secondsRemaining: curRoundData.seconds_remaining,
+          scheduledAt: curRoundData.scheduled_at
+        }
+      }
+    } catch (_) {}
+
     // Merge all streams, deduplicate by ID, and sort by createdAt DESC
     const allDraws = [...roundBetsDraws, ...historyDraws, ...roundDraws]
       .filter((item, index, self) => index === self.findIndex(t => t.id === item.id))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 10)
 
-    return { draws: allDraws }
+    return { draws: allDraws, activeRound }
   } catch (_) {
-    return { draws: [] }
+    return { draws: [], activeRound: null }
   }
 }
+

@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
@@ -88,7 +88,7 @@ export async function createPlayerAction(formData: FormData) {
   const { data: { user: agentUser } } = await supabase.auth.getUser()
   const agentId = agentUser?.id
 
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
+  const email = username.includes('@') ? username : `${username.toLowerCase()}@bestsmartgame.com`
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (serviceRoleKey) {
@@ -272,15 +272,15 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
   try {
     // Primary source: round_bets joined with game_rounds
     const { data: roundBets } = await supabaseAdmin
-      .from('round_bets')
-      .select('*, game_rounds(red, green, black, status)')
+      .from('triple_chance_bets')
+      .select('*, triple_chance_rounds(red, green, black, status)')
       .eq('user_id', playerId)
       .order('created_at', { ascending: false })
       .limit(50)
 
     if (roundBets && roundBets.length > 0) {
       gamePlays = roundBets.map(p => {
-        const round = p.game_rounds || {}
+        const round = p.triple_chance_rounds || {}
         const red = round.red ?? null
         const green = round.green ?? null
         const black = round.black ?? null
@@ -481,3 +481,5 @@ export async function resetPlayerPasswordAction(playerIdentifier: string, newPas
 
   return { error: 'Service Role Key not configured.' }
 }
+
+

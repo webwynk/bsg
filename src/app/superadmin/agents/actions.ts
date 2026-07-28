@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
@@ -87,7 +87,7 @@ export async function getAgentDetailAction(agentIdentifier: string) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Step 1: Resolve username → UUID (case-insensitive + auth listUsers fallback)
+      // Step 1: Resolve username â†’ UUID (case-insensitive + auth listUsers fallback)
       const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
       if (!agentId) {
         return { agent: null, players: [], resolvedAgentId: null, error: 'Agent not found' }
@@ -198,7 +198,7 @@ export async function createAgentAction(formData: FormData) {
     return { error: 'Username must be 3 to 20 characters and contain ONLY letters and numbers (no symbols, spaces, or special characters).' }
   }
 
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
+  const email = username.includes('@') ? username : `${username.toLowerCase()}@bestsmartgame.com`
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (serviceRoleKey) {
@@ -683,3 +683,4 @@ export async function updateAgentPasswordAction(agentIdentifier: string, newPass
 
   return { error: 'Service Role Key not configured.' }
 }
+

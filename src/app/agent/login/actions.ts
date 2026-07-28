@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -13,7 +13,7 @@ export async function agentLogin(formData: FormData) {
   }
 
   // Support pure username by converting to internal format if @ isn't present
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bsg.com`
+  const email = username.includes('@') ? username : `${username.toLowerCase()}@bestsmartgame.com`
 
   const supabase = await createClient()
 
@@ -31,3 +31,4 @@ export async function agentLogin(formData: FormData) {
 
   redirect('/agent')
 }
+

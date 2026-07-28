@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -17,7 +17,7 @@ export async function superAdminLogin(formData: FormData) {
     // If username is 'admin', automatically resolve to admin@bestsmartgame.com
     email = username.toLowerCase() === 'admin' 
       ? 'admin@bestsmartgame.com' 
-      : `${username.toLowerCase()}@bsg.com`
+      : `${username.toLowerCase()}@bestsmartgame.com`
   }
 
   const supabase = await createClient()
@@ -36,3 +36,4 @@ export async function superAdminLogin(formData: FormData) {
 
   redirect('/superadmin')
 }
+

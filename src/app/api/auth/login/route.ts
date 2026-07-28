@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: Request) {
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Username and password are required.' }, { status: 400 })
     }
 
-    const email = username.includes('@') ? username : `${username.trim().toLowerCase()}@bsg.com`
+    const email = username.includes('@') ? username : `${username.trim().toLowerCase()}@bestsmartgame.com`
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -81,3 +81,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: msg }, { status: 500 })
   }
 }
+
