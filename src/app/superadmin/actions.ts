@@ -305,7 +305,7 @@ export async function getLatestGameDrawsAction() {
         .from('triple_chance_bets')
         .select('*, profiles(username), triple_chance_rounds(red, green, black, status)')
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(20)
 
       if (rbRows) {
         roundBetsDraws = rbRows.map(row => {
@@ -339,7 +339,7 @@ export async function getLatestGameDrawsAction() {
       .from('game_history')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
 
     // Fetch game_rounds (server global synchronized round results)
     let roundRows: any[] = []
@@ -348,7 +348,7 @@ export async function getLatestGameDrawsAction() {
         .from('triple_chance_rounds')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(20)
       roundRows = data || []
     } catch (_) {}
 
@@ -394,7 +394,7 @@ export async function getLatestGameDrawsAction() {
         betAmount: 0,
         winAmount: 0,
         status: row.status || 'COMPLETED',
-        playerUsername: 'Global Round',
+        playerUsername: 'System (No Bets)',
         createdAt: row.created_at || row.scheduled_at || new Date().toISOString()
       }
     })
@@ -425,7 +425,7 @@ export async function getLatestGameDrawsAction() {
     const allDraws = [...roundBetsDraws, ...historyDraws, ...roundDraws]
       .filter((item, index, self) => index === self.findIndex(t => t.id === item.id))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10)
+      .slice(0, 20)
 
     return { draws: allDraws, activeRound }
   } catch (_) {
