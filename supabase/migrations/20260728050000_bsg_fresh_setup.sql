@@ -463,7 +463,7 @@ BEGIN
   v_d_key := v_round.green::TEXT || v_round.black::TEXT;                     -- e.g. '42'
   v_t_key := v_round.red::TEXT || v_round.green::TEXT || v_round.black::TEXT;-- e.g. '742'
 
-  v_s_bet := COALESCE((v_bet.single_bets ->> v_s_key)::NUMERIC, 0);
+  v_s_bet := COALESCE((v_bet.single_bets ->> v_s_key)::NUMERIC, COALESCE((v_bet.single_bets ->> (v_s_key::INT)::TEXT)::NUMERIC, 0));
   
   v_d_bet := COALESCE(
     (v_bet.double_bets ->> v_d_key)::NUMERIC,
