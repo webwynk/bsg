@@ -79,7 +79,8 @@ export async function getAgentDashboardDataAction() {
             const amt = Number(tx.amount || 0)
             const isDep = tx.type === 'agent_topup' || tx.type === 'agent_credit' || tx.type === 'deposit' || (tx.type === 'admin_adjustment' && amt >= 0)
             const isPlayerTx = tx.agent_id === authUser.id && tx.user_id !== authUser.id
-            const targetName = isPlayerTx ? `@${tx.user?.username || 'player'}` : 'Superadmin'
+            const rawTarget = isPlayerTx ? (tx.user?.username || 'player') : 'Superadmin'
+            const targetName = rawTarget.replace(/^@+/, '')
 
             return {
               id: tx.id,
@@ -121,14 +122,14 @@ export async function getAgentTransactionHistoryAction() {
   const { data: { user: authUser } } = await supabase.auth.getUser()
 
   if (!authUser) {
-    return { transactions: [] }
+    return { balance: 0, transactions: [] }
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
   if (!serviceRoleKey || !supabaseUrl) {
-    return { transactions: [] }
+    return { balance: 0, transactions: [] }
   }
 
   try {
@@ -136,15 +137,21 @@ export async function getAgentTransactionHistoryAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { data: txnsData, error } = await supabaseAdmin
-      .from('transactions')
-      .select('*, user:profiles!transactions_user_id_fkey(username), agent:profiles!transactions_agent_id_fkey(username)')
-      .or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`)
-      .order('created_at', { ascending: false })
-      .limit(100)
+    const [profRes, txnsRes] = await Promise.all([
+      supabaseAdmin.from('profiles').select('balance').eq('id', authUser.id).single(),
+      supabaseAdmin
+        .from('transactions')
+        .select('*, user:profiles!transactions_user_id_fkey(username), agent:profiles!transactions_agent_id_fkey(username)')
+        .or(`agent_id.eq.${authUser.id},user_id.eq.${authUser.id}`)
+        .order('created_at', { ascending: false })
+        .limit(100)
+    ])
 
-    if (error || !txnsData) {
-      return { transactions: [] }
+    const balance = Number(profRes.data?.balance || 0)
+    const txnsData = txnsRes.data
+
+    if (txnsRes.error || !txnsData) {
+      return { balance, transactions: [] }
     }
 
     const formatted = txnsData
@@ -153,11 +160,9 @@ export async function getAgentTransactionHistoryAction() {
         const isAgentPlayerTxn = tx.agent_id === authUser.id && tx.user_id !== authUser.id
         const isSuperadminTxn = tx.user_id === authUser.id
 
-        let target = 'System'
+        let target = 'Superadmin'
         if (isAgentPlayerTxn) {
-          target = `@${tx.user?.username || 'player'}`
-        } else if (isSuperadminTxn) {
-          target = 'Superadmin'
+          target = (tx.user?.username || 'player').replace(/^@+/, '')
         }
 
         const amt = Number(tx.amount || 0)
@@ -170,6 +175,7 @@ export async function getAgentTransactionHistoryAction() {
 
         return {
           id: tx.id,
+          category: (isSuperadminTxn ? 'superadmin' : 'player') as 'superadmin' | 'player',
           type: txType,
           amount: Math.abs(amt),
           target,
@@ -186,8 +192,8 @@ export async function getAgentTransactionHistoryAction() {
         }
       })
 
-    return { transactions: formatted }
+    return { balance, transactions: formatted }
   } catch (err) {
-    return { transactions: [] }
+    return { balance: 0, transactions: [] }
   }
 }

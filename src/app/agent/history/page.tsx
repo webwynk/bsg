@@ -13,12 +13,22 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatCurrency } from "@/lib/utils"
-import { ArrowDownRight, ArrowUpRight, Check, History, RefreshCw, Search, Filter, Coins } from "lucide-react"
+import { ArrowDownRight, ArrowUpRight, Check, History, RefreshCw, Search, Filter, Wallet, Users, ShieldCheck } from "lucide-react"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentTransactionHistoryAction } from '../actions'
 
 export default function HistoryPage() {
-  const [transactions, setTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; date: string; status: string }>>([])
+  const [agentBalance, setAgentBalance] = React.useState(0)
+  const [activeTab, setActiveTab] = React.useState<'player' | 'superadmin'>('player')
+  const [transactions, setTransactions] = React.useState<Array<{
+    id: string
+    category: 'player' | 'superadmin'
+    type: 'deposit' | 'withdraw'
+    amount: number
+    target: string
+    date: string
+    status: string
+  }>>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -29,15 +39,17 @@ export default function HistoryPage() {
   const [datePreset, setDatePreset] = React.useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
 
   const itemsPerPage = 10
-
   const [countdown, setCountdown] = React.useState(60)
 
   const loadHistory = React.useCallback((isInitial = false) => {
-    if (isInitial) setIsLoading(true) // skeleton only on first load
+    if (isInitial) setIsLoading(true)
     getAgentTransactionHistoryAction().then((res) => {
       setIsLoading(false)
       if (res.transactions) {
         setTransactions(res.transactions)
+      }
+      if (typeof res.balance === 'number') {
+        setAgentBalance(res.balance)
       }
     }).catch(() => setIsLoading(false))
   }, [])
@@ -45,12 +57,12 @@ export default function HistoryPage() {
   const handleManualRefresh = () => {
     setIsRefreshing(true)
     setCountdown(60)
-    loadHistory(false) // no skeleton on manual refresh
+    loadHistory(false)
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
   React.useEffect(() => {
-    loadHistory(true) // initial: show skeleton
+    loadHistory(true)
 
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
@@ -58,7 +70,7 @@ export default function HistoryPage() {
 
     const dataInterval = setInterval(() => {
       setCountdown(60)
-      loadHistory(false) // silent: no skeleton
+      loadHistory(false)
     }, 60000)
 
     return () => {
@@ -75,6 +87,7 @@ export default function HistoryPage() {
   }
 
   const filteredTransactions = transactions.filter(txn => {
+    const matchesTab = activeTab === 'player' ? txn.category === 'player' : txn.category === 'superadmin'
     const matchesSearch = !searchQuery ||
       txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       txn.target.toLowerCase().includes(searchQuery.toLowerCase())
@@ -99,15 +112,15 @@ export default function HistoryPage() {
       }
     }
 
-    return matchesSearch && matchesType && matchesDate
+    return matchesTab && matchesSearch && matchesType && matchesDate
   })
 
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1
   const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const totalDeposited = transactions.filter(t => t.type === 'deposit').reduce((acc, t) => acc + Number(t.amount || 0), 0)
-  const totalWithdrawn = transactions.filter(t => t.type === 'withdraw').reduce((acc, t) => acc + Number(t.amount || 0), 0)
-  const totalVolume = totalDeposited + totalWithdrawn
+  const currentTabTxns = transactions.filter(t => t.category === activeTab)
+  const totalDeposited = currentTabTxns.filter(t => t.type === 'deposit').reduce((acc, t) => acc + Number(t.amount || 0), 0)
+  const totalWithdrawn = currentTabTxns.filter(t => t.type === 'withdraw').reduce((acc, t) => acc + Number(t.amount || 0), 0)
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -129,7 +142,7 @@ export default function HistoryPage() {
               )}
             </div>
             <p className="text-muted-foreground text-xs leading-tight hidden sm:block">
-              Complete cashier audit record of all coin deposits and withdrawals made to your players.
+              Complete cashier audit record of all coin transfers and withdrawals.
             </p>
           </div>
         </div>
@@ -147,20 +160,22 @@ export default function HistoryPage() {
 
       {/* Summary KPI Cards (3 Compact Cards) */}
       <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+        {/* Card 1: Available Coins (Current Balance) */}
         <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
-            <span>Total Volume</span>
-            <Coins className="h-3.5 w-3.5 text-primary shrink-0 hidden sm:block" />
+            <span>Available Coins</span>
+            <Wallet className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
           {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className="text-xs sm:text-base font-black font-mono text-foreground mt-0.5 truncate">
-              {formatCurrency(totalVolume)}
+            <div className="text-xs sm:text-base font-black font-mono text-emerald-400 mt-0.5 truncate">
+              {formatCurrency(agentBalance)}
             </div>
           )}
         </Card>
 
+        {/* Card 2: Deposited */}
         <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Deposited</span>
@@ -175,6 +190,7 @@ export default function HistoryPage() {
           )}
         </Card>
 
+        {/* Card 3: Withdrawn */}
         <Card className="bg-card border-border/80 p-2 sm:p-3 rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
             <span>Withdrawn</span>
@@ -190,6 +206,45 @@ export default function HistoryPage() {
         </Card>
       </div>
 
+      {/* 2-Tab Switcher: Player Transfers vs Superadmin Transfers */}
+      <div className="flex items-center space-x-1.5 border-b border-border/80 pb-1">
+        <button
+          onClick={() => {
+            setActiveTab('player')
+            setCurrentPage(1)
+          }}
+          className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center space-x-2 ${
+            activeTab === 'player'
+              ? 'bg-primary text-primary-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          <span>Player Transfers</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-background/20 font-mono">
+            {transactions.filter(t => t.category === 'player').length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('superadmin')
+            setCurrentPage(1)
+          }}
+          className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center space-x-2 ${
+            activeTab === 'superadmin'
+              ? 'bg-primary text-primary-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+          }`}
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>Superadmin Transfers</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-background/20 font-mono">
+            {transactions.filter(t => t.category === 'superadmin').length}
+          </span>
+        </button>
+      </div>
+
       {/* Comprehensive Filter Toolbar */}
       <Card className="bg-card border-border/80 p-2.5 rounded-xl shadow-xs space-y-2">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
@@ -198,7 +253,7 @@ export default function HistoryPage() {
             <div className="relative flex-1 sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
               <Input 
-                placeholder="Search Tx ID or @player..." 
+                placeholder={activeTab === 'player' ? "Search @player..." : "Search Tx ID..."} 
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value)
@@ -281,7 +336,9 @@ export default function HistoryPage() {
                 <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider sticky left-0 bg-card z-10 py-2.5">Transaction ID</TableHead>
                 <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Date & Time</TableHead>
                 <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Type</TableHead>
-                <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Player</TableHead>
+                <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">
+                  {activeTab === 'player' ? 'Player Account' : 'Source'}
+                </TableHead>
                 <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Amount</TableHead>
                 <TableHead className="text-center text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Status</TableHead>
               </TableRow>
@@ -315,7 +372,9 @@ export default function HistoryPage() {
                         {txn.type === 'deposit' ? 'Deposit' : 'Withdraw'}
                       </span>
                     </TableCell>
-                    <TableCell className="text-foreground font-bold text-xs py-2">@{txn.target}</TableCell>
+                    <TableCell className="text-foreground font-bold text-xs py-2">
+                      {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                    </TableCell>
                     <TableCell className={`text-right font-mono font-black text-xs py-2 ${
                       txn.type === 'deposit' ? 'text-emerald-500' : 'text-red-500'
                     }`}>
@@ -370,7 +429,7 @@ export default function HistoryPage() {
             <Card key={txn.id} className="border-border/80 bg-card p-3 rounded-xl space-y-2 shadow-2xs relative overflow-hidden">
               <div className="flex items-center justify-between text-xs">
                 <div className="font-mono font-bold text-foreground text-xs">
-                  ID: {txn.id}
+                  ID: {txn.id.substring(0, 8)}
                 </div>
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                   txn.type === 'deposit'
@@ -384,7 +443,9 @@ export default function HistoryPage() {
 
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
                 <div>
-                  <span className="font-extrabold text-foreground text-xs block">@{txn.target}</span>
+                  <span className="font-extrabold text-foreground text-xs block">
+                    {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                  </span>
                   <span className="text-[10px] text-muted-foreground font-mono">{txn.date}</span>
                 </div>
                 <div className="text-right">

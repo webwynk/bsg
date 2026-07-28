@@ -485,7 +485,7 @@ export async function getAgentCoinTransactionsAction(params?: {
   let query = supabaseAdmin
     .from('transactions')
     .select('*, user:profiles!transactions_user_id_fkey(username)', { count: 'exact' })
-    .in('type', ['admin_adjustment', 'deposit', 'withdraw'])
+    .eq('type', 'admin_adjustment')
 
   if (params?.agentId && params.agentId !== 'all') {
     const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)
@@ -530,7 +530,7 @@ export async function getAgentCoinTransactionsAction(params?: {
   let summaryQuery = supabaseAdmin
     .from('transactions')
     .select('amount')
-    .in('type', ['admin_adjustment', 'deposit', 'withdraw'])
+    .eq('type', 'admin_adjustment')
 
   if (params?.agentId && params.agentId !== 'all') {
     const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)

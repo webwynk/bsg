@@ -430,7 +430,7 @@ export default function AgentDashboard() {
                   {paginatedTransactions.map((txn) => (
                     <TableRow key={txn.id} className="border-border hover:bg-secondary/30 transition-colors">
                       <TableCell className="font-bold text-foreground text-xs py-2">
-                        @{txn.target}
+                        {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
                       </TableCell>
                       <TableCell className="text-[11px] text-muted-foreground font-mono py-2">
                         {txn.date}
@@ -477,7 +477,9 @@ export default function AgentDashboard() {
               paginatedTransactions.map((txn) => (
                 <div key={txn.id} className="p-2.5 rounded-lg border border-border/80 bg-background flex items-center justify-between text-xs">
                   <div>
-                    <span className="font-extrabold text-foreground text-xs block">@{txn.target}</span>
+                    <span className="font-extrabold text-foreground text-xs block">
+                      {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                    </span>
                     <span className="text-[10px] text-muted-foreground font-mono">{txn.date}</span>
                   </div>
 
