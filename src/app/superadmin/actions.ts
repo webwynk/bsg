@@ -319,9 +319,35 @@ export async function getLatestGameDrawsAction() {
         : (red * 100 + green * 10 + black)
 
       const bets = (row.triple_chance_bets || []) as any[]
+      const sKey = `${black}`
+      const dKey = `${green}${black}`
+      const tKey = `${red}${green}${black}`
+
+      const playerBets = bets.map(b => {
+        const singleBetsObj = (b.single_bets || {}) as Record<string, number>
+        const doubleBetsObj = (b.double_bets || {}) as Record<string, number>
+        const tripleBetsObj = (b.triple_bets || {}) as Record<string, number>
+
+        const sBet = Number(singleBetsObj[sKey] || 0)
+        const dBet = Number(doubleBetsObj[dKey] || doubleBetsObj[dKey.padStart(2, '0')] || 0)
+        const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
+
+        let winAmt = Number(b.win_amount || 0)
+        if (red !== null && green !== null && black !== null) {
+          winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
+        }
+
+        return {
+          username: b.profiles?.username || 'player',
+          betAmount: Number(b.total_stake || 0),
+          winAmount: winAmt,
+          status: winAmt > 0 ? 'WON' : 'LOST'
+        }
+      })
+
       const playerCount = bets.length
       const totalWagered = bets.reduce((acc, b) => acc + Number(b.total_stake || 0), 0)
-      const totalPayout = bets.reduce((acc, b) => acc + Number(b.win_amount || 0), 0)
+      const totalPayout = playerBets.reduce((acc, b) => acc + b.winAmount, 0)
 
       let playerUsername = 'System (No Bets)'
       if (playerCount === 1) {
@@ -329,13 +355,6 @@ export async function getLatestGameDrawsAction() {
       } else if (playerCount > 1) {
         playerUsername = `👥 ${playerCount} Players`
       }
-
-      const playerBets = bets.map(b => ({
-        username: b.profiles?.username || 'player',
-        betAmount: Number(b.total_stake || 0),
-        winAmount: Number(b.win_amount || 0),
-        status: Number(b.win_amount || 0) > 0 ? 'WON' : 'LOST'
-      }))
 
       return {
         id: row.id || `round_${row.round_number}`,

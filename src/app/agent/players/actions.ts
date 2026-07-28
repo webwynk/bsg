@@ -290,9 +290,9 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         const black = round.black !== null && round.black !== undefined ? Number(round.black) : null
         const resultNumber = (red !== null && green !== null && black !== null) ? (red * 100 + green * 10 + black) : 0
 
-        const singleBetsObj = p.single_bets || {}
-        const doubleBetsObj = p.double_bets || {}
-        const tripleBetsObj = p.triple_bets || {}
+        const singleBetsObj = (p.single_bets || {}) as Record<string, number>
+        const doubleBetsObj = (p.double_bets || {}) as Record<string, number>
+        const tripleBetsObj = (p.triple_bets || {}) as Record<string, number>
 
         const activeModes = []
         if (Object.keys(singleBetsObj).length > 0) activeModes.push('SINGLE')
@@ -307,7 +307,19 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         if (Object.keys(tripleBetsObj).length > 0) parts.push(`Triple: ${Object.keys(tripleBetsObj).join(',')}`)
         if (parts.length > 0) selText = parts.join(' | ')
 
-        const winAmt = Number(p.win_amount || 0)
+        // Compute exact win math matching Flutter game engine
+        let winAmt = Number(p.win_amount || 0)
+        if (red !== null && green !== null && black !== null) {
+          const sKey = `${black}`
+          const dKey = `${green}${black}`
+          const tKey = `${red}${green}${black}`
+
+          const sBet = Number(singleBetsObj[sKey] || 0)
+          const dBet = Number(doubleBetsObj[dKey] || doubleBetsObj[dKey.padStart(2, '0')] || 0)
+          const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
+
+          winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
+        }
 
         return {
           id: p.id.substring(0, 8),
