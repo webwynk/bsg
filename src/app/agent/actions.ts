@@ -75,23 +75,22 @@ export async function getAgentDashboardDataAction() {
       const playerIds = (playersProfRes.data || []).map(p => p.id)
       const allTargetUserIds = [authUser.id, ...playerIds]
 
-      // Fetch last 20 transactions for agent & agent's players
+      // Fetch last 50 transactions for agent & agent's players using user_id list
       let txnsData: any[] = []
       try {
         const { data: rawTxns } = await supabaseAdmin
           .from('transactions')
           .select('*')
-          .or(`agent_id.eq.${authUser.id},user_id.in.(${allTargetUserIds.join(',')})`)
+          .in('user_id', allTargetUserIds)
           .order('created_at', { ascending: false })
-          .limit(20)
+          .limit(50)
         txnsData = rawTxns || []
       } catch (_) {
         const { data: fallbackTxns } = await supabaseAdmin
           .from('transactions')
           .select('*')
-          .eq('agent_id', authUser.id)
           .order('created_at', { ascending: false })
-          .limit(20)
+          .limit(50)
         txnsData = fallbackTxns || []
       }
 
