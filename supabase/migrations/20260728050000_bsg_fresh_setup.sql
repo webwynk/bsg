@@ -886,19 +886,26 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_caller_id   UUID := auth.uid();
+  v_caller_id   UUID := COALESCE(auth.uid(), p_agent_id);
   v_caller_role TEXT;
   v_agent_bal   NUMERIC;
   v_player_bal  NUMERIC;
+  v_is_service  BOOLEAN := (current_setting('request.jwt.claim.role', true) = 'service_role');
 BEGIN
-  IF v_caller_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  IF v_caller_id IS NULL AND NOT v_is_service THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+  
+  IF v_is_service THEN
+    v_caller_role := 'superadmin';
+  ELSE
+    SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  END IF;
+
   IF v_caller_role NOT IN ('agent', 'superadmin') THEN RAISE EXCEPTION 'Unauthorized' USING errcode = 'P0010'; END IF;
 
-  IF v_caller_role = 'agent' AND v_caller_id != p_agent_id THEN
+  IF NOT v_is_service AND v_caller_role = 'agent' AND v_caller_id != p_agent_id THEN
     RAISE EXCEPTION 'Unauthorized: can only transfer from own agent account' USING errcode = 'P0011';
   END IF;
-  IF v_caller_role = 'agent' AND NOT EXISTS (
+  IF NOT v_is_service AND v_caller_role = 'agent' AND NOT EXISTS (
     SELECT 1 FROM public.profiles WHERE id = p_player_id AND agent_id = v_caller_id
   ) THEN
     RAISE EXCEPTION 'Unauthorized: not your player' USING errcode = 'P0011';
@@ -939,19 +946,26 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_caller_id   UUID := auth.uid();
+  v_caller_id   UUID := COALESCE(auth.uid(), p_agent_id);
   v_caller_role TEXT;
   v_agent_bal   NUMERIC;
   v_player_bal  NUMERIC;
+  v_is_service  BOOLEAN := (current_setting('request.jwt.claim.role', true) = 'service_role');
 BEGIN
-  IF v_caller_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  IF v_caller_id IS NULL AND NOT v_is_service THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+
+  IF v_is_service THEN
+    v_caller_role := 'superadmin';
+  ELSE
+    SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  END IF;
+
   IF v_caller_role NOT IN ('agent', 'superadmin') THEN RAISE EXCEPTION 'Unauthorized' USING errcode = 'P0010'; END IF;
 
-  IF v_caller_role = 'agent' AND v_caller_id != p_agent_id THEN
+  IF NOT v_is_service AND v_caller_role = 'agent' AND v_caller_id != p_agent_id THEN
     RAISE EXCEPTION 'Unauthorized: can only withdraw to own agent account' USING errcode = 'P0011';
   END IF;
-  IF v_caller_role = 'agent' AND NOT EXISTS (
+  IF NOT v_is_service AND v_caller_role = 'agent' AND NOT EXISTS (
     SELECT 1 FROM public.profiles WHERE id = p_player_id AND agent_id = v_caller_id
   ) THEN
     RAISE EXCEPTION 'Unauthorized: not your player' USING errcode = 'P0011';
@@ -994,14 +1008,21 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_caller_id   UUID := auth.uid();
+  v_caller_id   UUID := COALESCE(auth.uid(), p_admin_id);
   v_caller_role TEXT;
   v_delta       NUMERIC;
   v_new_bal     NUMERIC;
   v_username    TEXT;
+  v_is_service  BOOLEAN := (current_setting('request.jwt.claim.role', true) = 'service_role');
 BEGIN
-  IF v_caller_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  IF v_caller_id IS NULL AND NOT v_is_service THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+
+  IF v_is_service THEN
+    v_caller_role := 'superadmin';
+  ELSE
+    SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  END IF;
+
   IF v_caller_role != 'superadmin' THEN RAISE EXCEPTION 'Unauthorized: superadmin only' USING errcode = 'P0010'; END IF;
 
   IF p_amount <= 0 THEN
