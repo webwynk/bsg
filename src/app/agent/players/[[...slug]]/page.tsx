@@ -200,6 +200,7 @@ export default function PlayersPage() {
   const [transferAmount, setTransferAmount] = React.useState('')
   const [isTransferring, setIsTransferring] = React.useState(false)
   const [transferError, setTransferError] = React.useState<string | null>(null)
+  const [transferSuccess, setTransferSuccess] = React.useState<string | null>(null)
 
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
@@ -360,9 +361,13 @@ export default function PlayersPage() {
     if (res.error) {
       setTransferError(res.error)
     } else {
-      setActiveTransferModal(null)
-      setTransferAmount('')
+      setTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${formatCurrency(amountNum)} Coins for @${selectedPlayer.username}!`)
       loadPlayers({ reloadHistory: true })
+      setTimeout(() => {
+        setActiveTransferModal(null)
+        setTransferAmount('')
+        setTransferSuccess(null)
+      }, 1200)
     }
   }
 
@@ -764,6 +769,7 @@ export default function PlayersPage() {
                     setActiveTransferModal(open ? 'deposit' : null)
                     setTransferAmount('')
                     setTransferError(null)
+                    setTransferSuccess(null)
                   }}>
                     <DialogTrigger className="w-full h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-sm cursor-pointer rounded-lg text-[11px] flex items-center justify-center border-0">
                       <ArrowUpRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Deposit Coins
@@ -779,6 +785,12 @@ export default function PlayersPage() {
                         {transferError && (
                           <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                             {transferError}
+                          </div>
+                        )}
+                        {transferSuccess && (
+                          <div className="p-2.5 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center space-x-2">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                            <span>{transferSuccess}</span>
                           </div>
                         )}
                         <div className="space-y-1">
@@ -798,7 +810,7 @@ export default function PlayersPage() {
                       <DialogFooter>
                         <Button 
                           onClick={() => handleTransferPoints('deposit')} 
-                          disabled={isTransferring}
+                          disabled={isTransferring || !!transferSuccess}
                           className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold cursor-pointer rounded-lg text-xs"
                         >
                           {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -813,6 +825,7 @@ export default function PlayersPage() {
                     setActiveTransferModal(open ? 'withdraw' : null)
                     setTransferAmount('')
                     setTransferError(null)
+                    setTransferSuccess(null)
                   }}>
                     <DialogTrigger className="w-full h-8 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center bg-transparent">
                       <ArrowDownRight className="mr-1 h-3.5 w-3.5 stroke-[3]" /> Withdraw
@@ -828,6 +841,12 @@ export default function PlayersPage() {
                         {transferError && (
                           <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                             {transferError}
+                          </div>
+                        )}
+                        {transferSuccess && (
+                          <div className="p-2.5 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center space-x-2">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                            <span>{transferSuccess}</span>
                           </div>
                         )}
                         <div className="space-y-1">
@@ -847,7 +866,7 @@ export default function PlayersPage() {
                       <DialogFooter>
                         <Button 
                           onClick={() => handleTransferPoints('withdraw')} 
-                          disabled={isTransferring}
+                          disabled={isTransferring || !!transferSuccess}
                           className="w-full h-10 bg-destructive text-destructive-foreground hover:bg-destructive/90 font-extrabold cursor-pointer rounded-lg text-xs"
                         >
                           {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

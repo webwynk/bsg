@@ -25,7 +25,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award } from "lucide-react"
+import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award, CheckCircle2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
@@ -102,6 +102,7 @@ export default function AgentDetailPage({ params }: Props) {
   const [transferAmount, setTransferAmount] = React.useState('')
   const [isTransferring, setIsTransferring] = React.useState(false)
   const [transferError, setTransferError] = React.useState<string | null>(null)
+  const [transferSuccess, setTransferSuccess] = React.useState<string | null>(null)
 
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
@@ -358,9 +359,13 @@ export default function AgentDetailPage({ params }: Props) {
     if (res.error) {
       setTransferError(res.error)
     } else {
-      setActiveTransferModal(null)
-      setTransferAmount('')
+      setTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${formatCurrency(amountNum)} Coins for @${agentInfo?.username || 'agent'}!`)
       loadAgentDetails({ showIndicator: false, reloadHistory: false })
+      setTimeout(() => {
+        setActiveTransferModal(null)
+        setTransferAmount('')
+        setTransferSuccess(null)
+      }, 1200)
     }
   }
 
@@ -410,6 +415,7 @@ export default function AgentDetailPage({ params }: Props) {
               setActiveTransferModal(open ? 'deposit' : null)
               setTransferAmount('')
               setTransferError(null)
+              setTransferSuccess(null)
             }}
           >
             <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center border-0">
@@ -426,6 +432,12 @@ export default function AgentDetailPage({ params }: Props) {
                 {transferError && (
                   <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                     {transferError}
+                  </div>
+                )}
+                {transferSuccess && (
+                  <div className="p-2.5 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center space-x-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    <span>{transferSuccess}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs">
@@ -447,7 +459,7 @@ export default function AgentDetailPage({ params }: Props) {
               <DialogFooter className="pt-2">
                 <Button 
                   onClick={() => handleTransferPoints('deposit')} 
-                  disabled={isTransferring}
+                  disabled={isTransferring || !!transferSuccess}
                   className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold cursor-pointer rounded-lg text-xs"
                 >
                   {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -464,6 +476,7 @@ export default function AgentDetailPage({ params }: Props) {
               setActiveTransferModal(open ? 'withdraw' : null)
               setTransferAmount('')
               setTransferError(null)
+              setTransferSuccess(null)
             }}
           >
             <DialogTrigger className="h-8 sm:h-10 px-2.5 sm:px-3 bg-secondary/80 hover:bg-secondary text-amber-400 border border-amber-500/30 font-extrabold shadow-sm cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center">
@@ -480,6 +493,12 @@ export default function AgentDetailPage({ params }: Props) {
                 {transferError && (
                   <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
                     {transferError}
+                  </div>
+                )}
+                {transferSuccess && (
+                  <div className="p-2.5 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center space-x-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    <span>{transferSuccess}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs">
@@ -501,7 +520,7 @@ export default function AgentDetailPage({ params }: Props) {
               <DialogFooter className="pt-2">
                 <Button 
                   onClick={() => handleTransferPoints('withdraw')} 
-                  disabled={isTransferring}
+                  disabled={isTransferring || !!transferSuccess}
                   variant="destructive"
                   className="w-full h-10 font-extrabold cursor-pointer rounded-lg text-xs"
                 >
