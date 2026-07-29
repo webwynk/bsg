@@ -341,7 +341,7 @@ export async function getLatestGameDrawsAction() {
         )
 
         let winAmt = Number(b.win_amount || 0)
-        if (red !== null && green !== null && black !== null) {
+        if (!b.is_resolved && red !== null && green !== null && black !== null) {
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
         }
 
