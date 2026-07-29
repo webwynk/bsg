@@ -275,12 +275,22 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
 
   try {
     // Primary source: round_bets joined with game_rounds
-    const { data: roundBets } = await supabaseAdmin
+    let { data: roundBets, error: betsErr } = await supabaseAdmin
       .from('triple_chance_bets')
       .select('*, triple_chance_rounds(red, green, black, status)')
       .eq('user_id', playerId)
       .order('created_at', { ascending: false })
       .limit(50)
+
+    if (betsErr || !roundBets) {
+      const { data: rawBets } = await supabaseAdmin
+        .from('triple_chance_bets')
+        .select('*')
+        .eq('user_id', playerId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      roundBets = rawBets || null
+    }
 
     if (roundBets && roundBets.length > 0) {
       gamePlays = roundBets.map(p => {

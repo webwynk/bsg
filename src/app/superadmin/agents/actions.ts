@@ -501,7 +501,7 @@ export async function getAgentCoinTransactionsAction(params?: {
 
   let query = supabaseAdmin
     .from('transactions')
-    .select('*, user:profiles!transactions_user_id_fkey(username)', { count: 'exact' })
+    .select('*', { count: 'exact' })
     .eq('type', 'admin_adjustment')
 
   if (params?.agentId && params.agentId !== 'all') {
@@ -582,12 +582,13 @@ export async function getAgentCoinTransactionsAction(params?: {
     const amt = Number(tx.amount || 0)
     const isDep = amt >= 0
     const u = allUsers.find(user => user.id === tx.user_id)
-    const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || tx.user?.username || 'Agent'
+    const agentUsername = u?.user_metadata?.username || u?.email?.split('@')[0] || 'agent'
+    const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || agentUsername || 'Agent'
     return {
       id: tx.id,
       agentId: tx.user_id,
       agentName: fullName,
-      agentUsername: tx.user?.username || 'agent',
+      agentUsername: `@${agentUsername.replace(/^@+/, '')}`,
       type: (isDep ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
       amount: Math.abs(amt),
       createdAt: tx.created_at,

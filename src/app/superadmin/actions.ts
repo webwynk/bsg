@@ -301,12 +301,21 @@ export async function getLatestGameDrawsAction() {
     // Fetch recent global rounds (up to 20)
     let roundRows: any[] = []
     try {
-      const { data } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('triple_chance_rounds')
-        .select('*, triple_chance_bets(*, profiles(username))')
+        .select('*, triple_chance_bets(*)')
         .order('created_at', { ascending: false })
         .limit(20)
-      roundRows = data || []
+      if (error || !data || data.length === 0) {
+        const { data: fallbackData } = await supabaseAdmin
+          .from('triple_chance_rounds')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20)
+        roundRows = fallbackData || []
+      } else {
+        roundRows = data || []
+      }
     } catch (_) {}
 
     // Transform rounds into aggregated draw objects
