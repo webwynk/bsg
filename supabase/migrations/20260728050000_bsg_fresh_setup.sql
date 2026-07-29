@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 -- B. active_sessions — single-session enforcement
-CREATE TABLE public.active_sessions (
+CREATE TABLE IF NOT EXISTS public.active_sessions (
   user_id         UUID        PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
   session_token   TEXT        NOT NULL,
   last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -54,7 +54,7 @@ CREATE TABLE public.active_sessions (
 );
 
 -- C. transactions — ALL coin movements from ALL games (tagged by game_name)
-CREATE TABLE public.transactions (
+CREATE TABLE IF NOT EXISTS public.transactions (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       UUID        NOT NULL REFERENCES public.profiles(id),
   agent_id      UUID        REFERENCES public.profiles(id),
@@ -65,15 +65,15 @@ CREATE TABLE public.transactions (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_transactions_user    ON public.transactions (user_id, created_at DESC);
-CREATE INDEX idx_transactions_game    ON public.transactions (game_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_user    ON public.transactions (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_game    ON public.transactions (game_name, created_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- STEP 3: TRIPLE CHANCE GAME TABLES
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- D. triple_chance_rounds — round registry (win numbers pre-generated via MD5)
-CREATE TABLE public.triple_chance_rounds (
+CREATE TABLE IF NOT EXISTS public.triple_chance_rounds (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   round_number  BIGINT      NOT NULL UNIQUE,  -- epoch / 103
   scheduled_at  TIMESTAMPTZ NOT NULL,
@@ -84,11 +84,11 @@ CREATE TABLE public.triple_chance_rounds (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_tc_rounds_number ON public.triple_chance_rounds (round_number DESC);
-CREATE INDEX idx_tc_rounds_status ON public.triple_chance_rounds (status, scheduled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tc_rounds_number ON public.triple_chance_rounds (round_number DESC);
+CREATE INDEX IF NOT EXISTS idx_tc_rounds_status ON public.triple_chance_rounds (status, scheduled_at DESC);
 
 -- E. triple_chance_bets — player bets per round
-CREATE TABLE public.triple_chance_bets (
+CREATE TABLE IF NOT EXISTS public.triple_chance_bets (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id      UUID        NOT NULL REFERENCES public.triple_chance_rounds(id),
   user_id       UUID        NOT NULL REFERENCES public.profiles(id),
@@ -105,11 +105,11 @@ CREATE TABLE public.triple_chance_bets (
   UNIQUE (round_id, user_id)
 );
 
-CREATE INDEX idx_tc_bets_user   ON public.triple_chance_bets (user_id, created_at DESC);
-CREATE INDEX idx_tc_bets_round  ON public.triple_chance_bets (round_id);
+CREATE INDEX IF NOT EXISTS idx_tc_bets_user   ON public.triple_chance_bets (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tc_bets_round  ON public.triple_chance_bets (round_id);
 
 -- F. play_limits — Triple Chance per-cell betting caps (admin configurable)
-CREATE TABLE public.play_limits (
+CREATE TABLE IF NOT EXISTS public.play_limits (
   id           TEXT    PRIMARY KEY DEFAULT 'global',
   single_min   NUMERIC NOT NULL DEFAULT 2,
   single_max   NUMERIC NOT NULL DEFAULT 10000,
@@ -124,7 +124,7 @@ CREATE TABLE public.play_limits (
 INSERT INTO public.play_limits (id) VALUES ('global') ON CONFLICT DO NOTHING;
 
 -- G. audit_log — Persistent Administrative Audit Logs
-CREATE TABLE public.audit_log (
+CREATE TABLE IF NOT EXISTS public.audit_log (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   type        TEXT        NOT NULL DEFAULT 'System',
   detail      TEXT        NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE public.audit_log (
 );
 
 -- H. agent_configs — Global System RTP & House Config
-CREATE TABLE public.agent_configs (
+CREATE TABLE IF NOT EXISTS public.agent_configs (
   id                    TEXT        PRIMARY KEY DEFAULT 'global_system_config',
   agent_id              UUID        REFERENCES public.profiles(id) ON DELETE CASCADE,
   rtp_percentage        NUMERIC     NOT NULL DEFAULT 96.0,
@@ -205,6 +205,10 @@ RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+  IF auth.uid() != p_user_id AND public.get_my_role() != 'superadmin' THEN
+    RAISE EXCEPTION 'Unauthorized' USING errcode = 'P0010';
+  END IF;
   DELETE FROM public.active_sessions WHERE user_id = p_user_id;
 END;
 $$;
@@ -334,21 +338,22 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_user_id       UUID    := auth.uid();
-  v_balance       NUMERIC;
-  v_agent_id      UUID;
-  v_round         public.triple_chance_rounds;
-  v_limits        public.play_limits;
+  v_user_id        UUID    := auth.uid();
+  v_balance        NUMERIC;
+  v_agent_id       UUID;
+  v_round          public.triple_chance_rounds;
+  v_limits         public.play_limits;
   v_existing_stake NUMERIC := 0;
-  v_delta_stake   NUMERIC;
-  v_cell_key      TEXT;
-  v_cell_val      NUMERIC;
+  v_computed_stake NUMERIC := 0;
+  v_delta_stake    NUMERIC;
+  v_cell_key       TEXT;
+  v_cell_val       NUMERIC;
 BEGIN
   IF v_user_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
 
   SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = p_round_id;
   IF v_round IS NULL THEN RAISE EXCEPTION 'Round not found' USING errcode = 'P0002'; END IF;
-  IF v_round.status = 'complete' THEN RAISE EXCEPTION 'Round already complete' USING errcode = 'P0003'; END IF;
+  IF v_round.status != 'betting' THEN RAISE EXCEPTION 'Betting window closed' USING errcode = 'P0003'; END IF;
 
   SELECT * INTO v_limits FROM public.play_limits WHERE id = 'global' LIMIT 1;
 
@@ -356,13 +361,23 @@ BEGIN
     FOR v_cell_key, v_cell_val IN SELECT key, value::numeric FROM jsonb_each_text(p_single_bets) LOOP
       IF v_cell_val < v_limits.single_min THEN RAISE EXCEPTION 'Below min' USING errcode = 'P0007'; END IF;
       IF v_cell_val > v_limits.single_max THEN RAISE EXCEPTION 'Exceeds max' USING errcode = 'P0008'; END IF;
+      v_computed_stake := v_computed_stake + v_cell_val;
     END LOOP;
     FOR v_cell_key, v_cell_val IN SELECT key, value::numeric FROM jsonb_each_text(p_double_bets) LOOP
+      IF v_cell_val < v_limits.double_min THEN RAISE EXCEPTION 'Below min' USING errcode = 'P0007'; END IF;
       IF v_cell_val > v_limits.double_max THEN RAISE EXCEPTION 'Exceeds max' USING errcode = 'P0008'; END IF;
+      v_computed_stake := v_computed_stake + v_cell_val;
     END LOOP;
     FOR v_cell_key, v_cell_val IN SELECT key, value::numeric FROM jsonb_each_text(p_triple_bets) LOOP
+      IF v_cell_val < v_limits.triple_min THEN RAISE EXCEPTION 'Below min' USING errcode = 'P0007'; END IF;
       IF v_cell_val > v_limits.triple_max THEN RAISE EXCEPTION 'Exceeds max' USING errcode = 'P0008'; END IF;
+      v_computed_stake := v_computed_stake + v_cell_val;
     END LOOP;
+  ELSE
+    -- If no limits configured, still compute stake from JSONB maps
+    FOR v_cell_key, v_cell_val IN SELECT key, value::numeric FROM jsonb_each_text(p_single_bets) LOOP v_computed_stake := v_computed_stake + v_cell_val; END LOOP;
+    FOR v_cell_key, v_cell_val IN SELECT key, value::numeric FROM jsonb_each_text(p_double_bets) LOOP v_computed_stake := v_computed_stake + v_cell_val; END LOOP;
+    FOR v_cell_key, v_cell_val IN SELECT key, value::numeric FROM jsonb_each_text(p_triple_bets) LOOP v_computed_stake := v_computed_stake + v_cell_val; END LOOP;
   END IF;
 
   SELECT balance, agent_id INTO v_balance, v_agent_id
@@ -373,7 +388,7 @@ BEGIN
   SELECT total_stake INTO v_existing_stake
     FROM public.triple_chance_bets WHERE round_id = p_round_id AND user_id = v_user_id;
   v_existing_stake := COALESCE(v_existing_stake, 0);
-  v_delta_stake    := p_total_stake - v_existing_stake;
+  v_delta_stake    := v_computed_stake - v_existing_stake;
 
   IF v_delta_stake > 0 AND v_balance < v_delta_stake THEN
     RAISE EXCEPTION 'INSUFFICIENT_COINS' USING errcode = 'P0001';
@@ -390,12 +405,12 @@ BEGIN
   END IF;
 
   INSERT INTO public.triple_chance_bets (round_id, user_id, single_bets, double_bets, triple_bets, total_stake)
-    VALUES (p_round_id, v_user_id, p_single_bets, p_double_bets, p_triple_bets, p_total_stake)
+    VALUES (p_round_id, v_user_id, p_single_bets, p_double_bets, p_triple_bets, v_computed_stake)
     ON CONFLICT (round_id, user_id) DO UPDATE SET
       single_bets = EXCLUDED.single_bets,
       double_bets = EXCLUDED.double_bets,
       triple_bets = EXCLUDED.triple_bets,
-      total_stake = EXCLUDED.total_stake;
+      total_stake = v_computed_stake;
 
   RETURN jsonb_build_object(
     'success',       true,
@@ -443,7 +458,8 @@ BEGIN
   END IF;
 
   SELECT * INTO v_bet FROM public.triple_chance_bets
-    WHERE round_id = v_round_uuid AND user_id = v_user_id;
+    WHERE round_id = v_round_uuid AND user_id = v_user_id
+    FOR UPDATE;
 
   IF NOT FOUND THEN
     SELECT balance INTO v_balance FROM public.profiles WHERE id = v_user_id;
@@ -503,6 +519,10 @@ BEGIN
     is_resolved = true
   WHERE id = v_bet.id;
 
+  UPDATE public.triple_chance_rounds SET
+    status = 'complete'
+  WHERE id = v_round_uuid AND status != 'complete';
+
   IF v_total_win > 0 THEN
     UPDATE public.profiles
       SET balance = balance + v_total_win, updated_at = NOW()
@@ -541,9 +561,8 @@ ALTER TABLE public.play_limits           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_configs         ENABLE ROW LEVEL SECURITY;
 
--- profiles: own row only for players
+-- profiles: scoped selection via profiles_agent_select policy below (Step 9)
 DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
-CREATE POLICY "profiles_select" ON public.profiles FOR SELECT USING (true);
 
 -- active_sessions: own row only
 DROP POLICY IF EXISTS "sessions_select" ON public.active_sessions;
@@ -567,11 +586,11 @@ CREATE POLICY "play_limits_select" ON public.play_limits FOR SELECT USING (true)
 
 -- audit_log: superadmin read-only
 DROP POLICY IF EXISTS "audit_log_select" ON public.audit_log;
-CREATE POLICY "audit_log_select" ON public.audit_log FOR SELECT USING (true);
+CREATE POLICY "audit_log_select" ON public.audit_log FOR SELECT USING (public.get_my_role() = 'superadmin');
 
--- agent_configs: all authenticated users can read
+-- agent_configs: agents and superadmins can read
 DROP POLICY IF EXISTS "agent_configs_select" ON public.agent_configs;
-CREATE POLICY "agent_configs_select" ON public.agent_configs FOR SELECT USING (true);
+CREATE POLICY "agent_configs_select" ON public.agent_configs FOR SELECT USING (public.get_my_role() IN ('agent', 'superadmin'));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- STEP 7: AUTO-CREATE PROFILE ON AUTH SIGNUP
@@ -584,8 +603,11 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'username', SPLIT_PART(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'player'),
-    COALESCE((NEW.raw_user_meta_data->>'balance')::numeric, 0),
+    CASE
+      WHEN NEW.raw_user_meta_data->>'role' IN ('agent', 'player') THEN NEW.raw_user_meta_data->>'role'
+      ELSE 'player'
+    END,
+    0, -- Balance must start at 0; funded via agent/admin RPCs only
     TRUE,
     -- agent_id is passed in metadata when agent creates player from web dashboard
     CASE
@@ -864,9 +886,24 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_agent_bal  NUMERIC;
-  v_player_bal NUMERIC;
+  v_caller_id   UUID := auth.uid();
+  v_caller_role TEXT;
+  v_agent_bal   NUMERIC;
+  v_player_bal  NUMERIC;
 BEGIN
+  IF v_caller_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+  SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  IF v_caller_role NOT IN ('agent', 'superadmin') THEN RAISE EXCEPTION 'Unauthorized' USING errcode = 'P0010'; END IF;
+
+  IF v_caller_role = 'agent' AND v_caller_id != p_agent_id THEN
+    RAISE EXCEPTION 'Unauthorized: can only transfer from own agent account' USING errcode = 'P0011';
+  END IF;
+  IF v_caller_role = 'agent' AND NOT EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = p_player_id AND agent_id = v_caller_id
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: not your player' USING errcode = 'P0011';
+  END IF;
+
   IF p_amount <= 0 THEN
     RAISE EXCEPTION 'Amount must be greater than zero' USING errcode = 'P0001';
   END IF;
@@ -902,9 +939,24 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_agent_bal  NUMERIC;
-  v_player_bal NUMERIC;
+  v_caller_id   UUID := auth.uid();
+  v_caller_role TEXT;
+  v_agent_bal   NUMERIC;
+  v_player_bal  NUMERIC;
 BEGIN
+  IF v_caller_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+  SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  IF v_caller_role NOT IN ('agent', 'superadmin') THEN RAISE EXCEPTION 'Unauthorized' USING errcode = 'P0010'; END IF;
+
+  IF v_caller_role = 'agent' AND v_caller_id != p_agent_id THEN
+    RAISE EXCEPTION 'Unauthorized: can only withdraw to own agent account' USING errcode = 'P0011';
+  END IF;
+  IF v_caller_role = 'agent' AND NOT EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = p_player_id AND agent_id = v_caller_id
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: not your player' USING errcode = 'P0011';
+  END IF;
+
   IF p_amount <= 0 THEN
     RAISE EXCEPTION 'Amount must be greater than zero' USING errcode = 'P0001';
   END IF;
@@ -942,10 +994,16 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_delta    NUMERIC;
-  v_new_bal  NUMERIC;
-  v_username TEXT;
+  v_caller_id   UUID := auth.uid();
+  v_caller_role TEXT;
+  v_delta       NUMERIC;
+  v_new_bal     NUMERIC;
+  v_username    TEXT;
 BEGIN
+  IF v_caller_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
+  SELECT role INTO v_caller_role FROM public.profiles WHERE id = v_caller_id;
+  IF v_caller_role != 'superadmin' THEN RAISE EXCEPTION 'Unauthorized: superadmin only' USING errcode = 'P0010'; END IF;
+
   IF p_amount <= 0 THEN
     RAISE EXCEPTION 'Amount must be positive' USING errcode = 'P0001';
   END IF;
