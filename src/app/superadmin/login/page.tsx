@@ -7,85 +7,92 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { ShieldAlert, Lock, User, Eye, EyeOff } from 'lucide-react'
+import { ShieldAlert, Lock, User, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react'
 
 function LoginForm() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const [showPassword, setShowPassword] = React.useState(false)
+  const [isPending, setIsPending] = React.useState(false)
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    setIsPending(true)
+    // Server action form submit will handle redirect/error reload
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background p-4 sm:p-6">
-      <div className="w-full max-w-md space-y-4">
+    <div className="min-h-dvh flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/15 via-background to-background p-3.5 sm:p-6 py-6 sm:py-12">
+      <div className="w-full max-w-md space-y-3.5">
         {/* Visual Brand Accent */}
-        <div className="flex flex-col items-center text-center space-y-2 mb-2">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-lg shadow-primary/5">
+        <div className="flex flex-col items-center text-center space-y-1.5 mb-1">
+          <div className="w-13 h-13 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xl shadow-amber-500/10 relative group">
             <ShieldAlert className="h-6 w-6 animate-pulse" />
+            <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-amber-300" />
           </div>
-          <h1 className="text-xl font-extrabold tracking-tight text-foreground">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
             Best Smart Game
           </h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">
-            Administrative Portal
+          <p className="text-[11px] text-amber-400/90 uppercase tracking-widest font-black">
+            SuperAdmin Control Portal
           </p>
         </div>
 
-        <Card className="border-border/60 bg-card/85 backdrop-blur-md text-foreground shadow-2xl rounded-2xl overflow-hidden relative">
+        <Card className="border-amber-500/20 bg-card/90 backdrop-blur-xl text-foreground shadow-2xl rounded-2xl overflow-hidden relative">
           {/* Top glowing strip */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500/40 via-amber-400 to-amber-500/40" />
           
-          <CardHeader className="space-y-1.5 pt-8">
-            <CardTitle className="text-2xl font-black tracking-tight text-center">
+          <CardHeader className="space-y-1 pt-6 pb-2 sm:pt-7 sm:pb-3">
+            <CardTitle className="text-xl sm:text-2xl font-black tracking-tight text-center">
               Super Admin
             </CardTitle>
             <CardDescription className="text-muted-foreground text-center text-xs">
-              Enter your credentials to unlock God Mode controls
+              Enter credentials to unlock God Mode controls
             </CardDescription>
           </CardHeader>
           
-          <form action={superAdminLogin}>
-            <CardContent className="space-y-4">
+          <form action={superAdminLogin} onSubmit={handleSubmit}>
+            <CardContent className="space-y-3.5 pt-2">
               {error && (
-                <div className="p-3 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/10 flex items-center">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 shrink-0 animate-ping" />
-                  {error}
+                <div className="p-3 text-xs font-bold rounded-xl bg-danger-bg text-danger-text border border-red-500/20 flex items-center shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-red-500 mr-2.5 shrink-0 animate-ping" />
+                  <span>{error}</span>
                 </div>
               )}
               
-              <div className="space-y-1.5">
-                <Label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="username" className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
                   Username
                 </Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/70" />
+                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
                   <Input
                     id="username"
                     name="username"
                     placeholder="admin"
-                    className="pl-9 bg-background/50 border-border/80 focus:border-primary/50 text-sm h-10 rounded-lg"
+                    className="pl-9 bg-background/60 border-border/80 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 text-sm h-10 rounded-xl transition-all"
                     required
                   />
                 </div>
               </div>
               
-              <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="password" className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground/70" />
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
                   <Input
                     id="password"
                     name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="pl-9 pr-10 bg-background/50 border-border/80 focus:border-primary/50 text-sm h-10 rounded-lg"
+                    className="pl-9 pr-10 bg-background/60 border-border/80 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 text-sm h-10 rounded-xl transition-all"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none p-1"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -94,9 +101,20 @@ function LoginForm() {
               </div>
             </CardContent>
             
-            <div className="px-6 pt-4 pb-8">
-              <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/95 h-11 rounded-lg font-bold text-sm tracking-wide shadow-lg shadow-primary/10 cursor-pointer select-none">
-                Sign In to God Mode
+            <div className="px-6 pt-2 pb-6 sm:pb-7">
+              <Button 
+                type="submit" 
+                disabled={isPending}
+                className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-black h-11 rounded-xl font-black text-sm tracking-wide shadow-lg shadow-amber-500/20 cursor-pointer select-none border border-amber-300/40 transition-all active:scale-[0.99]"
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-black" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <span>Sign In to God Mode</span>
+                )}
               </Button>
             </div>
           </form>
