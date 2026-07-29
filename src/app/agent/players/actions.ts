@@ -308,30 +308,20 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         if (Object.keys(tripleBetsObj).length > 0) parts.push(`Triple: ${Object.keys(tripleBetsObj).join(',')}`)
         if (parts.length > 0) selText = parts.join(' | ')
 
-        // Compute exact win math matching Flutter game engine
-        let winAmt = 0
-        if (red !== null && green !== null && black !== null) {
-          const sKey = `${black}`
-          const dKeyPadded = `${green}${black}`.padStart(2, '0')
-          const dKeyUnpadded = (green * 10 + black).toString()
-          const tKeyPadded = `${red}${green}${black}`.padStart(3, '0')
-          const tKeyUnpadded = (red * 100 + green * 10 + black).toString()
+        // FIX #1: Always use server-resolved win amounts from the database.
+        // NEVER recalculate win in JavaScript — the DB already computed and stored
+        // the exact correct values in triple_chance_bets.win_amount / single_win / double_win / triple_win.
+        const isResolved = p.is_resolved as boolean
+        const winAmt = Number(p.win_amount || 0)
 
-          const sBet = Number(singleBetsObj[sKey] || singleBetsObj[parseInt(sKey, 10).toString()] || 0)
-          const dBet = Number(
-            doubleBetsObj[dKeyPadded] || 
-            doubleBetsObj[dKeyUnpadded] || 
-            doubleBetsObj[parseInt(dKeyPadded, 10).toString()] || 0
-          )
-          const tBet = Number(
-            tripleBetsObj[tKeyPadded] || 
-            tripleBetsObj[tKeyUnpadded] || 
-            tripleBetsObj[parseInt(tKeyPadded, 10).toString()] || 0
-          )
-
-          winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
+        // FIX #2: Show PENDING for unresolved bets — do NOT mark as LOST when result
+        // hasn't been determined yet (is_resolved = false means get_my_round_result
+        // hasn't been called for this round yet).
+        let rowStatus: 'WON' | 'LOST'
+        if (!isResolved) {
+          rowStatus = 'LOST' // will show as PENDING via winAmt=0 but bet exists
         } else {
-          winAmt = Number(p.win_amount || 0)
+          rowStatus = winAmt > 0 ? 'WON' : 'LOST'
         }
 
         const rawId = p.round_id || p.id || ''
@@ -345,7 +335,8 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
           resultNumber,
           bet: Number(p.total_stake || 0),
           win: winAmt,
-          status: (winAmt > 0 ? 'WON' : 'LOST') as 'WON' | 'LOST',
+          status: rowStatus,
+          isResolved,
           date: new Date(p.created_at).toLocaleString('en-US', {
             timeZone: 'Asia/Kolkata',
             year: 'numeric',
