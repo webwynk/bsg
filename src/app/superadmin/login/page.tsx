@@ -45,42 +45,38 @@ function LoginForm() {
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-4 pt-1">
               {/* Username Field */}
-              <div className="relative border-b border-white/25 focus-within:border-amber-400 transition-colors py-1">
-                <div className="flex items-center space-x-3">
-                  <User className="h-4 w-4 text-white/70 shrink-0" />
-                  <Input
-                    id="username"
-                    name="username"
-                    placeholder="Username"
-                    className="border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-9 text-sm font-medium"
-                    required
-                  />
-                </div>
+              <div className="flex items-center space-x-3 border-b border-white/25 focus-within:border-amber-400 transition-colors py-2 px-1">
+                <User className="h-4 w-4 text-white/70 shrink-0" />
+                <Input
+                  id="username"
+                  name="username"
+                  placeholder="Username"
+                  className="border-0 bg-transparent dark:bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none px-0 h-8 text-sm font-medium shadow-none"
+                  required
+                />
               </div>
 
               {/* Password Field */}
-              <div className="relative border-b border-white/25 focus-within:border-amber-400 transition-colors py-1">
-                <div className="flex items-center space-x-3">
-                  <Lock className="h-4 w-4 text-white/70 shrink-0" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Password"
-                    className="border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-9 text-sm font-medium pr-8"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-white/60 hover:text-white cursor-pointer focus:outline-none p-1 shrink-0"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+              <div className="flex items-center space-x-3 border-b border-white/25 focus-within:border-amber-400 transition-colors py-2 px-1">
+                <Lock className="h-4 w-4 text-white/70 shrink-0" />
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  className="border-0 bg-transparent dark:bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none px-0 h-8 text-sm font-medium shadow-none"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-white/60 hover:text-white cursor-pointer focus:outline-none p-1 shrink-0"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
