@@ -36,7 +36,7 @@ export async function getAgentDashboardDataAction() {
       const [agentProfRes, playersProfRes, spinsRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('username, balance').eq('id', authUser.id).maybeSingle(),
         supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', authUser.id),
-        supabaseAdmin.from('game_history').select('bet_amount, win_amount').eq('agent_id', authUser.id).gte('created_at', todayStartISO)
+        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').gte('created_at', todayStartISO)
       ])
 
       // Fetch all auth users to extract full_name metadata
