@@ -230,6 +230,11 @@ export async function togglePlayerStatusAction(playerIdentifier: string, current
       return { error: updateError.message }
     }
 
+    // Sync profiles.is_active so dashboard reads correct status from profiles table
+    await supabaseAdmin.from('profiles').update({
+      is_active: newStatus === 'Active'
+    }).eq('id', playerId)
+
     revalidatePath('/agent/players')
     return { success: true, newStatus }
   }
@@ -360,7 +365,9 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         }
       })
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[getPlayerDetailHistoryAction] bets/rounds query failed:', err)
+  }
 
   // 2. Fetch all transaction history from public.transactions
   // WHY NO TYPE FILTER: The only transaction types that exist for players from gameplay
@@ -408,7 +415,9 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         }
       })
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[getPlayerDetailHistoryAction] transactions query failed:', err)
+  }
 
   return { gamePlays, pointsHistory }
 }
