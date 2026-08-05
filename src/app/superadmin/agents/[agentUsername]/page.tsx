@@ -61,7 +61,9 @@ export default function AgentDetailPage({ params }: Props) {
     bet: number
     win: number
     status: 'WON' | 'LOST'
+    isResolved: boolean
     date: string
+    createdAtIso: string
     singleBets: Record<string, number>
     doubleBets: Record<string, number>
     tripleBets: Record<string, number>
@@ -74,7 +76,7 @@ export default function AgentDetailPage({ params }: Props) {
   const toggleSpinExpand = (spinId: string) => {
     setExpandedSpins(prev => ({ ...prev, [spinId]: !prev[spinId] }))
   }
-  const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; balanceAfter: number; date: string }>>([])
+  const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; txType: string; amount: number; balanceAfter: number; date: string; createdAtIso: string }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points' | 'profit'>('games')
   const [profitSummary, setProfitSummary] = React.useState({ todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 })
@@ -127,16 +129,15 @@ export default function AgentDetailPage({ params }: Props) {
 
   // Compute performance metrics
   const performanceStats = React.useMemo(() => {
-    const todayStr = new Date().toLocaleDateString('en-US', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    const todayIstStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
 
     const targetPlays = gamePlays.filter(spin => {
       if (statsScope === 'today') {
-        return spin.date.includes(todayStr)
+        if (spin.createdAtIso) {
+          const spinIstStr = new Date(spin.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          return spinIstStr === todayIstStr
+        }
+        return true
       }
       return true
     })
@@ -155,13 +156,11 @@ export default function AgentDetailPage({ params }: Props) {
     return gamePlays.filter(spin => {
       // Date Filter
       if (filterDate) {
-        const filterDateStr = filterDate.toLocaleDateString('en-US', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
-        if (!spin.date.includes(filterDateStr)) return false
+        const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        const spinDateStr = spin.createdAtIso 
+          ? new Date(spin.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : spin.date
+        if (spinDateStr !== filterDateStr) return false
       }
 
       // Outcome Filter
@@ -182,13 +181,11 @@ export default function AgentDetailPage({ params }: Props) {
   const filteredPoints = React.useMemo(() => {
     return pointsHistory.filter(tx => {
       if (filterDate) {
-        const filterDateStr = filterDate.toLocaleDateString('en-US', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
-        if (!tx.date.includes(filterDateStr)) return false
+        const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        const txDateStr = tx.createdAtIso
+          ? new Date(tx.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : tx.date
+        if (txDateStr !== filterDateStr) return false
       }
       return true
     })
