@@ -11,6 +11,12 @@ export async function getAgentDashboardDataAction() {
     return { balance: 0, playersCount: 0, players: [], todaysBets: 0, todaysWins: 0, todaysProfitLoss: 0, recentTransactions: [] }
   }
 
+  // Defense-in-Depth: Ensure SuperAdmin and Player callers cannot query agent dashboard data
+  const callerRole = authUser.user_metadata?.role
+  if (callerRole && callerRole !== 'agent') {
+    return { balance: 0, playersCount: 0, players: [], todaysBets: 0, todaysWins: 0, todaysProfitLoss: 0, recentTransactions: [] }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 

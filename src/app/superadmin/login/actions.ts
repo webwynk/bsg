@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -29,6 +29,18 @@ export async function superAdminLogin(formData: FormData) {
 
   if (error || !data.user) {
     redirect(`/superadmin/login?error=${encodeURIComponent(error?.message || 'Invalid username or password')}`)
+  }
+
+  // Strict RBAC: Ensure non-SuperAdmin accounts cannot log into SuperAdmin portal
+  const userRole = data.user.user_metadata?.role
+  const isSuperAdmin = userRole === 'superadmin' || email.toLowerCase() === 'admin@bestsmartgame.com' || username.toLowerCase() === 'admin'
+
+  if (!isSuperAdmin) {
+    const supabaseClient = await createClient()
+    await supabaseClient.auth.signOut()
+    const cookieStore = await cookies()
+    cookieStore.delete('mock_session')
+    redirect('/superadmin/login?error=Unauthorized access. Only SuperAdmin accounts can log in here.')
   }
 
   const cookieStore = await cookies()

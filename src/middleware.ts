@@ -48,16 +48,34 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const mockSession = request.cookies.get('mock_session')?.value
 
+  // Extract user role from JWT user metadata or fallback cookie
+  const userRole = user?.user_metadata?.role || mockSession
+
   // Protect /superadmin routes
   if (pathname.startsWith('/superadmin')) {
     if (!user && mockSession !== 'superadmin') {
+      return NextResponse.redirect(new URL('/superadmin/login', request.url))
+    }
+    // Strict RBAC: If logged-in user is NOT a SuperAdmin (e.g., Agent or Player)
+    if (userRole && userRole !== 'superadmin') {
+      if (userRole === 'agent') {
+        return NextResponse.redirect(new URL('/agent', request.url))
+      }
       return NextResponse.redirect(new URL('/superadmin/login', request.url))
     }
   }
 
   // Protect /agent routes
   if (pathname.startsWith('/agent')) {
-    if (!user && mockSession !== 'agent' && mockSession !== 'superadmin') {
+    if (!user && mockSession !== 'agent') {
+      return NextResponse.redirect(new URL('/agent/login', request.url))
+    }
+    // Strict RBAC: If logged-in user is a SuperAdmin, redirect to /superadmin (never open Agent Dashboard)
+    if (userRole === 'superadmin') {
+      return NextResponse.redirect(new URL('/superadmin', request.url))
+    }
+    // Strict RBAC: If logged-in user is a Player, redirect to agent login
+    if (userRole === 'player') {
       return NextResponse.redirect(new URL('/agent/login', request.url))
     }
   }
