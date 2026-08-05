@@ -38,8 +38,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id          UUID        PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   username    TEXT        NOT NULL UNIQUE,
   role        TEXT        NOT NULL DEFAULT 'player' CHECK (role IN ('player','agent','superadmin')),
-  balance     NUMERIC     NOT NULL DEFAULT 0 CHECK (balance >= 0),
-  is_active   BOOLEAN     NOT NULL DEFAULT true,
+  balance        NUMERIC     NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  ledger_version BIGINT      NOT NULL DEFAULT 1,
+  is_active      BOOLEAN     NOT NULL DEFAULT true,
   agent_id    UUID        REFERENCES public.profiles(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -491,7 +492,9 @@ BEGIN
 
     IF v_total_win > 0 THEN
       UPDATE public.profiles
-        SET balance = balance + v_total_win, updated_at = NOW()
+        SET balance = balance + v_total_win,
+            ledger_version = ledger_version + 1,
+            updated_at = NOW()
         WHERE id = v_bet_row.user_id;
 
       INSERT INTO public.transactions (user_id, agent_id, game_name, type, amount, balance_after)
@@ -622,7 +625,9 @@ BEGIN
 
   IF v_delta_stake != 0 THEN
     UPDATE public.profiles
-      SET balance = balance - v_delta_stake, updated_at = NOW()
+      SET balance = balance - v_delta_stake,
+          ledger_version = ledger_version + 1,
+          updated_at = NOW()
       WHERE id = v_user_id;
 
     INSERT INTO public.transactions (user_id, agent_id, game_name, type, amount, balance_after)
@@ -639,8 +644,9 @@ BEGIN
       total_stake = v_computed_stake;
 
   RETURN jsonb_build_object(
-    'success',       true,
-    'balance_after', (SELECT balance FROM public.profiles WHERE id = v_user_id)
+    'success',        true,
+    'balance_after',  (SELECT balance FROM public.profiles WHERE id = v_user_id),
+    'ledger_version', (SELECT ledger_version FROM public.profiles WHERE id = v_user_id)
   );
 END;
 $$;
