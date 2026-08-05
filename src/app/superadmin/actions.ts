@@ -399,16 +399,20 @@ export async function getLatestGameDrawsAction() {
     try {
       const { data: curRoundData } = await supabaseAdmin.rpc('get_current_round')
       if (curRoundData) {
-        const red = curRoundData.red ?? 0
-        const green = curRoundData.green ?? 0
-        const black = curRoundData.black ?? 0
+        const hasDigits = curRoundData.red !== null && curRoundData.red !== undefined &&
+                          curRoundData.green !== null && curRoundData.green !== undefined &&
+                          curRoundData.black !== null && curRoundData.black !== undefined
+        const red = hasDigits ? Number(curRoundData.red) : null
+        const green = hasDigits ? Number(curRoundData.green) : null
+        const black = hasDigits ? Number(curRoundData.black) : null
         activeRound = {
           roundNumber: curRoundData.round_number,
           roundId: curRoundData.round_id,
+          hasDigits,
           redDigit: red,
           greenDigit: green,
           blackDigit: black,
-          resultNumber: red * 100 + green * 10 + black,
+          resultNumber: hasDigits ? (red! * 100 + green! * 10 + black!) : null,
           status: curRoundData.status,
           secondsRemaining: curRoundData.seconds_remaining,
           scheduledAt: curRoundData.scheduled_at

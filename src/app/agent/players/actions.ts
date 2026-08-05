@@ -395,9 +395,9 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
           const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : (p.mode || 'single').toUpperCase()
 
           const resStr = (p.result_number !== null && p.result_number !== undefined) ? p.result_number.toString().padStart(3, '0') : '000'
-          const red = p.red_digit !== null ? p.red_digit : parseInt(resStr[0], 10)
-          const green = p.green_digit !== null ? p.green_digit : parseInt(resStr[1], 10)
-          const black = p.black_digit !== null ? p.black_digit : parseInt(resStr[2], 10)
+          const red = p.red !== undefined && p.red !== null ? p.red : (p.red_digit !== undefined && p.red_digit !== null ? p.red_digit : parseInt(resStr[0], 10))
+          const green = p.green !== undefined && p.green !== null ? p.green : (p.green_digit !== undefined && p.green_digit !== null ? p.green_digit : parseInt(resStr[1], 10))
+          const black = p.black !== undefined && p.black !== null ? p.black : (p.black_digit !== undefined && p.black_digit !== null ? p.black_digit : parseInt(resStr[2], 10))
 
           return {
             id: p.id.substring(0, 8),

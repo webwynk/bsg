@@ -240,7 +240,135 @@ BEGIN
 END;
 $$;
 
--- E. get_current_round (103-second cycle — must match Flutter client)
+-- E. calculate_round_rtp_outcome
+-- Runs at T >= 70s elapsed (20s remaining). Calculates optimal digits matching
+-- SuperAdmin's target RTP % from agent_configs.
+CREATE OR REPLACE FUNCTION public.calculate_round_rtp_outcome(p_round_id UUID)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_round         public.triple_chance_rounds;
+  v_rtp           NUMERIC := 96.0;
+  v_total_stake   NUMERIC := 0;
+  v_target_payout NUMERIC := 0;
+  v_best_red      INT := 0;
+  v_best_green    INT := 0;
+  v_best_black    INT := 0;
+  v_min_diff      NUMERIC := 999999999;
+  v_hash          TEXT;
+  v_r             INT;
+  v_g             INT;
+  v_b             INT;
+  v_s_bet         NUMERIC;
+  v_d_bet         NUMERIC;
+  v_t_bet         NUMERIC;
+  v_combo_payout  NUMERIC;
+  v_diff          NUMERIC;
+  v_bet_row       RECORD;
+  -- Aggregated stakes per cell
+  v_single_stakes NUMERIC[] := ARRAY[0,0,0,0,0,0,0,0,0,0];
+  v_double_stakes NUMERIC[] := ARRAY_FILL(0::numeric, ARRAY[100]);
+  v_triple_stakes NUMERIC[] := ARRAY_FILL(0::numeric, ARRAY[1000]);
+  v_cell_k        TEXT;
+  v_cell_v        NUMERIC;
+  v_idx           INT;
+BEGIN
+  SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = p_round_id FOR UPDATE;
+  IF v_round IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Round not found');
+  END IF;
+
+  -- If digits already generated, return existing digits
+  IF v_round.red IS NOT NULL AND v_round.green IS NOT NULL AND v_round.black IS NOT NULL THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'red', v_round.red,
+      'green', v_round.green,
+      'black', v_round.black
+    );
+  END IF;
+
+  -- Fetch SuperAdmin target RTP %
+  SELECT rtp_percentage INTO v_rtp FROM public.agent_configs WHERE id = 'global_system_config' LIMIT 1;
+  IF v_rtp IS NULL THEN v_rtp := 96.0; END IF;
+
+  -- Aggregate total stake and cell wagers across all bets placed in this round
+  FOR v_bet_row IN SELECT single_bets, double_bets, triple_bets, total_stake FROM public.triple_chance_bets WHERE round_id = p_round_id LOOP
+    v_total_stake := v_total_stake + COALESCE(v_bet_row.total_stake, 0);
+
+    -- Single bets aggregation
+    FOR v_cell_k, v_cell_v IN SELECT key, value::numeric FROM jsonb_each_text(v_bet_row.single_bets) LOOP
+      v_idx := v_cell_k::INT;
+      IF v_idx >= 0 AND v_idx <= 9 THEN
+        v_single_stakes[v_idx + 1] := v_single_stakes[v_idx + 1] + v_cell_v;
+      END IF;
+    END LOOP;
+
+    -- Double bets aggregation
+    FOR v_cell_k, v_cell_v IN SELECT key, value::numeric FROM jsonb_each_text(v_bet_row.double_bets) LOOP
+      v_idx := v_cell_k::INT;
+      IF v_idx >= 0 AND v_idx <= 99 THEN
+        v_double_stakes[v_idx + 1] := v_double_stakes[v_idx + 1] + v_cell_v;
+      END IF;
+    END LOOP;
+
+    -- Triple bets aggregation
+    FOR v_cell_k, v_cell_v IN SELECT key, value::numeric FROM jsonb_each_text(v_bet_row.triple_bets) LOOP
+      v_idx := v_cell_k::INT;
+      IF v_idx >= 0 AND v_idx <= 999 THEN
+        v_triple_stakes[v_idx + 1] := v_triple_stakes[v_idx + 1] + v_cell_v;
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  IF v_total_stake > 0 THEN
+    -- Target payout for this round based on configured RTP
+    v_target_payout := v_total_stake * (v_rtp / 100.0);
+
+    -- Scan all 1,000 combinations (r=0..9, g=0..9, b=0..9)
+    FOR v_r IN 0..9 LOOP
+      FOR v_g IN 0..9 LOOP
+        FOR v_b IN 0..9 LOOP
+          v_s_bet := v_single_stakes[v_b + 1];
+          v_d_bet := v_double_stakes[(v_g * 10 + v_b) + 1];
+          v_t_bet := v_triple_stakes[(v_r * 100 + v_g * 10 + v_b) + 1];
+
+          v_combo_payout := (v_s_bet * 9.0) + (v_d_bet * 90.0) + (v_t_bet * 900.0);
+          v_diff := ABS(v_combo_payout - v_target_payout);
+
+          IF v_diff < v_min_diff THEN
+            v_min_diff   := v_diff;
+            v_best_red   := v_r;
+            v_best_green := v_g;
+            v_best_black := v_b;
+          END IF;
+        END LOOP;
+      END LOOP;
+    END LOOP;
+  ELSE
+    -- If zero bets placed, generate via MD5 seed hash for 100% fair random outcome
+    v_hash       := md5('bsg_tc_seed_' || v_round.round_number::TEXT);
+    v_best_red   := (ABS(('x' || SUBSTR(v_hash,  1, 8))::BIT(32)::INT) % 10);
+    v_best_green := (ABS(('x' || SUBSTR(v_hash,  9, 8))::BIT(32)::INT) % 10);
+    v_best_black := (ABS(('x' || SUBSTR(v_hash, 17, 8))::BIT(32)::INT) % 10);
+  END IF;
+
+  -- Lock calculated digits into database
+  UPDATE public.triple_chance_rounds
+  SET red = v_best_red, green = v_best_green, black = v_best_black
+  WHERE id = p_round_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'red', v_best_red,
+    'green', v_best_green,
+    'black', v_best_black
+  );
+END;
+$$;
+
+-- F. get_current_round (103-second cycle — must match Flutter client)
 CREATE OR REPLACE FUNCTION public.get_current_round()
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -254,29 +382,34 @@ DECLARE
   v_secs_left   INT    := v_cycle - v_secs_into;
   v_status      TEXT;
   v_round       public.triple_chance_rounds;
-  v_hash        TEXT;
-  v_red INT; v_green INT; v_black INT;
 BEGIN
   v_status := CASE WHEN v_secs_into < v_bet_window THEN 'betting' ELSE 'spinning' END;
 
   SELECT * INTO v_round FROM public.triple_chance_rounds WHERE round_number = v_round_num;
 
   IF v_round IS NULL THEN
-    v_hash  := md5('bsg_tc_seed_' || v_round_num::TEXT);
-    v_red   := (ABS(('x' || SUBSTR(v_hash,  1, 8))::BIT(32)::INT) % 10);
-    v_green := (ABS(('x' || SUBSTR(v_hash,  9, 8))::BIT(32)::INT) % 10);
-    v_black := (ABS(('x' || SUBSTR(v_hash, 17, 8))::BIT(32)::INT) % 10);
-
     INSERT INTO public.triple_chance_rounds
-      (round_number, scheduled_at, status, red, green, black)
+      (round_number, scheduled_at, status)
     VALUES
-      (v_round_num, TO_TIMESTAMP((v_round_num + 1) * v_cycle), v_status, v_red, v_green, v_black)
+      (v_round_num, TO_TIMESTAMP((v_round_num + 1) * v_cycle), v_status)
     ON CONFLICT (round_number) DO NOTHING
     RETURNING * INTO v_round;
 
     IF v_round IS NULL THEN
       SELECT * INTO v_round FROM public.triple_chance_rounds WHERE round_number = v_round_num;
     END IF;
+  END IF;
+
+  -- Trigger RTP Calculation at T >= 70s (20s remaining) if digits not yet calculated
+  IF v_secs_into >= 70 AND v_round.red IS NULL THEN
+    PERFORM public.calculate_round_rtp_outcome(v_round.id);
+    SELECT * INTO v_round FROM public.triple_chance_rounds WHERE round_number = v_round_num;
+  END IF;
+
+  -- Update status if spinning/complete
+  IF v_round.status != v_status THEN
+    UPDATE public.triple_chance_rounds SET status = v_status WHERE id = v_round.id;
+    v_round.status := v_status;
   END IF;
 
   RETURN jsonb_build_object(
@@ -292,7 +425,7 @@ BEGIN
 END;
 $$;
 
--- F. get_recent_rounds (history grid — last N completed rounds)
+-- G. get_recent_rounds (history grid — last N completed rounds)
 CREATE OR REPLACE FUNCTION public.get_recent_rounds(p_limit INT DEFAULT 10)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -303,16 +436,25 @@ DECLARE
   v_current     BIGINT := v_now_epoch / v_cycle;
   v_results     jsonb  := '[]'::jsonb;
   v_r_num       BIGINT;
+  v_db_round    public.triple_chance_rounds;
   v_hash        TEXT;
   v_red INT; v_green INT; v_black INT;
   i             INT;
 BEGIN
   FOR i IN 1..LEAST(p_limit, 50) LOOP
     v_r_num := v_current - i;
-    v_hash  := md5('bsg_tc_seed_' || v_r_num::TEXT);
-    v_red   := (ABS(('x' || SUBSTR(v_hash,  1, 8))::BIT(32)::INT) % 10);
-    v_green := (ABS(('x' || SUBSTR(v_hash,  9, 8))::BIT(32)::INT) % 10);
-    v_black := (ABS(('x' || SUBSTR(v_hash, 17, 8))::BIT(32)::INT) % 10);
+    SELECT * INTO v_db_round FROM public.triple_chance_rounds WHERE round_number = v_r_num;
+    IF v_db_round IS NOT NULL AND v_db_round.red IS NOT NULL THEN
+      v_red   := v_db_round.red;
+      v_green := v_db_round.green;
+      v_black := v_db_round.black;
+    ELSE
+      v_hash  := md5('bsg_tc_seed_' || v_r_num::TEXT);
+      v_red   := (ABS(('x' || SUBSTR(v_hash,  1, 8))::BIT(32)::INT) % 10);
+      v_green := (ABS(('x' || SUBSTR(v_hash,  9, 8))::BIT(32)::INT) % 10);
+      v_black := (ABS(('x' || SUBSTR(v_hash, 17, 8))::BIT(32)::INT) % 10);
+    END IF;
+
     v_results := v_results || jsonb_build_object(
       'id',           'round_' || v_r_num::TEXT,
       'round_number', v_r_num,
@@ -348,12 +490,15 @@ DECLARE
   v_delta_stake    NUMERIC;
   v_cell_key       TEXT;
   v_cell_val       NUMERIC;
+  v_cycle          CONSTANT INT := 103;
+  v_now_epoch      BIGINT := EXTRACT(EPOCH FROM NOW())::BIGINT;
+  v_secs_into      INT := (v_now_epoch % v_cycle)::INT;
 BEGIN
   IF v_user_id IS NULL THEN RAISE EXCEPTION 'Unauthenticated' USING errcode = 'P0006'; END IF;
 
   SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = p_round_id;
   IF v_round IS NULL THEN RAISE EXCEPTION 'Round not found' USING errcode = 'P0002'; END IF;
-  IF v_round.status != 'betting' THEN RAISE EXCEPTION 'Betting window closed' USING errcode = 'P0003'; END IF;
+  IF v_round.status != 'betting' OR v_secs_into > 85 THEN RAISE EXCEPTION 'Betting window closed' USING errcode = 'P0003'; END IF;
 
   SELECT * INTO v_limits FROM public.play_limits WHERE id = 'global' LIMIT 1;
 

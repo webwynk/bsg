@@ -209,13 +209,18 @@ export default function SuperAdminLiveGamePage() {
 
             // Active Round Outcome Preview for SuperAdmin (God Mode)
             if (activeRound) {
+              const hasDigits = activeRound.redDigit !== null && activeRound.redDigit !== undefined
               return (
                 <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-950/20 via-card to-background border border-amber-500/40 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center space-x-2">
                       <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center space-x-1.5 animate-pulse">
                         <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                        <span>⚡ God Mode Outcome Preview (Round #{activeRound.roundNumber})</span>
+                        <span>
+                          {hasDigits 
+                            ? `⚡ God Mode Outcome Revealed (Round #${activeRound.roundNumber})` 
+                            : `⚡ Accumulating 70s Wagers & Exposure (Round #${activeRound.roundNumber})`}
+                        </span>
                       </span>
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -229,49 +234,67 @@ export default function SuperAdminLiveGamePage() {
                     </div>
                   </div>
 
-                  {/* Pre-Calculated Winning Digits Display */}
-                  <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
-                    <div className="flex items-center space-x-3 sm:space-x-4">
-                      {/* Red Digit (1st) */}
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                          {activeRound.redDigit}
+                  {hasDigits ? (
+                    /* Pre-Calculated Winning Digits Display (Second 71+) */
+                    <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+                      <div className="flex items-center space-x-3 sm:space-x-4">
+                        {/* Red Digit (1st) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
+                            {activeRound.redDigit}
+                          </div>
+                        </div>
+
+                        <span className="text-muted-foreground/40 font-black text-2xl mt-4">+</span>
+
+                        {/* Green Digit (2nd) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
+                            {activeRound.greenDigit}
+                          </div>
+                        </div>
+
+                        <span className="text-muted-foreground/40 font-black text-2xl mt-4">+</span>
+
+                        {/* Black Digit (3rd) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
+                            {activeRound.blackDigit}
+                          </div>
                         </div>
                       </div>
 
-                      <span className="text-muted-foreground/40 font-black text-2xl mt-4">+</span>
-
-                      {/* Green Digit (2nd) */}
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                          {activeRound.greenDigit}
-                        </div>
-                      </div>
-
-                      <span className="text-muted-foreground/40 font-black text-2xl mt-4">+</span>
-
-                      {/* Black Digit (3rd) */}
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                          {activeRound.blackDigit}
+                      {/* Combination Result Badge */}
+                      <div className="flex flex-col items-start sm:items-end">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Pre-Result</span>
+                        <div className="text-3xl sm:text-5xl font-black font-mono tracking-widest text-amber-400 bg-amber-500/10 px-4 py-1.5 rounded-2xl border border-amber-500/30 mt-1">
+                          {activeRound.resultNumber?.toString().padStart(3, '0')}
                         </div>
                       </div>
                     </div>
-
-                    {/* Combination Result Badge */}
-                    <div className="flex flex-col items-start sm:items-end">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Pre-Result</span>
-                      <div className="text-3xl sm:text-5xl font-black font-mono tracking-widest text-amber-400 bg-amber-500/10 px-4 py-1.5 rounded-2xl border border-amber-500/30 mt-1">
-                        {activeRound.resultNumber.toString().padStart(3, '0')}
+                  ) : (
+                    /* Wager Accumulation Phase Display (0s to 70s) */
+                    <div className="flex items-center justify-between flex-wrap gap-3 py-4 px-5 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                      <div className="flex items-center space-x-3">
+                        <Loader2 className="h-6 w-6 text-amber-400 animate-spin shrink-0" />
+                        <div>
+                          <div className="text-sm font-black text-foreground">Collecting Live Player Wagers & Exposure (0s ──► 70s)</div>
+                          <div className="text-xs font-semibold text-muted-foreground mt-0.5">
+                            RTP Engine will analyze all bets and calculate the optimal winning combination at <strong className="text-amber-400">20s remaining (Second 71)</strong>.
+                          </div>
+                        </div>
                       </div>
+                      <span className="px-3 py-1 text-xs font-mono font-bold rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        {roundCountdown > 20 ? `${roundCountdown - 20}s until calculation` : 'Calculating now...'}
+                      </span>
                     </div>
-                  </div>
+                  )}
 
                   <p className="text-xs text-amber-300/80 font-medium pt-2 border-t border-amber-500/20 flex items-center space-x-1">
-                    <span>⚡ <strong>God Mode Telemetry:</strong> This pre-calculated outcome is live on your admin dashboard within 5s of round start. Players in <em>bsg_game</em> see only betting timers and hidden wheels.</span>
+                    <span>⚡ <strong>God Mode Telemetry:</strong> At Second 71 (20s remaining), the 70s snapshot RTP calculation completes and reveals the winning numbers here to SuperAdmin.</span>
                   </p>
                 </div>
               )
