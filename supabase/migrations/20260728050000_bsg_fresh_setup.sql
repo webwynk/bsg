@@ -800,17 +800,26 @@ DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
 DROP POLICY IF EXISTS "sessions_select" ON public.active_sessions;
 CREATE POLICY "sessions_select" ON public.active_sessions FOR SELECT USING (user_id = auth.uid());
 
--- transactions: own rows only
+-- transactions: own rows (player) OR agent can read their players' transactions
 DROP POLICY IF EXISTS "transactions_select" ON public.transactions;
-CREATE POLICY "transactions_select" ON public.transactions FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "transactions_select" ON public.transactions FOR SELECT USING (
+  user_id = auth.uid() OR agent_id = auth.uid()
+);
 
 -- triple_chance_rounds: all authenticated players can read
 DROP POLICY IF EXISTS "tc_rounds_select" ON public.triple_chance_rounds;
 CREATE POLICY "tc_rounds_select" ON public.triple_chance_rounds FOR SELECT USING (true);
 
--- triple_chance_bets: own rows only
+-- triple_chance_bets: own rows only (player) OR agent can read their players' bets
 DROP POLICY IF EXISTS "tc_bets_select" ON public.triple_chance_bets;
 CREATE POLICY "tc_bets_select" ON public.triple_chance_bets FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "tc_bets_agent_select" ON public.triple_chance_bets;
+CREATE POLICY "tc_bets_agent_select" ON public.triple_chance_bets FOR SELECT USING (
+  user_id IN (
+    SELECT id FROM public.profiles WHERE agent_id = auth.uid()
+  )
+);
 
 -- play_limits: all authenticated players can read
 DROP POLICY IF EXISTS "play_limits_select" ON public.play_limits;

@@ -281,10 +281,10 @@ export default function PlayersPage() {
       setCountdown(prev => (prev <= 1 ? 90 : prev - 1))
     }, 1000)
 
-    // 90s data interval — silent, list only (no history cascade)
+    // 90s data interval — silent, reloads list AND history for selected player
     const dataInterval = setInterval(() => {
       setCountdown(90)
-      loadPlayers({ silent: true })
+      loadPlayers({ silent: true, reloadHistory: true })
     }, 90000)
 
     return () => {
