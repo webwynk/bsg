@@ -223,6 +223,10 @@ export async function getRtpAction() {
 }
 
 export async function updateRtpAction(rtpPercentage: number) {
+  if (typeof rtpPercentage !== 'number' || rtpPercentage < 50 || rtpPercentage > 100) {
+    return { success: false, error: 'Invalid RTP value. Must be between 50% and 100%.' }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 

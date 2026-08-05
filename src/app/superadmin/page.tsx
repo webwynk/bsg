@@ -429,14 +429,14 @@ export default function SuperAdminDashboard() {
                       setRtpValue(val[0])
                     }
                   }}
-                  max={99} 
+                  max={100} 
                   min={50} 
                   step={0.5}
                   className="w-full cursor-pointer"
                 />
                 <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
                   <span>50% (Max House Margin)</span>
-                  <span>99% (Min House Margin)</span>
+                  <span>100% (Zero House Margin)</span>
                 </div>
               </div>
 
@@ -451,7 +451,8 @@ export default function SuperAdminDashboard() {
                     { val: 92.5, label: '92.5% Medium' },
                     { val: 95, label: '95% Balanced' },
                     { val: 96.5, label: '96.5% Standard' },
-                    { val: 98, label: '98% High Payout' }
+                    { val: 98, label: '98% High Payout' },
+                    { val: 100, label: '100% Full Return (0% House Edge)' }
                   ].map((preset) => (
                     <button
                       key={preset.val}
@@ -480,9 +481,11 @@ export default function SuperAdminDashboard() {
                       ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                       : rtpValue <= 96.5
                       ? 'bg-success-bg text-success-text border border-emerald-500/30'
-                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : rtpValue < 100
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                   }`}>
-                    {rtpValue < 92 ? '🔥 Aggressive Yield' : rtpValue <= 96.5 ? '⚖️ Balanced (Recommended)' : '💎 Player Friendly'}
+                    {rtpValue < 92 ? '🔥 Aggressive Yield' : rtpValue <= 96.5 ? '⚖️ Balanced (Recommended)' : rtpValue < 100 ? '💎 Player Friendly' : '🎁 100% Full Return (Zero House Edge)'}
                   </span>
                 </div>
 
