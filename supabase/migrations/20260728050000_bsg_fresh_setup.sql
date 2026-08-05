@@ -38,9 +38,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id          UUID        PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   username    TEXT        NOT NULL UNIQUE,
   role        TEXT        NOT NULL DEFAULT 'player' CHECK (role IN ('player','agent','superadmin')),
-  balance        NUMERIC     NOT NULL DEFAULT 0 CHECK (balance >= 0),
-  ledger_version BIGINT      NOT NULL DEFAULT 1,
-  is_active      BOOLEAN     NOT NULL DEFAULT true,
+  balance         NUMERIC NOT NULL DEFAULT 0.00 CHECK (balance >= 0),
+  ledger_version  BIGINT NOT NULL DEFAULT 1,
+  is_active       BOOLEAN NOT NULL DEFAULT true,
   agent_id    UUID        REFERENCES public.profiles(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
