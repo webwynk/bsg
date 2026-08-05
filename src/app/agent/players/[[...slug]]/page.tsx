@@ -115,16 +115,15 @@ export default function PlayersPage() {
 
   // Compute performance metrics
   const performanceStats = React.useMemo(() => {
-    const todayStr = new Date().toLocaleDateString('en-US', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    const todayIstStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
 
     const targetPlays = gamePlays.filter(spin => {
       if (statsScope === 'today') {
-        return spin.date.includes(todayStr)
+        if ((spin as any).createdAtIso) {
+          const spinIstStr = new Date((spin as any).createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          return spinIstStr === todayIstStr
+        }
+        return true
       }
       return true
     })
@@ -142,13 +141,11 @@ export default function PlayersPage() {
   const filteredGames = React.useMemo(() => {
     return gamePlays.filter(spin => {
       if (filterDate) {
-        const filterDateStr = filterDate.toLocaleDateString('en-US', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
-        if (!spin.date.includes(filterDateStr)) return false
+        const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        const spinDateStr = (spin as any).createdAtIso 
+          ? new Date((spin as any).createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : spin.date
+        if (spinDateStr !== filterDateStr) return false
       }
 
       if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
@@ -231,7 +228,7 @@ export default function PlayersPage() {
   }, [])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(90)
+  const [countdown, setCountdown] = React.useState(10)
   // Stable ref — tracks selected player ID without being a useCallback dependency
   const selectedPlayerIdRef = React.useRef<string | null>(null)
 
@@ -278,14 +275,14 @@ export default function PlayersPage() {
 
     // 1s countdown tick — UI only, no DB fetch
     const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 90 : prev - 1))
+      setCountdown(prev => (prev <= 1 ? 10 : prev - 1))
     }, 1000)
 
-    // 90s data interval — silent, reloads list AND history for selected player
+    // 10s data interval — silent, reloads list AND history for selected player
     const dataInterval = setInterval(() => {
-      setCountdown(90)
+      setCountdown(10)
       loadPlayers({ silent: true, reloadHistory: true })
-    }, 90000)
+    }, 10000)
 
     return () => {
       clearInterval(countdownTick)
@@ -294,7 +291,7 @@ export default function PlayersPage() {
   }, [loadPlayers])
 
   const handleManualRefresh = async () => {
-    setCountdown(90)
+    setCountdown(10)
     loadPlayers({ reloadHistory: true })
   }
 

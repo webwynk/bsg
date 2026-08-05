@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 
-export async function getPlayersAction() {
+export async function getPlayersAction(targetAgentId?: string) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const agentId = user?.id
+  const agentId = targetAgentId || user?.id
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -274,10 +274,10 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
   }> = []
 
   try {
-    // Primary source: round_bets joined with game_rounds
+    // Primary source: round_bets joined with game_rounds using explicit FK syntax (!round_id)
     let { data: roundBets, error: betsErr } = await supabaseAdmin
       .from('triple_chance_bets')
-      .select('*, triple_chance_rounds(red, green, black, status)')
+      .select('*, triple_chance_rounds!round_id(red, green, black, status)')
       .eq('user_id', playerId)
       .order('created_at', { ascending: false })
       .limit(50)
@@ -355,6 +355,7 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
             hour: '2-digit',
             minute: '2-digit'
           }),
+          createdAtIso: p.created_at,
           singleBets: singleBetsObj,
           doubleBets: doubleBetsObj,
           tripleBets: tripleBetsObj,
