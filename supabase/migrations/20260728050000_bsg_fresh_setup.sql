@@ -582,7 +582,9 @@ BEGIN
 
   SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = p_round_id;
   IF v_round IS NULL THEN RAISE EXCEPTION 'Round not found' USING errcode = 'P0002'; END IF;
-  IF v_round.status != 'betting' OR v_secs_into > 85 THEN RAISE EXCEPTION 'Betting window closed' USING errcode = 'P0003'; END IF;
+  
+  -- Allow bets as long as cycle hasn't passed 93s (85s betting + 8s grace period for network latency during spin start)
+  IF v_secs_into > 93 THEN RAISE EXCEPTION 'Betting window closed' USING errcode = 'P0003'; END IF;
 
   SELECT * INTO v_limits FROM public.play_limits WHERE id = 'global' LIMIT 1;
 
@@ -647,6 +649,41 @@ BEGIN
     'success',        true,
     'balance_after',  (SELECT balance FROM public.profiles WHERE id = v_user_id),
     'ledger_version', (SELECT ledger_version FROM public.profiles WHERE id = v_user_id)
+  );
+END;
+$$;
+
+-- G2. submit_round_bet (TEXT overload for round_123 or UUID strings)
+CREATE OR REPLACE FUNCTION public.submit_round_bet(
+  p_round_id    TEXT,
+  p_single_bets JSONB,
+  p_double_bets JSONB,
+  p_triple_bets JSONB,
+  p_total_stake NUMERIC
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_round_uuid UUID;
+BEGIN
+  IF p_round_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_round_uuid := p_round_id::UUID;
+  ELSE
+    SELECT id INTO v_round_uuid FROM public.triple_chance_rounds
+      WHERE round_number = (REGEXP_REPLACE(p_round_id, '[^0-9]', '', 'g'))::BIGINT LIMIT 1;
+  END IF;
+
+  IF v_round_uuid IS NULL THEN
+    RAISE EXCEPTION 'Round not found for id %', p_round_id USING errcode = 'P0002';
+  END IF;
+
+  RETURN public.submit_round_bet(
+    v_round_uuid,
+    p_single_bets,
+    p_double_bets,
+    p_triple_bets,
+    p_total_stake
   );
 END;
 $$;
