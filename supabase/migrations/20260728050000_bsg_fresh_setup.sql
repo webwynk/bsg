@@ -757,7 +757,9 @@ BEGIN
 
   IF v_total_win > 0 THEN
     UPDATE public.profiles
-      SET balance = balance + v_total_win, updated_at = NOW()
+      SET balance = balance + v_total_win,
+          ledger_version = ledger_version + 1,
+          updated_at = NOW()
       WHERE id = v_user_id;
 
     INSERT INTO public.transactions (user_id, agent_id, game_name, type, amount, balance_after)
