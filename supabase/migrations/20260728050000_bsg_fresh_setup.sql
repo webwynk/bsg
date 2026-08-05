@@ -406,6 +406,12 @@ BEGIN
     SELECT * INTO v_round FROM public.triple_chance_rounds WHERE round_number = v_round_num;
   END IF;
 
+  -- Trigger Server-Side Auto-Settlement at T >= 90s (spin start)
+  IF v_secs_into >= 90 THEN
+    PERFORM public.resolve_round_payouts(v_round.id);
+    SELECT * INTO v_round FROM public.triple_chance_rounds WHERE round_number = v_round_num;
+  END IF;
+
   -- Update status if spinning/complete
   IF v_round.status != v_status THEN
     UPDATE public.triple_chance_rounds SET status = v_status WHERE id = v_round.id;
@@ -422,6 +428,81 @@ BEGIN
     'green',             v_round.green,
     'black',             v_round.black
   );
+END;
+$$;
+
+-- G. resolve_round_payouts (Server-Side Auto-Settlement at T=90s spin start)
+CREATE OR REPLACE FUNCTION public.resolve_round_payouts(p_round_id UUID)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_round         public.triple_chance_rounds;
+  v_bet_row       RECORD;
+  v_s_key         TEXT;
+  v_d_key         TEXT;
+  v_t_key         TEXT;
+  v_s_bet         NUMERIC;
+  v_d_bet         NUMERIC;
+  v_t_bet         NUMERIC;
+  v_s_win         NUMERIC;
+  v_d_win         NUMERIC;
+  v_t_win         NUMERIC;
+  v_total_win     NUMERIC;
+  v_agent_id      UUID;
+  v_settled_count INT := 0;
+BEGIN
+  SELECT * INTO v_round FROM public.triple_chance_rounds WHERE id = p_round_id FOR UPDATE;
+  IF v_round IS NULL OR v_round.red IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Round or digits missing');
+  END IF;
+
+  v_s_key := v_round.black::TEXT;
+  v_d_key := v_round.green::TEXT || v_round.black::TEXT;
+  v_t_key := v_round.red::TEXT || v_round.green::TEXT || v_round.black::TEXT;
+
+  FOR v_bet_row IN SELECT * FROM public.triple_chance_bets WHERE round_id = p_round_id AND is_resolved = false FOR UPDATE LOOP
+    v_s_bet := COALESCE((v_bet_row.single_bets ->> v_s_key)::NUMERIC, COALESCE((v_bet_row.single_bets ->> (v_s_key::INT)::TEXT)::NUMERIC, 0));
+    v_d_bet := COALESCE(
+      (v_bet_row.double_bets ->> v_d_key)::NUMERIC,
+      COALESCE((v_bet_row.double_bets ->> LPAD(v_d_key, 2, '0'))::NUMERIC,
+      COALESCE((v_bet_row.double_bets ->> (v_d_key::INT)::TEXT)::NUMERIC, 0))
+    );
+    v_t_bet := COALESCE(
+      (v_bet_row.triple_bets ->> v_t_key)::NUMERIC,
+      COALESCE((v_bet_row.triple_bets ->> LPAD(v_t_key, 3, '0'))::NUMERIC,
+      COALESCE((v_bet_row.triple_bets ->> (v_t_key::INT)::TEXT)::NUMERIC, 0))
+    );
+
+    v_s_win     := v_s_bet * 9.0;
+    v_d_win     := v_d_bet * 90.0;
+    v_t_win     := v_t_bet * 900.0;
+    v_total_win := v_s_win + v_d_win + v_t_win;
+
+    SELECT agent_id INTO v_agent_id FROM public.profiles WHERE id = v_bet_row.user_id;
+
+    UPDATE public.triple_chance_bets SET
+      single_win  = v_s_win,
+      double_win  = v_d_win,
+      triple_win  = v_t_win,
+      win_amount  = v_total_win,
+      is_resolved = true
+    WHERE id = v_bet_row.id;
+
+    IF v_total_win > 0 THEN
+      UPDATE public.profiles
+        SET balance = balance + v_total_win, updated_at = NOW()
+        WHERE id = v_bet_row.user_id;
+
+      INSERT INTO public.transactions (user_id, agent_id, game_name, type, amount, balance_after)
+        VALUES (v_bet_row.user_id, v_agent_id, 'triple_chance', 'win_payout', v_total_win,
+                (SELECT balance FROM public.profiles WHERE id = v_bet_row.user_id));
+    END IF;
+
+    v_settled_count := v_settled_count + 1;
+  END LOOP;
+
+  RETURN jsonb_build_object('success', true, 'settled_count', v_settled_count);
 END;
 $$;
 
