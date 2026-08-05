@@ -116,7 +116,7 @@ export async function getAgentDashboardDataAction() {
           todaysWins = todayBetsData.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
           todaysProfitLoss = todaysBets - todaysWins
         } else if (spinsRes.data && spinsRes.data.length > 0) {
-          todaysBets = spinsRes.data.reduce((acc, s) => acc + Number(s.bet_amount || 0), 0)
+          todaysBets = spinsRes.data.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
           todaysWins = spinsRes.data.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
           todaysProfitLoss = todaysBets - todaysWins
         }
