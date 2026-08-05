@@ -60,7 +60,7 @@ export async function getPlayersAction(targetAgentId?: string) {
               id: u.id,
               name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
               username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-              balance: u.user_metadata?.balance || 0,
+              balance: 0, // always 0 in fallback — profiles table is authoritative for live balance
               status: u.user_metadata?.status || 'Active',
               isOnline,
               gamePlays: 0

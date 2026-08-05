@@ -71,7 +71,9 @@ export default function PlayersPage() {
     bet: number
     win: number
     status: 'WON' | 'LOST'
+    isResolved: boolean
     date: string
+    createdAtIso: string
     singleBets: Record<string, number>
     doubleBets: Record<string, number>
     tripleBets: Record<string, number>
@@ -88,9 +90,11 @@ export default function PlayersPage() {
   const [pointsHistory, setPointsHistory] = React.useState<Array<{
     id: string
     type: 'deposit' | 'withdraw'
+    txType: string
     amount: number
     balanceAfter: number
     date: string
+    createdAtIso: string
   }>>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
 
@@ -160,17 +164,15 @@ export default function PlayersPage() {
     })
   }, [gamePlays, filterDate, filterOutcome, filterMode])
 
-  // Filtered points history list
+  // Filtered points history list — uses ISO date comparison for accuracy across midnight boundaries
   const filteredPoints = React.useMemo(() => {
     return pointsHistory.filter(tx => {
       if (filterDate) {
-        const filterDateStr = filterDate.toLocaleDateString('en-US', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
-        if (!tx.date.includes(filterDateStr)) return false
+        const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        const txDateStr = tx.createdAtIso
+          ? new Date(tx.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : tx.date
+        if (txDateStr !== filterDateStr) return false
       }
       return true
     })
