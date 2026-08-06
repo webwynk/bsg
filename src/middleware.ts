@@ -48,8 +48,21 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Extract user role strictly from JWT user metadata
-  const userRole = user?.user_metadata?.role
+  // S-2 FIX: read the role from `app_metadata`, never `user_metadata`.
+  //
+  // In Supabase, user_metadata (raw_user_meta_data) is SELF-SERVICE WRITABLE —
+  // any authenticated user can call
+  //     supabase.auth.updateUser({ data: { role: 'superadmin' } })
+  // with their own token. Reading the role from there meant a player could
+  // promote themselves and walk into every /superadmin route.
+  //
+  // app_metadata (raw_app_meta_data) can only be written with the service role.
+  // It is kept in step with profiles.role by a database trigger, so it is safe
+  // to trust here and costs no database round trip on each navigation.
+  //
+  // This guard covers page routes only. Server actions independently re-verify
+  // through requireAuth(), which reads public.profiles directly.
+  const userRole = user?.app_metadata?.role
 
   // Protect /superadmin routes
   if (pathname.startsWith('/superadmin')) {

@@ -19,38 +19,37 @@ import {
 
 interface PlayerBet {
   username: string
-  betAmount: number
-  winAmount: number
-  status: string
+  total_stake: number
+  total_payout: number
 }
 
 interface GameDraw {
-  id: string
-  roundNumber?: number
-  game: string
-  resultNumber: number
-  redDigit: number
-  greenDigit: number
-  blackDigit: number
-  betAmount: number
-  winAmount: number
-  playerCount?: number
-  status: string
-  playerUsername: string
-  playerBets?: PlayerBet[]
-  createdAt: string
+  round_id: string
+  round_number: number
+  hand_id: string
+  red: number
+  green: number
+  black: number
+  result: string
+  total_stake: number
+  total_payout: number
+  player_count: number
+  outcome: 'WON' | 'LOST' | 'NO BETS'
+  created_at: string
+  player_bets: PlayerBet[]
 }
 
 interface ActiveRound {
-  roundNumber: number
-  roundId: string
-  redDigit: number
-  greenDigit: number
-  blackDigit: number
-  resultNumber: number
-  status: string
-  secondsRemaining: number
-  scheduledAt: string
+  round_number: number
+  round_id: string
+  phase: string
+  seconds_remaining: number
+  seconds_into: number
+  draw_at_second: number
+  has_digits: boolean
+  red: number | null
+  green: number | null
+  black: number | null
 }
 
 export default function SuperAdminLiveGamePage() {
@@ -81,7 +80,7 @@ export default function SuperAdminLiveGamePage() {
       const res = await getLatestGameDrawsAction()
       if (res) {
         if (res.draws) setLatestDraws(res.draws)
-        if (res.activeRound) setActiveRound(res.activeRound)
+        if (res.active_round) setActiveRound(res.active_round)
       }
     } catch (e) {
       console.error('Error loading game draws:', e)
@@ -107,14 +106,14 @@ export default function SuperAdminLiveGamePage() {
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {
     const matchesSearch = 
-      draw.resultNumber.toString().includes(searchQuery) ||
-      draw.playerUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      draw.id.toLowerCase().includes(searchQuery.toLowerCase())
+      draw.result.toString().includes(searchQuery) ||
+      draw.hand_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      draw.round_id.toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = 
       statusFilter === 'ALL' ||
-      (statusFilter === 'WON' && draw.winAmount > 0) ||
-      (statusFilter === 'LOST' && draw.winAmount === 0)
+      (statusFilter === 'WON' && draw.total_payout > 0) ||
+      (statusFilter === 'LOST' && draw.total_payout === 0)
 
     return matchesSearch && matchesStatus
   })
@@ -198,7 +197,7 @@ export default function SuperAdminLiveGamePage() {
         <div className="space-y-5">
           {(() => {
             const latest = latestDraws.length > 0 ? latestDraws[0] : null
-            const drawTime = latest?.createdAt ? new Date(latest.createdAt).getTime() : 0
+            const drawTime = latest?.created_at ? new Date(latest.created_at).getTime() : 0
             const diffSecs = latest ? Math.max(0, Math.floor((nowTime - drawTime) / 1000)) : 999999
             const isRecentCompletion = latest && diffSecs <= 15
 
@@ -209,7 +208,7 @@ export default function SuperAdminLiveGamePage() {
 
             // Active Round Outcome Preview for SuperAdmin (God Mode)
             if (activeRound) {
-              const hasDigits = activeRound.redDigit !== null && activeRound.redDigit !== undefined
+              const hasDigits = activeRound.red !== null && activeRound.red !== undefined
               return (
                 <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-950/20 via-card to-background border border-amber-500/40 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -218,13 +217,13 @@ export default function SuperAdminLiveGamePage() {
                         <Sparkles className="h-3.5 w-3.5 text-amber-400" />
                         <span>
                           {hasDigits 
-                            ? `⚡ God Mode Outcome Revealed (Round #${activeRound.roundNumber})` 
-                            : `⚡ Accumulating 70s Wagers & Exposure (Round #${activeRound.roundNumber})`}
+                            ? `⚡ God Mode Outcome Revealed (Round #${activeRound.round_number})` 
+                            : `⚡ Accumulating 70s Wagers & Exposure (Round #${activeRound.round_number})`}
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        {activeRound.status === 'spinning' ? 'Spinning Phase' : 'Betting Phase (Live)'}
+                        {activeRound.phase === 'spinning' ? 'Spinning Phase' : 'Betting Phase (Live)'}
                       </span>
                     </div>
 
@@ -242,7 +241,7 @@ export default function SuperAdminLiveGamePage() {
                         <div className="flex flex-col items-center">
                           <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
                           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                            {activeRound.redDigit}
+                            {activeRound.red}
                           </div>
                         </div>
 
@@ -252,7 +251,7 @@ export default function SuperAdminLiveGamePage() {
                         <div className="flex flex-col items-center">
                           <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
                           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                            {activeRound.greenDigit}
+                            {activeRound.green}
                           </div>
                         </div>
 
@@ -262,7 +261,7 @@ export default function SuperAdminLiveGamePage() {
                         <div className="flex flex-col items-center">
                           <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
                           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                            {activeRound.blackDigit}
+                            {activeRound.black}
                           </div>
                         </div>
                       </div>
@@ -271,7 +270,7 @@ export default function SuperAdminLiveGamePage() {
                       <div className="flex flex-col items-start sm:items-end">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Pre-Result</span>
                         <div className="text-3xl sm:text-5xl font-black font-mono tracking-widest text-amber-400 bg-amber-500/10 px-4 py-1.5 rounded-2xl border border-amber-500/30 mt-1">
-                          {activeRound.resultNumber?.toString().padStart(3, '0')}
+                          {`${activeRound.red}${activeRound.green}${activeRound.black}`}
                         </div>
                       </div>
                     </div>
@@ -331,7 +330,7 @@ export default function SuperAdminLiveGamePage() {
                     <div className="flex flex-col items-center">
                       <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Red (1st)</span>
                       <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-600/20 border-2 border-red-500 text-red-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                        {latest.redDigit}
+                        {latest.red}
                       </div>
                     </div>
 
@@ -341,7 +340,7 @@ export default function SuperAdminLiveGamePage() {
                     <div className="flex flex-col items-center">
                       <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Green (2nd)</span>
                       <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-600/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                        {latest.greenDigit}
+                        {latest.green}
                       </div>
                     </div>
 
@@ -351,7 +350,7 @@ export default function SuperAdminLiveGamePage() {
                     <div className="flex flex-col items-center">
                       <span className="text-[10px] font-extrabold uppercase text-muted-foreground mb-1">Black (3rd)</span>
                       <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-800 border-2 border-neutral-600 text-foreground flex items-center justify-center text-xl sm:text-3xl font-black font-mono shadow-md">
-                        {latest.blackDigit}
+                        {latest.black}
                       </div>
                     </div>
                   </div>
@@ -360,7 +359,7 @@ export default function SuperAdminLiveGamePage() {
                   <div className="flex flex-col items-start sm:items-end">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">3-Digit Result</span>
                     <div className="text-3xl sm:text-5xl font-black font-mono tracking-widest text-primary bg-primary/10 px-4 py-1.5 rounded-2xl border border-primary/30 mt-1">
-                      {latest.resultNumber.toString().padStart(3, '0')}
+                      {latest.result}
                     </div>
                   </div>
                 </div>
@@ -369,16 +368,16 @@ export default function SuperAdminLiveGamePage() {
                 <div className="grid grid-cols-3 gap-3 pt-3 border-t border-purple-500/20 text-xs sm:text-sm">
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Player:</span>
-                    <span className="font-extrabold font-mono text-foreground">@{latest.playerUsername}</span>
+                    <span className="font-extrabold font-mono text-foreground">@{latest.hand_id}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Wagered:</span>
-                    <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.betAmount)}</span>
+                    <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.total_stake)}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Net Payout:</span>
-                    <span className={`font-extrabold font-mono ${latest.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                      {latest.winAmount > 0 ? `+${formatCurrency(latest.winAmount)}` : '0 Coins'}
+                    <span className={`font-extrabold font-mono ${latest.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                      {latest.total_payout > 0 ? `+${formatCurrency(latest.total_payout)}` : '0 Coins'}
                     </span>
                   </div>
                 </div>
@@ -398,7 +397,7 @@ export default function SuperAdminLiveGamePage() {
               </div>
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
                 {latestDraws.map(draw => {
-                  const drawTime = draw.createdAt ? new Date(draw.createdAt).getTime() : Date.now()
+                  const drawTime = draw.created_at ? new Date(draw.created_at).getTime() : Date.now()
                   const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
                   let relTime = 'Just now'
                   if (diffSecs >= 5 && diffSecs < 60) relTime = `${diffSecs}s ago`
@@ -407,19 +406,19 @@ export default function SuperAdminLiveGamePage() {
 
                   return (
                     <div
-                      key={draw.id}
+                      key={draw.round_id}
                       className="px-3 py-2 rounded-xl bg-card border border-border/80 shrink-0 flex items-center space-x-2.5 text-xs font-mono shadow-xs hover:border-primary/40 transition-colors"
                     >
                       <span className="text-[10px] text-muted-foreground font-semibold">{relTime}</span>
                       <div className="flex items-center space-x-1 font-bold">
-                        <span className="text-red-400">{draw.redDigit}</span>
+                        <span className="text-red-400">{draw.red}</span>
                         <span className="text-muted-foreground/50 text-[10px]">•</span>
-                        <span className="text-emerald-400">{draw.greenDigit}</span>
+                        <span className="text-emerald-400">{draw.green}</span>
                         <span className="text-muted-foreground/50 text-[10px]">•</span>
-                        <span className="text-foreground">{draw.blackDigit}</span>
+                        <span className="text-foreground">{draw.black}</span>
                       </div>
                       <span className="font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-lg text-xs border border-primary/20">
-                        {draw.resultNumber.toString().padStart(3, '0')}
+                        {draw.result}
                       </span>
                     </div>
                   )
@@ -509,7 +508,7 @@ export default function SuperAdminLiveGamePage() {
                     </tr>
                   ) : paginatedDraws.length > 0 ? (
                     paginatedDraws.flatMap(draw => {
-                      const formattedTime = draw.createdAt ? new Date(draw.createdAt).toLocaleString('en-IN', {
+                      const formattedTime = draw.created_at ? new Date(draw.created_at).toLocaleString('en-IN', {
                         timeZone: 'Asia/Kolkata',
                         hour: '2-digit',
                         minute: '2-digit',
@@ -518,20 +517,20 @@ export default function SuperAdminLiveGamePage() {
                         month: 'short'
                       }) : '—'
 
-                      const isExpanded = expandedDrawId === draw.id;
-                      const hasMultiple = draw.playerBets && draw.playerBets.length > 0;
+                      const isExpanded = expandedDrawId === draw.round_id;
+                      const hasMultiple = draw.player_bets && draw.player_bets.length > 0;
 
                       return [
                         <tr
-                          key={draw.id}
-                          onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.id)}
+                          key={draw.round_id}
+                          onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.round_id)}
                           className={`hover:bg-secondary/40 transition-colors ${hasMultiple ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-secondary/30' : ''}`}
                         >
                           <td className="py-2.5 px-3 text-muted-foreground text-[11px] font-sans">{formattedTime}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground text-[10px]">...{draw.id.slice(-8)}</td>
+                          <td className="py-2.5 px-3 text-muted-foreground text-[10px]">...{draw.round_id.slice(-8)}</td>
                           <td className="py-2.5 px-3 font-bold text-foreground font-sans">
                             <span className="flex items-center space-x-1">
-                              <span>{draw.playerUsername}</span>
+                              <span>{draw.hand_id}</span>
                               {hasMultiple && (
                                 <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">
                                   {isExpanded ? '▲ Hide' : '▼ Details'}
@@ -541,38 +540,38 @@ export default function SuperAdminLiveGamePage() {
                           </td>
                           <td className="py-2.5 px-3">
                             <div className="flex items-center space-x-1.5 font-bold text-xs">
-                              <span className="text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">{draw.redDigit}</span>
+                              <span className="text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">{draw.red}</span>
                               <span className="text-muted-foreground/40">•</span>
-                              <span className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">{draw.greenDigit}</span>
+                              <span className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">{draw.green}</span>
                               <span className="text-muted-foreground/40">•</span>
-                              <span className="text-foreground bg-secondary px-1.5 py-0.5 rounded border border-border">{draw.blackDigit}</span>
+                              <span className="text-foreground bg-secondary px-1.5 py-0.5 rounded border border-border">{draw.black}</span>
                             </div>
                           </td>
                           <td className="py-2.5 px-3">
                             <span className="font-extrabold text-primary bg-primary/10 px-2 py-1 rounded-lg text-xs border border-primary/20">
-                              {draw.resultNumber.toString().padStart(3, '0')}
+                              {draw.result}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-foreground font-semibold">{formatCurrency(draw.betAmount)}</td>
-                          <td className={`py-2.5 px-3 text-right font-extrabold ${draw.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                            {draw.winAmount > 0 ? `+${formatCurrency(draw.winAmount)}` : '0 Coins'}
+                          <td className="py-2.5 px-3 text-foreground font-semibold">{formatCurrency(draw.total_stake)}</td>
+                          <td className={`py-2.5 px-3 text-right font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                            {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0 Coins'}
                           </td>
                         </tr>,
-                        isExpanded && draw.playerBets && draw.playerBets.length > 0 && (
-                          <tr key={`${draw.id}-expanded`} className="bg-secondary/20 border-b border-border/40">
+                        isExpanded && draw.player_bets && draw.player_bets.length > 0 && (
+                          <tr key={`${draw.round_id}-expanded`} className="bg-secondary/20 border-b border-border/40">
                             <td colSpan={7} className="p-3">
                               <div className="bg-background/90 rounded-xl p-3 border border-border/60 space-y-2">
                                 <div className="text-[11px] font-bold text-primary flex items-center justify-between border-b border-border/40 pb-1.5">
-                                  <span>Participating Player Breakdown ({draw.playerBets.length} Players)</span>
+                                  <span>Participating Player Breakdown ({draw.player_bets.length} Players)</span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-sans">
-                                  {draw.playerBets.map((pb, idx) => (
+                                  {draw.player_bets.map((pb, idx) => (
                                     <div key={idx} className="flex items-center justify-between bg-secondary/40 px-2.5 py-1.5 rounded-lg border border-border/30">
                                       <span className="font-bold text-foreground">@{pb.username}</span>
                                       <div className="flex items-center space-x-2 text-[11px] font-mono">
-                                        <span className="text-muted-foreground">Bet: {formatCurrency(pb.betAmount)}</span>
-                                        <span className={pb.winAmount > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
-                                          {pb.winAmount > 0 ? `+${formatCurrency(pb.winAmount)}` : '0'}
+                                        <span className="text-muted-foreground">Bet: {formatCurrency(pb.total_stake)}</span>
+                                        <span className={pb.total_payout > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
+                                          {pb.total_payout > 0 ? `+${formatCurrency(pb.total_payout)}` : '0'}
                                         </span>
                                       </div>
                                     </div>
@@ -604,18 +603,18 @@ export default function SuperAdminLiveGamePage() {
                 </div>
               ) : paginatedDraws.length > 0 ? (
                 paginatedDraws.map(draw => {
-                  const isExpanded = expandedDrawId === draw.id;
-                  const hasMultiple = draw.playerBets && draw.playerBets.length > 0;
+                  const isExpanded = expandedDrawId === draw.round_id;
+                  const hasMultiple = draw.player_bets && draw.player_bets.length > 0;
 
                   return (
                     <div
-                      key={draw.id}
-                      onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.id)}
+                      key={draw.round_id}
+                      onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.round_id)}
                       className={`p-3 rounded-xl bg-secondary/30 border border-border/80 space-y-2 text-xs ${hasMultiple ? 'cursor-pointer' : ''}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-foreground">{draw.playerUsername}</span>
+                          <span className="font-bold text-foreground">{draw.hand_id}</span>
                           {hasMultiple && (
                             <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">
                               {isExpanded ? '▲ Hide' : '▼ Details'}
@@ -623,33 +622,33 @@ export default function SuperAdminLiveGamePage() {
                           )}
                         </div>
                         <span className="font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded text-xs border border-primary/20">
-                          {draw.resultNumber.toString().padStart(3, '0')}
+                          {draw.result}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between text-[11px]">
                         <div className="flex items-center space-x-1 font-mono font-bold">
-                          <span className="text-red-400">{draw.redDigit}</span>
+                          <span className="text-red-400">{draw.red}</span>
                           <span className="text-muted-foreground/40">•</span>
-                          <span className="text-emerald-400">{draw.greenDigit}</span>
+                          <span className="text-emerald-400">{draw.green}</span>
                           <span className="text-muted-foreground/40">•</span>
-                          <span className="text-foreground">{draw.blackDigit}</span>
+                          <span className="text-foreground">{draw.black}</span>
                         </div>
-                        <span className={`font-extrabold ${draw.winAmount > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                          {draw.winAmount > 0 ? `+${formatCurrency(draw.winAmount)}` : '0 Coins'}
+                        <span className={`font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                          {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0 Coins'}
                         </span>
                       </div>
 
-                      {isExpanded && draw.playerBets && draw.playerBets.length > 0 && (
+                      {isExpanded && draw.player_bets && draw.player_bets.length > 0 && (
                         <div className="pt-2 border-t border-border/40 space-y-1.5">
-                          <div className="text-[10px] font-bold text-primary">Participating Players ({draw.playerBets.length})</div>
-                          {draw.playerBets.map((pb, idx) => (
+                          <div className="text-[10px] font-bold text-primary">Participating Players ({draw.player_bets.length})</div>
+                          {draw.player_bets.map((pb, idx) => (
                             <div key={idx} className="flex items-center justify-between bg-background/80 p-2 rounded-lg border border-border/40 text-[11px]">
                               <span className="font-bold text-foreground">@{pb.username}</span>
                               <div className="flex items-center space-x-2 font-mono">
-                                <span className="text-muted-foreground">Bet: {formatCurrency(pb.betAmount)}</span>
-                                <span className={pb.winAmount > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
-                                  {pb.winAmount > 0 ? `+${formatCurrency(pb.winAmount)}` : '0'}
+                                <span className="text-muted-foreground">Bet: {formatCurrency(pb.total_stake)}</span>
+                                <span className={pb.total_payout > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
+                                  {pb.total_payout > 0 ? `+${formatCurrency(pb.total_payout)}` : '0'}
                                 </span>
                               </div>
                             </div>

@@ -1,742 +1,433 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient as createServerClient } from '@/lib/supabase'
-import { createClient } from '@supabase/supabase-js'
-import { logAuditEventAction } from '../actions'
-import { toWholeCoins } from '@/lib/ledger'
+import { createClient as createUserClient, createAdminClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { asRpc, type AdminIssueResult } from '@/lib/rpc'
+import { logAuditEventAction } from '../actions'
+import { isCredit, toWholeCoins, type TransferDirection } from '@/lib/ledger'
 
-export async function getAgentsAction() {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { agents: [] }
-  }
+/**
+ * Agent administration — v2.
+ *
+ * Every export is guarded by requireAuth(['superadmin']). Coin movement goes
+ * through the admin_issue_coins RPC using the CALLER'S session, so the database
+ * identifies the actor from auth.uid(); the service-role client is used only
+ * for reads and Auth admin operations already authorised here.
+ *
+ * M-1 carried forward: blocking an agent now writes profiles.is_active — the
+ * column the heartbeat and every dashboard view actually read — and cascades in
+ * BOTH directions. v1 wrote only auth metadata, so a blocked agent still showed
+ * as Active and nobody was ever kicked out of a live session.
+ */
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      const [profRes, usersRes] = await Promise.all([
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('role', 'agent'),
-        supabaseAdmin.auth.admin.listUsers()
-      ])
-
-      const profiles = profRes.data
-      const allUsers = usersRes.data?.users || []
-
-      if (profiles && profiles.length > 0) {
-        const agents = profiles.map(p => {
-          const u = allUsers.find(user => user.id === p.id)
-          const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || p.username || 'Agent'
-          return {
-            id: p.id,
-            name: fullName,
-            username: p.username || '',
-            balance: Number(p.balance || 0),
-            status: p.is_active ? 'Active' : 'Blocked'
-          }
-        })
-        return { agents }
-      }
-
-      if (allUsers.length > 0) {
-        const agents = allUsers
-          .filter(u => u.user_metadata?.role === 'agent')
-          .map(u => ({
-            id: u.id,
-            name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Agent',
-            username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-            balance: u.user_metadata?.balance || 0,
-            status: u.user_metadata?.status || 'Active'
-          }))
-        return { agents }
-      }
-    } catch (_) {}
-  }
-
-  return { agents: [] }
+function istDateTime(value: string): string {
+  return new Date(value).toLocaleString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 
-async function resolveUserIdentifier(supabaseAdmin: any, identifier: string): Promise<string | null> {
-  if (!identifier || identifier === 'all') return identifier
+async function resolveAgentId(identifier: string): Promise<string | null> {
+  if (!identifier || identifier === 'all') return null
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
   if (isUuid) return identifier
-
-  try {
-    const { data: lookup } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .ilike('username', identifier)
-      .single()
-    if (lookup?.id) return lookup.id
-  } catch (_) {}
-
-  try {
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-    const matched = (usersData?.users || []).find((u: any) =>
-      u.user_metadata?.username?.toLowerCase() === identifier.toLowerCase() ||
-      u.email?.toLowerCase().split('@')[0] === identifier.toLowerCase()
-    )
-    if (matched?.id) return matched.id
-  } catch (_) {}
-
-  return null
+  const { data } = await createAdminClient()
+    .from('profiles').select('id').eq('role', 'agent')
+    .ilike('username', identifier).maybeSingle()
+  return data?.id ?? null
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LIST
+// ─────────────────────────────────────────────────────────────────────────────
+export interface AgentRow {
+  id: string
+  full_name: string
+  username: string
+  coin_balance: number
+  is_active: boolean
+  player_count: number
+}
+
+export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: string | null }> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { agents: [], error: auth.error }
+
+  try {
+    const db = createAdminClient()
+    const [agentsRes, playersRes] = await Promise.all([
+      db.from('profiles')
+        .select('id, username, full_name, coin_balance, is_active')
+        .eq('role', 'agent').order('username'),
+      db.from('profiles').select('agent_id').eq('role', 'player').range(0, 999999),
+    ])
+    if (agentsRes.error) throw new Error(agentsRes.error.message)
+    if (playersRes.error) throw new Error(playersRes.error.message)
+
+    const counts = new Map<string, number>()
+    for (const p of playersRes.data ?? []) {
+      if (p.agent_id) counts.set(p.agent_id, (counts.get(p.agent_id) ?? 0) + 1)
+    }
+
+    return {
+      agents: (agentsRes.data ?? []).map(a => ({
+        id: a.id,
+        full_name: a.full_name || a.username,
+        username: a.username,
+        coin_balance: Number(a.coin_balance ?? 0),
+        is_active: a.is_active,
+        player_count: counts.get(a.id) ?? 0,
+      })),
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { agents: [], error: `Could not load agents: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DETAIL
+// ─────────────────────────────────────────────────────────────────────────────
 export async function getAgentDetailAction(agentIdentifier: string) {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { agent: null, players: [], resolvedAgentId: null, error: auth.error }
+  if (auth.error) return { agent: null, players: [], error: auth.error }
+
+  try {
+    const agentId = await resolveAgentId(agentIdentifier)
+    if (!agentId) return { agent: null, players: [], error: 'Agent not found.' }
+
+    const db = createAdminClient()
+    const [agentRes, playersRes, sessionsRes] = await Promise.all([
+      db.from('profiles')
+        .select('id, username, full_name, coin_balance, is_active, created_at')
+        .eq('id', agentId).single(),
+      db.from('profiles')
+        .select('id, username, full_name, coin_balance, is_active')
+        .eq('agent_id', agentId).order('username'),
+      db.from('active_sessions').select('user_id, last_seen_at'),
+    ])
+    if (agentRes.error) throw new Error(agentRes.error.message)
+    if (playersRes.error) throw new Error(playersRes.error.message)
+
+    const seenAt = new Map((sessionsRes.data ?? []).map(s => [s.user_id, new Date(s.last_seen_at).getTime()]))
+    const now = Date.now()
+    const a = agentRes.data
+
+    return {
+      agent: {
+        id: a.id,
+        full_name: a.full_name || a.username,
+        username: a.username,
+        coin_balance: Number(a.coin_balance ?? 0),
+        is_active: a.is_active,
+        joined_date: new Date(a.created_at).toLocaleDateString('en-US', {
+          timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric',
+        }),
+      },
+      players: (playersRes.data ?? []).map(p => ({
+        id: p.id,
+        full_name: p.full_name || p.username,
+        username: p.username,
+        coin_balance: Number(p.coin_balance ?? 0),
+        is_active: p.is_active,
+        is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
+      })),
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { agent: null, players: [], error: `Could not load agent: ${message}` }
   }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
-      if (!agentId) {
-        return { agent: null, players: [], resolvedAgentId: null, error: 'Agent not found' }
-      }
-
-      const [agentProfileRes, sessRes, playersRes, authUserRes] = await Promise.all([
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active, created_at').eq('id', agentId).single(),
-        supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active, created_at').or(`agent_id.eq.${agentId},parent_agent_id.eq.${agentId}`),
-        supabaseAdmin.auth.admin.getUserById(agentId)
-      ])
-
-      const sessions = sessRes.data || null
-      const authUser = authUserRes?.data?.user
-      const now = new Date().getTime()
-
-      let ap = agentProfileRes.data
-      if (!ap) {
-        if (authUser) {
-          const u = authUser
-          ap = {
-            id: u.id,
-            username: u.user_metadata?.username || u.user_metadata?.full_name || u.email?.split('@')[0] || 'Agent',
-            balance: Number(u.user_metadata?.balance || 0),
-            is_active: u.user_metadata?.status !== 'Blocked',
-            created_at: u.created_at
-          }
-          try {
-            await supabaseAdmin.from('profiles').upsert({
-              id: u.id,
-              username: ap.username,
-              role: 'agent',
-              balance: ap.balance,
-              is_active: ap.is_active
-            })
-          } catch (_) {}
-        }
-      }
-
-      if (!ap) {
-        return { agent: null, players: [], resolvedAgentId: null, error: 'Agent profile not found' }
-      }
-
-      let agentPlayers: Array<any> = []
-      if (playersRes.data && playersRes.data.length > 0) {
-        agentPlayers = playersRes.data.map(p => {
-          const activeSess = sessions?.find(s => s.user_id === p.id)
-          const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
-          return {
-            id: p.id,
-            name: p.username || 'Player',
-            username: p.username || '',
-            balance: Number(p.balance || 0),
-            status: p.is_active ? 'Active' : 'Blocked',
-            isOnline,
-            gamePlays: 0
-          }
-        })
-      } else {
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        agentPlayers = (usersData?.users || [])
-          .filter(p => p.user_metadata?.role === 'player' && (p.user_metadata?.agent_id === agentId || !p.user_metadata?.agent_id))
-          .map(p => {
-            const activeSess = sessions?.find(s => s.user_id === p.id)
-            const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
-            return {
-              id: p.id,
-              name: p.user_metadata?.full_name || p.email?.split('@')[0] || 'Player',
-              username: p.user_metadata?.username || p.email?.split('@')[0] || '',
-              balance: Number(p.user_metadata?.balance || 0),
-              status: p.user_metadata?.status || 'Active',
-              isOnline,
-              gamePlays: 0
-            }
-          })
-      }
-
-      const displayName = authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || ap.username || 'Agent'
-      const rawJoined = ap.created_at || authUser?.created_at
-      const joinedDate = rawJoined ? new Date(rawJoined).toLocaleDateString('en-US', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      }) : 'Jul 28, 2026'
-
-      return {
-        agent: {
-          id: ap.id,
-          name: displayName,
-          username: ap.username || '',
-          balance: Number(ap.balance || 0),
-          status: ap.is_active ? 'Active' : 'Blocked',
-          joinedDate
-        },
-        players: agentPlayers,
-        resolvedAgentId: agentId
-      }
-    } catch (_) {}
-  }
-
-  return { agent: null, players: [], resolvedAgentId: null, error: 'Service error' }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CREATE
+// ─────────────────────────────────────────────────────────────────────────────
 export async function createAgentAction(formData: FormData) {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { error: auth.error }
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  const full_name = (formData.get('name') as string || '').trim()
+  const username  = (formData.get('username') as string || '').trim()
+  const password  = (formData.get('password') as string || '').trim()
+
+  if (!full_name || !username || !password) {
+    return { error: 'Please provide a name, username and password.' }
+  }
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+    return { error: 'Username must be 3-20 characters, letters, numbers or underscore only.' }
+  }
+  if (password.length < 6) {
+    return { error: 'Password must be at least 6 characters.' }
   }
 
-  const name = (formData.get('name') as string || '').trim()
-  const username = (formData.get('username') as string || '').trim()
-  const password = (formData.get('password') as string || '').trim()
+  try {
+    const { data, error } = await createAdminClient().auth.admin.createUser({
+      email: `${username.toLowerCase()}@bestsmartgame.com`,
+      password,
+      email_confirm: true,
+      user_metadata: { username, full_name, role: 'agent' },
+    })
 
-  if (!name || !username || !password) {
-    return { error: 'Please provide Name, Username, and Password.' }
+    if (error) {
+      const m = error.message.toLowerCase()
+      if (m.includes('already') || m.includes('exists') || m.includes('duplicate')) {
+        return { error: `Username "${username}" is already taken.` }
+      }
+      return { error: error.message }
+    }
+
+    await logAuditEventAction('account', `Created agent @${username} (${full_name})`)
+    revalidatePath('/superadmin/agents')
+    return { success: true, agent_id: data.user?.id }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not create agent: ${message}` }
   }
-
-  const usernameRegex = /^[a-zA-Z0-9]{3,20}$/
-  if (!usernameRegex.test(username)) {
-    return { error: 'Username must be 3 to 20 characters and contain ONLY letters and numbers (no symbols, spaces, or special characters).' }
-  }
-
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bestsmartgame.com`
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!serviceRoleKey) {
-    return { error: 'Server configuration error.' }
-  }
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: name,
-      username,
-      role: 'agent',
-      balance: 0,
-      status: 'Active',
-    },
-  })
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  if (data.user) {
-    try {
-      await supabaseAdmin.from('profiles').upsert({
-        id: data.user.id,
-        username,
-        role: 'agent',
-        balance: 0,
-        is_active: true
-      })
-    } catch (_) {}
-  }
-
-  await logAuditEventAction('System', `Created new Agent account ${name} (@${username})`)
-  revalidatePath('/superadmin/agents')
-  return { success: true, user: data.user }
 }
 
-export async function transferPointsAction(targetIdentifier: string, amount: number, type: 'deposit' | 'withdraw') {
-  const auth = await requireAuth(['superadmin', 'agent'])
-  if (auth.error || !auth.user) {
-    return { error: auth.error || 'Unauthorized: Active session required.' }
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// ISSUE COINS  (superadmin -> agent)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function issueAgentCoinsAction(
+  agentIdentifier: string,
+  amount: number,
+  direction: TransferDirection
+) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
 
-  const sanitizedAmount = toWholeCoins(amount)
-  if (!targetIdentifier || sanitizedAmount === null) {
-    return { error: 'Please enter a valid whole number of coins.' }
-  }
+  const whole = toWholeCoins(amount)
+  if (whole === null) return { error: 'Please enter a whole number of coins greater than zero.' }
+  if (direction !== 'credit' && direction !== 'debit') return { error: 'Invalid direction.' }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  try {
+    const agentId = await resolveAgentId(agentIdentifier)
+    if (!agentId) return { error: 'Agent not found.' }
 
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { error: 'Server configuration error.' }
-  }
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-
-  const targetId = await resolveUserIdentifier(supabaseAdmin, targetIdentifier)
-  if (!targetId) {
-    return { error: 'Target account not found.' }
-  }
-
-  const { data: targetProfile, error: getTargetError } = await supabaseAdmin
-    .from('profiles')
-    .select('id, username, role, agent_id, parent_agent_id, balance')
-    .eq('id', targetId)
-    .single()
-
-  if (getTargetError || !targetProfile) {
-    return { error: 'Target profile not found in database.' }
-  }
-
-  const callerUser = auth.user
-  const callerRole = auth.user.role
-
-  // Case 1: Agent transferring to a Player
-  if (targetProfile.role === 'player') {
-    const playerAgentId = targetProfile.parent_agent_id || targetProfile.agent_id
-
-    // Security check: Agent can ONLY manage their assigned players!
-    if (callerRole === 'agent' && playerAgentId && playerAgentId !== callerUser.id) {
-      return { error: 'Unauthorized. You can only transfer coins to your own assigned players.' }
-    }
-
-    let agentId = playerAgentId || callerUser.id
-
-    if (!agentId) {
-      return { error: 'Agent account for player not specified.' }
-    }
-
-    const rpcName = type === 'deposit' ? 'transfer_coins_agent_to_player' : 'withdraw_coins_player_to_agent'
-    let { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc(rpcName, {
+    // Caller's own session: admin_issue_coins reads auth.uid() and refuses
+    // anyone who is not a superadmin in public.profiles.
+    const supabase = await createUserClient()
+    const { data, error } = await supabase.rpc('admin_issue_coins', {
       p_agent_id: agentId,
-      p_player_id: targetId,
-      p_amount: sanitizedAmount
+      p_amount: whole,
+      p_direction: direction,
     })
 
-    if (rpcErr && rpcErr.message.includes('schema cache')) {
-      const fallbackRes = await supabaseAdmin.rpc(rpcName, {
-        p_agent_id: agentId,
-        p_amount: sanitizedAmount,
-        p_player_id: targetId
-      })
-      if (!fallbackRes.error) {
-        rpcRes = fallbackRes.data
-        rpcErr = null
+    if (error) {
+      if (error.message.includes('INSUFFICIENT_COINS')) {
+        return { error: 'That agent does not hold enough coins for this withdrawal.' }
       }
+      return { error: error.message }
     }
 
-    if (rpcErr && rpcErr.message.includes('schema cache')) {
-      const { data: agentProfile } = await supabaseAdmin.from('profiles').select('id, username, balance').eq('id', agentId).single()
-      if (!agentProfile) return { error: 'Agent profile not found.' }
+    const result = asRpc<AdminIssueResult>(data)
 
-      if (type === 'deposit') {
-        if (agentProfile.balance < sanitizedAmount) {
-          return { error: `Insufficient agent coins balance. Available: ${agentProfile.balance}` }
-        }
-        const newAgentBal = agentProfile.balance - sanitizedAmount
-        const newPlayerBal = targetProfile.balance + sanitizedAmount
-
-        await supabaseAdmin.from('profiles').update({ balance: newAgentBal, updated_at: new Date().toISOString() }).eq('id', agentId)
-        await supabaseAdmin.from('profiles').update({ balance: newPlayerBal, parent_agent_id: agentId, updated_at: new Date().toISOString() }).eq('id', targetId)
-        await supabaseAdmin.from('transactions').insert({
-          user_id: targetId,
-          agent_id: agentId,
-          game_name: 'system',
-          type: 'agent_topup',
-          amount: sanitizedAmount,
-          balance_after: newPlayerBal
-        })
-        rpcRes = { new_player_balance: newPlayerBal, new_agent_balance: newAgentBal }
-        rpcErr = null
-      } else {
-        if (targetProfile.balance < sanitizedAmount) {
-          return { error: `Insufficient player coins balance. Available: ${targetProfile.balance}` }
-        }
-        const newPlayerBal = targetProfile.balance - sanitizedAmount
-        const newAgentBal = agentProfile.balance + sanitizedAmount
-
-        await supabaseAdmin.from('profiles').update({ balance: newPlayerBal, updated_at: new Date().toISOString() }).eq('id', targetId)
-        await supabaseAdmin.from('profiles').update({ balance: newAgentBal, updated_at: new Date().toISOString() }).eq('id', agentId)
-        await supabaseAdmin.from('transactions').insert({
-          user_id: targetId,
-          agent_id: agentId,
-          game_name: 'system',
-          type: 'agent_deduct',
-          amount: -sanitizedAmount,
-          balance_after: newPlayerBal
-        })
-        rpcRes = { new_player_balance: newPlayerBal, new_agent_balance: newAgentBal }
-        rpcErr = null
-      }
-    }
-
-    if (rpcErr) {
-      return { error: rpcErr.message }
-    }
-
-    await logAuditEventAction('Transaction', `Agent cashier ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Player @${targetProfile.username}`)
-    revalidatePath('/agent')
-    revalidatePath('/agent/players')
-    revalidatePath('/agent/history')
-    revalidatePath('/superadmin/agents')
-    return { 
-      success: true, 
-      newBalance: rpcRes?.new_player_balance, 
-      agentBalance: rpcRes?.new_agent_balance 
-    }
-  }
-
-  // Case 2: SuperAdmin transferring to an Agent directly (issue_agent_coins)
-  if (targetProfile.role === 'agent') {
-    if (callerRole !== 'superadmin') {
-      return { error: 'Unauthorized. Only SuperAdmin can issue coins directly to agents.' }
-    }
-
-    let { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('issue_agent_coins', {
-      p_admin_id: callerUser.id,
-      p_agent_id: targetId,
-      p_amount: sanitizedAmount,
-      p_type: type
-    })
-
-    if (rpcErr && rpcErr.message.includes('schema cache')) {
-      const fb1 = await supabaseAdmin.rpc('issue_agent_coins', {
-        p_agent_id: targetId,
-        p_amount: type === 'withdraw' ? -sanitizedAmount : sanitizedAmount
-      })
-      if (!fb1.error) {
-        rpcRes = fb1.data
-        rpcErr = null
-      }
-    }
-
-    if (rpcErr && rpcErr.message.includes('schema cache')) {
-      const delta = type === 'withdraw' ? -sanitizedAmount : sanitizedAmount
-      const newBal = Number(targetProfile.balance || 0) + delta
-      if (newBal < 0) {
-        return { error: 'Insufficient agent balance to withdraw.' }
-      }
-
-      const { error: updErr } = await supabaseAdmin
-        .from('profiles')
-        .update({ balance: newBal, updated_at: new Date().toISOString() })
-        .eq('id', targetId)
-
-      if (!updErr) {
-        await supabaseAdmin.from('transactions').insert({
-          user_id: targetId,
-          agent_id: callerUser.id,
-          game_name: 'system',
-          type: 'admin_adjustment',
-          amount: delta,
-          balance_after: newBal
-        })
-        rpcRes = { new_balance: newBal }
-        rpcErr = null
-      }
-    }
-
-    if (rpcErr) {
-      return { error: rpcErr.message }
-    }
-
-    await logAuditEventAction('Transaction', `SuperAdmin ${type === 'deposit' ? 'deposited' : 'withdrew'} ${sanitizedAmount.toLocaleString()} Coins for Agent @${targetProfile.username}`)
     revalidatePath('/superadmin/agents')
     revalidatePath('/superadmin/agents/issued')
-    return { success: true, newBalance: rpcRes?.new_balance }
+    return { success: true, agent_coin_balance: Number(result?.agent_coin_balance ?? 0) }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Transfer failed: ${message}` }
   }
-
-  return { error: 'Invalid target role for transfer.' }
 }
 
-export async function getAgentCoinTransactionsAction(params?: {
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOCK / UNBLOCK  (cascades to the agent's players)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Takes the DESIRED state, like setPlayerActiveAction. See the B-1 note there:
+ * deriving the new value from a passed-in "current" value is what made both
+ * buttons no-ops in v1.
+ */
+export async function setAgentActiveAction(agentIdentifier: string, isActive: boolean) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  try {
+    const agentId = await resolveAgentId(agentIdentifier)
+    if (!agentId) return { error: 'Agent not found.' }
+
+    const db = createAdminClient()
+    const { data: agent, error: agentError } = await db
+      .from('profiles').select('username').eq('id', agentId).single()
+    if (agentError || !agent) return { error: 'Agent not found.' }
+
+    const { error: updError } = await db
+      .from('profiles')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', agentId)
+    if (updError) return { error: updError.message }
+
+    // Cascade to the agent's players, in both directions.
+    const { data: players, error: playersError } = await db
+      .from('profiles').select('id').eq('agent_id', agentId)
+    if (playersError) return { error: playersError.message }
+
+    const playerIds = (players ?? []).map(p => p.id)
+    if (playerIds.length > 0) {
+      const { error: cascadeError } = await db
+        .from('profiles')
+        .update({ is_active: isActive, updated_at: new Date().toISOString() })
+        .in('id', playerIds)
+      if (cascadeError) return { error: cascadeError.message }
+    }
+
+    // End live sessions for everyone just blocked, so nobody keeps playing.
+    if (!isActive) {
+      await db.from('active_sessions').delete().in('user_id', [agentId, ...playerIds])
+    }
+
+    await logAuditEventAction(
+      'security',
+      isActive
+        ? `Unblocked agent @${agent.username} and ${playerIds.length} player account(s)`
+        : `Blocked agent @${agent.username} and ${playerIds.length} player account(s)`
+    )
+
+    revalidatePath('/superadmin/agents')
+    return { success: true, is_active: isActive, cascaded: playerIds.length }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not update agent: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PASSWORD RESET
+// ─────────────────────────────────────────────────────────────────────────────
+export async function updateAgentPasswordAction(agentIdentifier: string, newPassword: string) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  if (!newPassword || newPassword.trim().length < 6) {
+    return { error: 'Password must be at least 6 characters.' }
+  }
+
+  try {
+    const agentId = await resolveAgentId(agentIdentifier)
+    if (!agentId) return { error: 'Agent not found.' }
+
+    const db = createAdminClient()
+    const { data: agent } = await db.from('profiles').select('username').eq('id', agentId).single()
+
+    const { error } = await db.auth.admin.updateUserById(agentId, { password: newPassword.trim() })
+    if (error) return { error: error.message }
+
+    await logAuditEventAction('security', `Reset password for agent @${agent?.username ?? agentId}`)
+    revalidatePath('/superadmin/agents')
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not reset password: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COINS ISSUED LEDGER
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getAgentCoinLedgerAction(params?: {
   agentId?: string
   startDate?: string
   endDate?: string
-  type?: 'deposit' | 'withdraw' | 'all'
+  direction?: 'credit' | 'debit' | 'all'
   page?: number
   limit?: number
 }) {
   const auth = await requireAuth(['superadmin'])
   if (auth.error) {
-    return { transactions: [], totalItems: 0, totalPages: 1, summary: { totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 } }
+    return { rows: [], total_items: 0, total_pages: 1,
+             summary: { credited: 0, debited: 0, net: 0 }, error: auth.error }
   }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  try {
+    const db = createAdminClient()
+    const page = Math.max(1, params?.page ?? 1)
+    const limit = Math.min(100, Math.max(1, params?.limit ?? 10))
 
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { transactions: [], totalItems: 0, totalPages: 1, summary: { totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 } }
-  }
+    // Agent names are resolved with a second query rather than a PostgREST
+    // embed — embeds silently drop rows when a relationship cannot be resolved
+    // and they defeat the generated column types.
+    let base = db.from('coin_ledger')
+      .select('id, user_id, amount, balance_after, kind, created_at', { count: 'exact' })
+      .in('kind', ['admin_credit', 'admin_debit'])
 
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-
-  let query = supabaseAdmin
-    .from('transactions')
-    .select('*', { count: 'exact' })
-    .eq('type', 'admin_adjustment')
-
-  if (params?.agentId && params.agentId !== 'all') {
-    const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)
-    if (resolvedAgentId) {
-      query = query.eq('user_id', resolvedAgentId)
+    if (params?.agentId && params.agentId !== 'all') {
+      const id = await resolveAgentId(params.agentId)
+      if (id) base = base.eq('user_id', id)
     }
-  }
-
-  if (params?.type && params.type !== 'all') {
-    if (params.type === 'deposit') {
-      query = query.gte('amount', 0)
-    } else if (params.type === 'withdraw') {
-      query = query.lt('amount', 0)
+    if (params?.direction === 'credit') base = base.gt('amount', 0)
+    if (params?.direction === 'debit')  base = base.lt('amount', 0)
+    if (params?.startDate) base = base.gte('created_at', new Date(params.startDate).toISOString())
+    if (params?.endDate) {
+      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
+      base = base.lte('created_at', end.toISOString())
     }
-  }
 
-  if (params?.startDate) {
-    const startIso = new Date(params.startDate).toISOString()
-    query = query.gte('created_at', startIso)
-  }
+    const { data, count, error } = await base
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1)
+    if (error) throw new Error(error.message)
 
-  if (params?.endDate) {
-    const endDateObj = new Date(params.endDate)
-    endDateObj.setHours(23, 59, 59, 999)
-    query = query.lte('created_at', endDateObj.toISOString())
-  }
-
-  const page = params?.page || 1
-  const limit = params?.limit || 10
-  const from = (page - 1) * limit
-  const to = from + limit - 1
-
-  query = query.order('created_at', { ascending: false }).range(from, to)
-
-  const { data, count, error } = await query
-
-  if (error) {
-    return { transactions: [], totalItems: 0, totalPages: 1, summary: { totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 } }
-  }
-
-  let summaryQuery = supabaseAdmin
-    .from('transactions')
-    .select('amount')
-    .eq('type', 'admin_adjustment')
-
-  if (params?.agentId && params.agentId !== 'all') {
-    const resolvedAgentId = await resolveUserIdentifier(supabaseAdmin, params.agentId)
-    if (resolvedAgentId) summaryQuery = summaryQuery.eq('user_id', resolvedAgentId)
-  }
-  if (params?.startDate) {
-    const startIso = new Date(params.startDate).toISOString()
-    summaryQuery = summaryQuery.gte('created_at', startIso)
-  }
-  if (params?.endDate) {
-    const endDateObj = new Date(params.endDate)
-    endDateObj.setHours(23, 59, 59, 999)
-    summaryQuery = summaryQuery.lte('created_at', endDateObj.toISOString())
-  }
-
-  const { data: summaryData } = await summaryQuery
-
-  let totalDeposited = 0
-  let totalWithdrawn = 0
-  if (summaryData) {
-    summaryData.forEach(item => {
-      const amt = Number(item.amount || 0)
-      if (amt > 0) totalDeposited += amt
-      else totalWithdrawn += Math.abs(amt)
-    })
-  }
-
-  const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-  const allUsers = usersData?.users || []
-
-  const transactions = (data || []).map(tx => {
-    const amt = Number(tx.amount || 0)
-    const isDep = amt >= 0
-    const u = allUsers.find(user => user.id === tx.user_id)
-    const agentUsername = u?.user_metadata?.username || u?.email?.split('@')[0] || 'agent'
-    const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || agentUsername || 'Agent'
-    return {
-      id: tx.id,
-      agentId: tx.user_id,
-      agentName: fullName,
-      agentUsername: `@${agentUsername.replace(/^@+/, '')}`,
-      type: (isDep ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-      amount: Math.abs(amt),
-      createdAt: tx.created_at,
-      date: new Date(tx.created_at).toLocaleString('en-US', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+    // Summary over the same filter, not just the current page (fixes B-7's
+    // sibling: totals that ignored the active filter).
+    let summaryQuery = db.from('coin_ledger').select('amount')
+      .in('kind', ['admin_credit', 'admin_debit']).range(0, 999999)
+    if (params?.agentId && params.agentId !== 'all') {
+      const id = await resolveAgentId(params.agentId)
+      if (id) summaryQuery = summaryQuery.eq('user_id', id)
     }
-  })
-
-  const totalItems = count || 0
-  const totalPages = Math.ceil(totalItems / limit) || 1
-
-  return {
-    transactions,
-    totalItems,
-    totalPages,
-    summary: {
-      totalDeposited,
-      totalWithdrawn,
-      netIssued: totalDeposited - totalWithdrawn
+    if (params?.startDate) summaryQuery = summaryQuery.gte('created_at', new Date(params.startDate).toISOString())
+    if (params?.endDate) {
+      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
+      summaryQuery = summaryQuery.lte('created_at', end.toISOString())
     }
-  }
-}
+    const { data: summaryData, error: summaryError } = await summaryQuery
+    if (summaryError) throw new Error(summaryError.message)
 
-export async function toggleAgentStatusAction(agentIdentifier: string, currentStatus: string) {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { error: auth.error }
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { error: 'Service Role Key not configured.' }
-  }
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-
-  const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
-  if (!agentId) return { error: 'Agent not found.' }
-
-  const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
-  
-  const { data: agentUserData, error: getAgentError } = await supabaseAdmin.auth.admin.getUserById(agentId)
-  if (getAgentError || !agentUserData?.user) {
-    return { error: 'Agent account not found.' }
-  }
-
-  const agentUsername = agentUserData.user.user_metadata?.username || agentUserData.user.email?.split('@')[0] || 'agent'
-
-  const { error: updateAgentError } = await supabaseAdmin.auth.admin.updateUserById(agentId, {
-    user_metadata: {
-      ...agentUserData.user.user_metadata,
-      status: newStatus
+    let credited = 0, debited = 0
+    for (const r of summaryData ?? []) {
+      const amt = Number(r.amount ?? 0)
+      if (amt > 0) credited += amt; else debited += Math.abs(amt)
     }
-  })
 
-  if (updateAgentError) {
-    return { error: updateAgentError.message }
-  }
-
-  const { error: agentProfileError } = await supabaseAdmin
-    .from('profiles')
-    .update({ is_active: newStatus === 'Active', status: newStatus, updated_at: new Date().toISOString() })
-    .eq('id', agentId)
-
-  if (agentProfileError) {
-    return { error: agentProfileError.message }
-  }
-
-  let cascadedPlayersCount = 0
-  const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-  const agentPlayers = (usersData?.users || []).filter(
-    u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId
-  )
-
-  const cascadeTargets = newStatus === 'Blocked'
-    ? agentPlayers
-    : agentPlayers.filter(p => p.user_metadata?.blocked_by_agent_cascade === true)
-
-  for (const player of cascadeTargets) {
-    await supabaseAdmin.auth.admin.updateUserById(player.id, {
-      user_metadata: {
-        ...player.user_metadata,
-        status: newStatus,
-        blocked_by_agent_cascade: newStatus === 'Blocked'
+    const agentIds = [...new Set((data ?? []).map(r => r.user_id))]
+    const agentById = new Map<string, { username: string; full_name: string | null }>()
+    if (agentIds.length > 0) {
+      const { data: agents } = await db
+        .from('profiles').select('id, username, full_name').in('id', agentIds)
+      for (const a of agents ?? []) {
+        agentById.set(a.id, { username: a.username, full_name: a.full_name })
       }
-    })
-    cascadedPlayersCount++
+    }
+
+    return {
+      rows: (data ?? []).map(row => {
+        const p = agentById.get(row.user_id)
+        return {
+          id: row.id,
+          agent_id: row.user_id,
+          agent_name: p?.full_name || p?.username || 'Agent',
+          agent_username: `@${p?.username ?? 'agent'}`,
+          direction: (isCredit(Number(row.amount)) ? 'credit' : 'debit') as 'credit' | 'debit',
+          amount: Math.abs(Number(row.amount)),
+          balance_after: Number(row.balance_after),
+          created_at: istDateTime(row.created_at),
+          created_at_iso: row.created_at,
+        }
+      }),
+      total_items: count ?? 0,
+      total_pages: Math.max(1, Math.ceil((count ?? 0) / limit)),
+      summary: { credited, debited, net: credited - debited },
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { rows: [], total_items: 0, total_pages: 1,
+             summary: { credited: 0, debited: 0, net: 0 },
+             error: `Could not load ledger: ${message}` }
   }
-
-  if (cascadeTargets.length > 0) {
-    await supabaseAdmin
-      .from('profiles')
-      .update({ is_active: newStatus === 'Active', status: newStatus, updated_at: new Date().toISOString() })
-      .in('id', cascadeTargets.map(p => p.id))
-  }
-
-  const logDetail = newStatus === 'Blocked'
-    ? `Blocked Agent @${agentUsername} and cascading blocked ${cascadedPlayersCount} player accounts`
-    : `Unblocked Agent @${agentUsername} and restored ${cascadedPlayersCount} cascade-blocked player accounts`
-  
-  await logAuditEventAction('Security', logDetail)
-  revalidatePath('/superadmin/agents')
-  revalidatePath(`/superadmin/agents/${agentId}`)
-  return { success: true, newStatus, cascadedPlayersCount }
-}
-
-export async function updateAgentPasswordAction(agentIdentifier: string, newPassword: string) {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { error: auth.error }
-  }
-
-  if (!newPassword || newPassword.length < 6) {
-    return { error: 'Password must be at least 6 characters.' }
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { error: 'Service Role Key not configured.' }
-  }
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-
-  const agentId = await resolveUserIdentifier(supabaseAdmin, agentIdentifier)
-  if (!agentId) return { error: 'Agent not found.' }
-
-  const { data: agentUserData } = await supabaseAdmin.auth.admin.getUserById(agentId)
-  const agentUsername = agentUserData?.user?.user_metadata?.username || 'agent'
-
-  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(agentId, {
-    password: newPassword
-  })
-
-  if (updateError) {
-    return { error: updateError.message }
-  }
-
-  await logAuditEventAction('Security', `Updated password for Agent @${agentUsername}`)
-  revalidatePath('/superadmin/agents')
-  return { success: true }
 }

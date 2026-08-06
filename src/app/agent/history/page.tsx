@@ -20,16 +20,20 @@ import { getAgentTransactionHistoryAction } from '../actions'
 export default function HistoryPage() {
   const [agentBalance, setAgentBalance] = React.useState(0)
   const [activeTab, setActiveTab] = React.useState<'player' | 'superadmin'>('player')
+  // v2: shape comes from AgentTransferHistory['transfers'] — snake_case keys
+  // matching the database, so no translation layer can drift out of step.
   const [transactions, setTransactions] = React.useState<Array<{
     id: string
     category: 'player' | 'superadmin'
-    type: 'deposit' | 'withdraw'
+    direction: 'deposit' | 'withdraw'
     amount: number
-    target: string
-    targetUsername?: string
-    date: string
-    status: string
+    balance_after: number
+    target_name: string
+    target_username: string
+    created_at: string
+    created_at_iso: string
   }>>([])
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -46,13 +50,13 @@ export default function HistoryPage() {
     if (isInitial) setIsLoading(true)
     getAgentTransactionHistoryAction().then((res) => {
       setIsLoading(false)
-      if (res.transactions) {
-        setTransactions(res.transactions)
-      }
-      if (typeof res.balance === 'number') {
-        setAgentBalance(res.balance)
-      }
-    }).catch(() => setIsLoading(false))
+      setLoadError(res.error)
+      setTransactions(res.transfers)
+      setAgentBalance(res.coin_balance)
+    }).catch((e) => {
+      setIsLoading(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load history.')
+    })
   }, [])
 
   const handleManualRefresh = () => {
@@ -91,8 +95,8 @@ export default function HistoryPage() {
     const matchesTab = activeTab === 'player' ? txn.category === 'player' : txn.category === 'superadmin'
     const matchesSearch = !searchQuery ||
       txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.target.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = typeFilter === 'all' || txn.type === typeFilter
+      txn.target_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesType = typeFilter === 'all' || txn.direction === typeFilter
 
     let matchesDate = true
     if (datePreset !== 'all') {
@@ -100,7 +104,7 @@ export default function HistoryPage() {
       const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       const istTodayStart = new Date(`${todayIST}T00:00:00+05:30`).getTime()
 
-      const txnTime = new Date(txn.date).getTime()
+      const txnTime = new Date(txn.created_at).getTime()
 
       if (datePreset === 'today') {
         matchesDate = txnTime >= istTodayStart
@@ -120,8 +124,8 @@ export default function HistoryPage() {
   const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   const currentTabTxns = transactions.filter(t => t.category === activeTab)
-  const totalDeposited = currentTabTxns.filter(t => t.type === 'deposit').reduce((acc, t) => acc + Number(t.amount || 0), 0)
-  const totalWithdrawn = currentTabTxns.filter(t => t.type === 'withdraw').reduce((acc, t) => acc + Number(t.amount || 0), 0)
+  const totalDeposited = currentTabTxns.filter(t => t.direction === 'deposit').reduce((acc, t) => acc + Number(t.amount || 0), 0)
+  const totalWithdrawn = currentTabTxns.filter(t => t.direction === 'withdraw').reduce((acc, t) => acc + Number(t.amount || 0), 0)
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -362,33 +366,33 @@ export default function HistoryPage() {
                     <TableCell className="font-mono text-xs font-semibold text-foreground sticky left-0 bg-card z-10 py-2">
                       {txn.id}
                     </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground font-mono py-2">{txn.date}</TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground font-mono py-2">{txn.created_at}</TableCell>
                     <TableCell className="py-2">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        txn.type === 'deposit'
+                        txn.direction === 'deposit'
                           ? 'bg-success-bg text-success-text border border-emerald-500/20'
                           : 'bg-danger-bg text-danger-text border border-red-500/20'
                       }`}>
-                        {txn.type === 'deposit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
-                        {txn.type === 'deposit' ? 'Deposit' : 'Withdraw'}
+                        {txn.direction === 'deposit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
+                        {txn.direction === 'deposit' ? 'Deposit' : 'Withdraw'}
                       </span>
                     </TableCell>
                     <TableCell className="py-2">
                       <div>
-                        <div className="font-bold text-foreground text-xs">{txn.target}</div>
-                        {txn.target !== 'Superadmin' && txn.targetUsername && (
-                          <div className="text-[10px] text-muted-foreground font-mono">{txn.targetUsername}</div>
+                        <div className="font-bold text-foreground text-xs">{txn.target_name}</div>
+                        {txn.target_name !== 'Superadmin' && txn.target_username && (
+                          <div className="text-[10px] text-muted-foreground font-mono">{txn.target_username}</div>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className={`text-right font-mono font-black text-xs py-2 ${
-                      txn.type === 'deposit' ? 'text-emerald-500' : 'text-red-500'
+                      txn.direction === 'deposit' ? 'text-emerald-500' : 'text-red-500'
                     }`}>
-                      {txn.type === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
+                      {txn.direction === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
                     </TableCell>
                     <TableCell className="text-center py-2">
                       <span className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-500 px-2 py-0.5 text-[10px] font-extrabold border border-emerald-500/20">
-                        <Check className="mr-0.5 h-3 w-3" /> {txn.status}
+                        <Check className="mr-0.5 h-3 w-3" /> {'Success'}
                       </span>
                     </TableCell>
                   </TableRow>
@@ -438,30 +442,30 @@ export default function HistoryPage() {
                   ID: {txn.id.substring(0, 8)}
                 </div>
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  txn.type === 'deposit'
+                  txn.direction === 'deposit'
                     ? 'bg-success-bg text-success-text border border-emerald-500/20'
                     : 'bg-danger-bg text-danger-text border border-red-500/20'
                 }`}>
-                  {txn.type === 'deposit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
-                  {txn.type === 'deposit' ? 'Deposit' : 'Withdraw'}
+                  {txn.direction === 'deposit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
+                  {txn.direction === 'deposit' ? 'Deposit' : 'Withdraw'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
                 <div>
                   <span className="font-extrabold text-foreground text-xs block">
-                    {txn.target}
+                    {txn.target_name}
                   </span>
-                  {txn.target !== 'Superadmin' && txn.targetUsername && (
-                    <span className="text-[10px] text-muted-foreground font-mono block">{txn.targetUsername}</span>
+                  {txn.target_name !== 'Superadmin' && txn.target_username && (
+                    <span className="text-[10px] text-muted-foreground font-mono block">{txn.target_username}</span>
                   )}
-                  <span className="text-[10px] text-muted-foreground font-mono">{txn.date}</span>
+                  <span className="text-[10px] text-muted-foreground font-mono">{txn.created_at}</span>
                 </div>
                 <div className="text-right">
                   <div className={`font-mono font-black text-sm ${
-                    txn.type === 'deposit' ? 'text-emerald-500' : 'text-red-500'
+                    txn.direction === 'deposit' ? 'text-emerald-500' : 'text-red-500'
                   }`}>
-                    {txn.type === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
+                    {txn.direction === 'deposit' ? '+' : '-'}{formatCurrency(txn.amount)}
                   </div>
                   <span className="inline-flex items-center text-emerald-500 text-[10px] font-bold">
                     <Check className="mr-0.5 h-2.5 w-2.5" /> Done

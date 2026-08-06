@@ -16,12 +16,12 @@ import {
 } from "@/components/ui/table"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { getPlayersAction } from './players/actions'
-import { transferPointsAction } from '@/app/superadmin/agents/actions'
+import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
 
 export default function AgentDashboard() {
-  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number }>>([])
-  const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; targetUsername?: string; date: string }>>([])
+  const [players, setPlayers] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number }>>([])
+  const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; direction: 'deposit' | 'withdraw'; amount: number; target_name: string; target_username: string; created_at: string }>>([])
   const [agentInfo, setAgentInfo] = React.useState<{ name: string; username: string; joinedDate: string } | null>(null)
   const [balance, setBalance] = React.useState(0)
   const [todaysBets, setTodaysBets] = React.useState(0)
@@ -50,19 +50,19 @@ export default function AgentDashboard() {
     getAgentDashboardDataAction().then((resDash) => {
       setIsLoadingDashboard(false)
       if (resDash) {
-        setBalance(resDash.balance || 0)
-        setTodaysBets(resDash.todaysBets || 0)
-        setTodaysWins(resDash.todaysWins || 0)
-        setTodaysProfitLoss(resDash.todaysProfitLoss || 0)
-        if (resDash.name) {
+        setBalance(resDash.coin_balance || 0)
+        setTodaysBets(resDash.todays_stake || 0)
+        setTodaysWins(resDash.todays_payout || 0)
+        setTodaysProfitLoss(resDash.todays_profit || 0)
+        if (resDash.full_name) {
           setAgentInfo({
-            name: resDash.name,
+            name: resDash.full_name,
             username: resDash.username || 'agent',
-            joinedDate: resDash.joinedDate || 'Jul 28, 2026'
+            joinedDate: resDash.joined_date || 'Jul 28, 2026'
           })
         }
-        if (resDash.recentTransactions) {
-          setRecentTransactions(resDash.recentTransactions)
+        if (resDash.recent_transfers) {
+          setRecentTransactions(resDash.recent_transfers)
         }
         if (resDash.players) {
           setPlayers(resDash.players)
@@ -111,7 +111,7 @@ export default function AgentDashboard() {
     setQuickTransferError(null)
     setQuickTransferSuccess(null)
 
-    const res = await transferPointsAction(selectedPlayerId, amountNum, type)
+    const res = await transferPlayerCoinsAction(selectedPlayerId, amountNum, type === 'deposit' ? 'credit' : 'debit')
 
     setIsQuickTransferring(false)
     if (res.error) {
@@ -120,8 +120,8 @@ export default function AgentDashboard() {
       const selectedP = players.find(p => p.id === selectedPlayerId)
       setQuickTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${formatCurrency(amountNum)} Coins for @${selectedP?.username || 'player'}!`)
       setQuickAmount('')
-      if (res.agentBalance !== undefined) {
-        setBalance(res.agentBalance)
+      if (res.agent_coin_balance !== undefined) {
+        setBalance(res.agent_coin_balance)
       }
       fetchDashboardData()
       setTimeout(() => setQuickTransferSuccess(null), 3500)
@@ -135,8 +135,8 @@ export default function AgentDashboard() {
   }
 
   const filteredTransactions = recentTransactions.filter(txn => {
-    const matchesSearch = !searchQuery || txn.target.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = typeFilter === 'all' || txn.type === typeFilter
+    const matchesSearch = !searchQuery || txn.target_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesType = typeFilter === 'all' || txn.direction === typeFilter
     return matchesSearch && matchesType
   })
 
@@ -305,7 +305,7 @@ export default function AgentDashboard() {
               <option value="">-- Choose a Player --</option>
               {players.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.name} (@{p.username}) — {formatCurrency(p.balance)} Coins
+                  {p.full_name} (@{p.username}) — {formatCurrency(p.coin_balance)} Coins
                 </option>
               ))}
             </select>
@@ -450,17 +450,17 @@ export default function AgentDashboard() {
                     <TableRow key={txn.id} className="border-border hover:bg-secondary/30 transition-colors">
                       <TableCell className="py-2">
                         <div>
-                          <div className="font-bold text-foreground text-xs">{txn.target}</div>
-                          {txn.target !== 'Superadmin' && txn.targetUsername && (
-                            <div className="text-[10px] text-muted-foreground font-mono">{txn.targetUsername}</div>
+                          <div className="font-bold text-foreground text-xs">{txn.target_name}</div>
+                          {txn.target_name !== 'Superadmin' && txn.target_username && (
+                            <div className="text-[10px] text-muted-foreground font-mono">{txn.target_username}</div>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="text-[11px] text-muted-foreground font-mono py-2">
-                        {txn.date}
+                        {txn.created_at}
                       </TableCell>
                       <TableCell className="text-right py-2">
-                        {txn.type === 'deposit' ? (
+                        {txn.direction === 'deposit' ? (
                           <span className="inline-flex items-center text-emerald-500 font-mono font-black text-xs">
                             +{formatCurrency(txn.amount)}
                           </span>
@@ -502,13 +502,13 @@ export default function AgentDashboard() {
                 <div key={txn.id} className="p-2.5 rounded-lg border border-border/80 bg-background flex items-center justify-between text-xs">
                   <div>
                     <span className="font-extrabold text-foreground text-xs block">
-                      {txn.target === 'Superadmin' ? 'Superadmin' : `@${txn.target.replace(/^@+/, '')}`}
+                      {txn.target_name === 'Superadmin' ? 'Superadmin' : `@${txn.target_name.replace(/^@+/, '')}`}
                     </span>
-                    <span className="text-[10px] text-muted-foreground font-mono">{txn.date}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">{txn.created_at}</span>
                   </div>
 
                   <div className="text-right">
-                    {txn.type === 'deposit' ? (
+                    {txn.direction === 'deposit' ? (
                       <span className="text-emerald-500 font-mono font-black text-xs block">
                         +{formatCurrency(txn.amount)}
                       </span>

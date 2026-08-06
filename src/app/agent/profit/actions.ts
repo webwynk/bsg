@@ -1,233 +1,205 @@
 'use server'
 
-import { createClient as createServerClient } from '@/lib/supabase'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase'
+
 import { requireAuth } from '@/lib/auth-guard'
 
-export interface AgentProfitReportParams {
+/**
+ * Agent profit & loss report — v2.
+ *
+ * Changes from v1:
+ *   M-7  The three `game_history` fallback queries are gone. That table does
+ *        not exist, so each returned an error and the
+ *        `rounds.length > 0 ? rounds : hist` merges could only ever pick one
+ *        side anyway.
+ *   A-8  targetAgentId is honoured only for a superadmin. An agent always
+ *        reports on themselves, so one agent can no longer read another's P&L
+ *        by passing their id.
+ *   S-4  agent_id only. No parent_agent_id.
+ *
+ * House profit is stake minus payout. Both figures come from `bets`, written by
+ * settle_round(), so the report and the player's own history cannot disagree.
+ */
+
+export interface ProfitReportParams {
   targetAgentId?: string
-  datePreset?: 'today' | '7days' | '30days' | 'lifetime' | 'all'
+  datePreset?: 'today' | '7days' | '30days' | 'lifetime'
   filterDate?: string
   searchQuery?: string
   page?: number
   limit?: number
 }
 
-function getISTDateRange(datePreset?: string, filterDate?: string) {
-  const now = new Date()
-  const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  const todayStart = new Date(`${istTodayString}T00:00:00+05:30`)
-
-  let startDate: string | undefined = undefined
-  let endDate: string | undefined = undefined
-
-  if (filterDate) {
-    const dStr = new Date(filterDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    startDate = new Date(`${dStr}T00:00:00+05:30`).toISOString()
-    endDate = new Date(`${dStr}T23:59:59.999+05:30`).toISOString()
-  } else if (datePreset === 'today') {
-    startDate = todayStart.toISOString()
-    endDate = new Date(`${istTodayString}T23:59:59.999+05:30`).toISOString()
-  } else if (datePreset === '7days') {
-    const d7 = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-    startDate = d7.toISOString()
-  } else if (datePreset === '30days') {
-    const d30 = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000)
-    startDate = d30.toISOString()
-  }
-
-  return { todayStartISO: todayStart.toISOString(), startDate, endDate }
+export interface PlayerProfitRow {
+  id: string
+  full_name: string
+  username: string
+  is_active: boolean
+  coin_balance: number
+  play_count: number
+  total_stake: number
+  total_payout: number
+  net_profit: number
+  margin_pct: number
+  last_played_at: string | null
 }
 
-export async function getAgentProfitReportAction(params: AgentProfitReportParams = {}) {
+export interface ProfitReport {
+  summary: {
+    todays_profit: number
+    lifetime_profit: number
+    total_stake: number
+    total_payout: number
+    margin_pct: number
+  }
+  players: PlayerProfitRow[]
+  total_pages: number
+  total_items: number
+  error: string | null
+}
+
+const EMPTY: ProfitReport = {
+  summary: { todays_profit: 0, lifetime_profit: 0, total_stake: 0, total_payout: 0, margin_pct: 0 },
+  players: [], total_pages: 1, total_items: 0, error: null,
+}
+
+
+/** IST day boundaries for the selected preset or explicit date. */
+function istRange(preset?: string, filterDate?: string) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  const dayStart = new Date(`${today}T00:00:00+05:30`)
+
+  let start: string | undefined
+  let end: string | undefined
+
+  if (filterDate) {
+    const d = new Date(filterDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    start = new Date(`${d}T00:00:00+05:30`).toISOString()
+    end   = new Date(`${d}T23:59:59.999+05:30`).toISOString()
+  } else if (preset === 'today') {
+    start = dayStart.toISOString()
+    end   = new Date(`${today}T23:59:59.999+05:30`).toISOString()
+  } else if (preset === '7days') {
+    start = new Date(dayStart.getTime() - 7 * 86_400_000).toISOString()
+  } else if (preset === '30days') {
+    start = new Date(dayStart.getTime() - 30 * 86_400_000).toISOString()
+  }
+  // 'lifetime' leaves both undefined.
+
+  return { dayStartISO: dayStart.toISOString(), start, end }
+}
+
+export async function getAgentProfitReportAction(
+  params: ProfitReportParams = {}
+): Promise<ProfitReport> {
   const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) {
-    return {
-      summary: { todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 },
-      players: [],
-      totalPages: 1,
-      totalItems: 0
-    }
-  }
+  if (auth.error || !auth.user) return { ...EMPTY, error: auth.error }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (!serviceRoleKey || !supabaseUrl) {
-    return {
-      summary: { todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 },
-      players: [],
-      totalPages: 1,
-      totalItems: 0
-    }
-  }
+  // A-8: an agent may only ever report on their own book.
+  const agentId = auth.user.role === 'superadmin' && params.targetAgentId
+    ? params.targetAgentId
+    : auth.user.id
 
   try {
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
+    const db = createAdminClient()
+    const { dayStartISO, start, end } = istRange(params.datePreset, params.filterDate)
 
-    // Cross-tenant protection (A-8): Agent callers can ONLY read their own profit report
-    let targetAgentIdResolved = auth.user.role === 'superadmin' && params.targetAgentId
-      ? params.targetAgentId
-      : auth.user.id
+    // The roster first — the report lists every player, including those with no
+    // activity in the window, so an agent can see who is idle.
+    const playersRes = await db
+      .from('profiles')
+      .select('id, username, full_name, coin_balance, is_active')
+      .eq('agent_id', agentId)
+      .order('username')
+    if (playersRes.error) throw new Error(`players: ${playersRes.error.message}`)
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetAgentIdResolved)
-    if (!isUuid) {
-      const { data: lookup } = await supabaseAdmin.from('profiles').select('id').ilike('username', targetAgentIdResolved).single()
-      if (lookup?.id) {
-        targetAgentIdResolved = lookup.id
-      } else {
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        const matched = (usersData?.users || []).find(u => 
-          u.user_metadata?.username?.toLowerCase() === targetAgentIdResolved.toLowerCase() ||
-          u.email?.toLowerCase().split('@')[0] === targetAgentIdResolved.toLowerCase()
-        )
-        if (matched) targetAgentIdResolved = matched.id
-      }
-    }
+    const players = playersRes.data ?? []
+    const playerIds = players.map(p => p.id)
 
-    const agentId = targetAgentIdResolved
+    if (playerIds.length === 0) return { ...EMPTY }
 
-    const { todayStartISO, startDate, endDate } = getISTDateRange(params.datePreset, params.filterDate)
+    let filtered = db.from('bets')
+      .select('user_id, total_stake, total_payout, created_at')
+      .in('user_id', playerIds).range(0, 999999)
+    if (start) filtered = filtered.gte('created_at', start)
+    if (end)   filtered = filtered.lte('created_at', end)
 
-    let roundQuery = supabaseAdmin
-      .from('triple_chance_bets')
-      .select('user_id, total_stake, win_amount, created_at, profiles!inner(agent_id)')
-      .eq('profiles.agent_id', agentId)
-
-    if (startDate) {
-      roundQuery = roundQuery.gte('created_at', startDate)
-    }
-    if (endDate) {
-      roundQuery = roundQuery.lte('created_at', endDate)
-    }
-
-    const [allRoundsRes, todayRoundsRes, filteredRoundsRes, profilesRes, authUsersRes] = await Promise.all([
-      supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId),
-      supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId).gte('created_at', todayStartISO),
-      roundQuery,
-      supabaseAdmin.from('profiles').select('id, username, is_active, balance').or(`agent_id.eq.${agentId},parent_agent_id.eq.${agentId}`),
-      supabaseAdmin.auth.admin.listUsers()
+    const [allRes, todayRes, filteredRes] = await Promise.all([
+      db.from('bets').select('total_stake, total_payout')
+        .in('user_id', playerIds).range(0, 999999),
+      db.from('bets').select('total_stake, total_payout')
+        .in('user_id', playerIds).gte('created_at', dayStartISO).range(0, 999999),
+      filtered,
     ])
+    if (allRes.error)      throw new Error(`lifetime: ${allRes.error.message}`)
+    if (todayRes.error)    throw new Error(`today: ${todayRes.error.message}`)
+    if (filteredRes.error) throw new Error(`filtered: ${filteredRes.error.message}`)
 
-    const allSpins = (allRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
-    const todaySpins = (todayRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
-    const filteredSpins = (filteredRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
+    const profitOf = (rows: Array<{ total_stake: unknown; total_payout: unknown }>) =>
+      rows.reduce((s, r) => s + (Number(r.total_stake ?? 0) - Number(r.total_payout ?? 0)), 0)
 
-    const todaysPnl = todaySpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)
-    const lifetimePnl = allSpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)
+    const total_stake  = (filteredRes.data ?? []).reduce((s, r) => s + Number(r.total_stake ?? 0), 0)
+    const total_payout = (filteredRes.data ?? []).reduce((s, r) => s + Number(r.total_payout ?? 0), 0)
 
-    const totalVolume = filteredSpins.reduce((acc, s) => acc + s.bet_amount, 0)
-    const totalPayouts = filteredSpins.reduce((acc, s) => acc + s.win_amount, 0)
-    const filteredPnl = totalVolume - totalPayouts
-    const netMarginPct = totalVolume > 0 ? (filteredPnl / totalVolume) * 100 : 0
-
-    const playerDict: Record<string, { name: string; username: string; isActive: boolean; balance: number }> = {}
-
-    if (profilesRes.data) {
-      profilesRes.data.forEach(p => {
-        const u = authUsersRes.data?.users?.find(user => user.id === p.id)
-        const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || p.username || 'Player'
-        playerDict[p.id] = {
-          name: fullName,
-          username: p.username || '',
-          isActive: p.is_active ?? true,
-          balance: Number(p.balance || 0)
-        }
-      })
+    // Per-player aggregation over the filtered window.
+    const stats = new Map<string, { plays: number; stake: number; payout: number; last: string | null }>()
+    for (const b of filteredRes.data ?? []) {
+      const cur = stats.get(b.user_id) ?? { plays: 0, stake: 0, payout: 0, last: null }
+      cur.plays += 1
+      cur.stake += Number(b.total_stake ?? 0)
+      cur.payout += Number(b.total_payout ?? 0)
+      if (!cur.last || b.created_at > cur.last) cur.last = b.created_at
+      stats.set(b.user_id, cur)
     }
 
-    if (authUsersRes.data?.users) {
-      authUsersRes.data.users.forEach(u => {
-        const meta = u.user_metadata || {}
-        if (meta.role === 'player' && (meta.agent_id === agentId || meta.parent_agent_id === agentId || !playerDict[u.id])) {
-          const pUsername = meta.username || u.email?.split('@')[0] || 'player'
-          const pName = meta.full_name || meta.name || pUsername
-          playerDict[u.id] = {
-            name: pName,
-            username: pUsername,
-            isActive: meta.status !== 'Blocked',
-            balance: Number(meta.balance || 0)
-          }
-        }
-      })
-    }
-
-    const playerStatsMap: Record<string, { totalPlays: number; totalBets: number; totalWins: number; lastPlayedAt: string }> = {}
-
-    filteredSpins.forEach(spin => {
-      const uid = spin.user_id
-      if (!uid) return
-      if (!playerStatsMap[uid]) {
-        playerStatsMap[uid] = { totalPlays: 0, totalBets: 0, totalWins: 0, lastPlayedAt: spin.created_at }
-      }
-      playerStatsMap[uid].totalPlays += 1
-      playerStatsMap[uid].totalBets += Number(spin.bet_amount || 0)
-      playerStatsMap[uid].totalWins += Number(spin.win_amount || 0)
-      if (new Date(spin.created_at) > new Date(playerStatsMap[uid].lastPlayedAt)) {
-        playerStatsMap[uid].lastPlayedAt = spin.created_at
-      }
-    })
-
-    const allPlayerIds = Array.from(new Set([...Object.keys(playerDict), ...Object.keys(playerStatsMap)]))
-
-    let playerBreakdowns = allPlayerIds.map(uid => {
-      const info = playerDict[uid] || { name: `Player (${uid.substring(0, 6)})`, username: `player_${uid.substring(0, 6)}`, isActive: true, balance: 0 }
-      const stats = playerStatsMap[uid] || { totalPlays: 0, totalBets: 0, totalWins: 0, lastPlayedAt: '' }
-      const netPnl = stats.totalBets - stats.totalWins
-      const marginPct = stats.totalBets > 0 ? (netPnl / stats.totalBets) * 100 : 0
-
+    let rows: PlayerProfitRow[] = players.map(p => {
+      const s = stats.get(p.id) ?? { plays: 0, stake: 0, payout: 0, last: null }
+      const net = s.stake - s.payout
       return {
-        id: uid,
-        name: info.name,
-        username: info.username,
-        isActive: info.isActive,
-        balance: info.balance,
-        totalPlays: stats.totalPlays,
-        totalBets: stats.totalBets,
-        totalWins: stats.totalWins,
-        netPnl,
-        marginPct,
-        lastPlayedAt: stats.lastPlayedAt
+        id: p.id,
+        full_name: p.full_name || p.username,
+        username: p.username,
+        is_active: p.is_active,
+        coin_balance: Number(p.coin_balance ?? 0),
+        play_count: s.plays,
+        total_stake: s.stake,
+        total_payout: s.payout,
+        net_profit: net,
+        margin_pct: s.stake > 0 ? (net / s.stake) * 100 : 0,
+        last_played_at: s.last,
       }
     })
 
-    if (startDate || endDate) {
-      playerBreakdowns = playerBreakdowns.filter(p => p.totalPlays > 0)
-    }
+    // When a window is selected, show only players who actually played in it.
+    if (start || end) rows = rows.filter(r => r.play_count > 0)
 
-    if (params.searchQuery && params.searchQuery.trim()) {
+    if (params.searchQuery?.trim()) {
       const q = params.searchQuery.trim().toLowerCase()
-      playerBreakdowns = playerBreakdowns.filter(p => p.username.toLowerCase().includes(q))
+      rows = rows.filter(r =>
+        r.username.toLowerCase().includes(q) || r.full_name.toLowerCase().includes(q))
     }
 
-    playerBreakdowns.sort((a, b) => b.totalBets - a.totalBets)
+    rows.sort((a, b) => b.total_stake - a.total_stake)
 
-    const page = params.page || 1
-    const limit = params.limit || 10
-    const totalItems = playerBreakdowns.length
-    const totalPages = Math.ceil(totalItems / limit) || 1
-    const paginatedPlayers = playerBreakdowns.slice((page - 1) * limit, page * limit)
+    const page = Math.max(1, params.page ?? 1)
+    const limit = Math.min(100, Math.max(1, params.limit ?? 10))
+    const total_items = rows.length
 
     return {
       summary: {
-        todaysPnl,
-        lifetimePnl,
-        totalVolume,
-        totalPayouts,
-        netMarginPct
+        todays_profit: profitOf(todayRes.data ?? []),
+        lifetime_profit: profitOf(allRes.data ?? []),
+        total_stake,
+        total_payout,
+        margin_pct: total_stake > 0 ? ((total_stake - total_payout) / total_stake) * 100 : 0,
       },
-      players: paginatedPlayers,
-      totalPages,
-      totalItems
+      players: rows.slice((page - 1) * limit, page * limit),
+      total_pages: Math.max(1, Math.ceil(total_items / limit)),
+      total_items,
+      error: null,
     }
   } catch (err) {
-    return {
-      summary: { todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 },
-      players: [],
-      totalPages: 1,
-      totalItems: 0
-    }
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { ...EMPTY, error: `Could not load report: ${message}` }
   }
 }

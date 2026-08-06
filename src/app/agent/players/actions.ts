@@ -1,487 +1,429 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient as createServerClient } from '@/lib/supabase'
-import { createClient } from '@supabase/supabase-js'
-import { isCreditTxn } from '@/lib/ledger'
+import { createClient as createUserClient, createAdminClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-guard'
+import { asRpc, type AgentTransferResult } from '@/lib/rpc'
+import { isCredit, ledgerKindLabel, toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
 
-export async function getPlayersAction(targetAgentId?: string) {
-  const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) {
-    return { players: [] }
-  }
+/**
+ * Player management for the agent back office.
+ *
+ * ARCHITECTURAL RULE INTRODUCED HERE
+ *   Money RPCs are invoked with the CALLER'S session (createUserClient), never
+ *   with the service-role client. The v2 functions derive identity from
+ *   auth.uid(); calling them with the service key would leave the database
+ *   unable to tell who acted, which is exactly how v1 ended up allowing
+ *   unauthenticated coin minting. The service-role client is used only for
+ *   reads and for Auth admin operations that have already been authorised here.
+ */
 
-  // Cross-tenant protection (A-8): Agent callers can ONLY read their own players
-  const agentId = auth.user.role === 'superadmin' && targetAgentId ? targetAgentId : auth.user.id
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      const [sessRes, profRes, usersRes] = await Promise.all([
-        supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active').or(`agent_id.eq.${agentId},parent_agent_id.eq.${agentId}`),
-        supabaseAdmin.auth.admin.listUsers()
-      ])
-
-      const sessions = sessRes.data || null
-      const allUsers = usersRes.data?.users || []
-      const now = new Date().getTime()
-
-      if (profRes.data && profRes.data.length > 0) {
-        const players = profRes.data.map(p => {
-          const activeSess = sessions?.find(s => s.user_id === p.id)
-          const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
-          const u = allUsers.find(user => user.id === p.id)
-          const fullName = u?.user_metadata?.full_name || u?.user_metadata?.name || p.username || 'Player'
-          return {
-            id: p.id,
-            name: fullName,
-            username: p.username || '',
-            balance: Number(p.balance || 0),
-            status: p.is_active ? 'Active' : 'Blocked',
-            isOnline,
-            gamePlays: 0
-          }
-        })
-        return { players }
-      }
-
-      const { data, error } = await supabaseAdmin.auth.admin.listUsers()
-      if (!error && data?.users) {
-        const players = data.users
-          .filter(u => u.user_metadata?.role === 'player' && (u.user_metadata?.agent_id === agentId || u.user_metadata?.parent_agent_id === agentId))
-          .map(u => {
-            const activeSess = sessions?.find(s => s.user_id === u.id)
-            const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
-            return {
-              id: u.id,
-              name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
-              username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-              balance: 0,
-              status: u.user_metadata?.status || 'Active',
-              isOnline,
-              gamePlays: 0
-            }
-          })
-        return { players }
-      }
-    } catch (_) {}
-  }
-
-  return { players: [] }
-}
-
-export async function createPlayerAction(formData: FormData) {
-  const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) {
-    return { error: auth.error || 'Unauthorized access' }
-  }
-
-  const name = (formData.get('name') as string || '').trim()
-  const username = (formData.get('username') as string || '').trim()
-  const password = (formData.get('password') as string || '').trim()
-
-  if (!name || !username || !password) {
-    return { error: 'Please provide Name, Username, and Password.' }
-  }
-
-  const usernameRegex = /^[a-zA-Z0-9]{3,20}$/
-  if (!usernameRegex.test(username)) {
-    return { error: 'Username must be 3 to 20 characters and contain ONLY letters and numbers (no symbols, spaces, or special characters).' }
-  }
-
-  const agentId = auth.user.id
-  const email = username.includes('@') ? username : `${username.toLowerCase()}@bestsmartgame.com`
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!serviceRoleKey) {
-    return { error: 'Server configuration error.' }
-  }
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: name,
-      username,
-      role: 'player',
-      agent_id: agentId,
-      parent_agent_id: agentId,
-      balance: 0,
-      status: 'Active',
-    },
+function istDateTime(value: string): string {
+  return new Date(value).toLocaleString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
-
-  if (error) {
-    if (error.message.toLowerCase().includes('already') || error.message.toLowerCase().includes('exists')) {
-      return { error: `Username "${username}" is already taken by another player. Please choose a different username.` }
-    }
-    return { error: error.message }
-  }
-
-  if (data?.user) {
-    try {
-      await supabaseAdmin.from('profiles').upsert({
-        id: data.user.id,
-        username,
-        role: 'player',
-        agent_id: agentId,
-        parent_agent_id: agentId,
-        balance: 0,
-        is_active: true
-      })
-    } catch (_) {}
-  }
-
-  revalidatePath('/agent/players')
-  revalidatePath('/agent')
-  revalidatePath('/superadmin/agents')
-  return { success: true, user: data.user }
 }
 
-async function resolveUserIdentifier(supabaseAdmin: any, identifier: string): Promise<string | null> {
+/** Resolves a username or UUID to a profile id, scoped to what the caller may see. */
+async function resolvePlayerId(identifier: string): Promise<string | null> {
   if (!identifier) return null
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
   if (isUuid) return identifier
-
-  try {
-    const { data: lookup } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .ilike('username', identifier)
-      .single()
-    if (lookup?.id) return lookup.id
-  } catch (_) {}
-
-  try {
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-    const matched = (usersData?.users || []).find((u: any) =>
-      u.user_metadata?.username?.toLowerCase() === identifier.toLowerCase() ||
-      u.email?.toLowerCase().split('@')[0] === identifier.toLowerCase()
-    )
-    if (matched?.id) return matched.id
-  } catch (_) {}
-
-  return null
+  const { data } = await createAdminClient().from('profiles').select('id').ilike('username', identifier).maybeSingle()
+  return data?.id ?? null
 }
 
-export async function togglePlayerStatusAction(playerIdentifier: string, currentStatus: string) {
-  const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) {
-    return { error: auth.error || 'Unauthorized: Active session required.' }
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { error: 'Service Role Key not configured.' }
-  }
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-
-  const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
-  if (!playerId) return { error: 'Player account not found.' }
-
-  const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
-  const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
-  if (getUserError || !userData?.user) {
-    return { error: 'Player account not found.' }
-  }
-
-  const { data: targetProfile } = await supabaseAdmin
+/**
+ * Confirms the caller may act on this player.
+ * Superadmin may act on anyone; an agent only on their own players.
+ */
+async function assertOwnership(
+  caller: { id: string; role: string },
+  playerId: string
+): Promise<{ ok: true; player: { id: string; username: string; agent_id: string | null } } | { ok: false; error: string }> {
+  const { data, error } = await createAdminClient()
     .from('profiles')
-    .select('agent_id, parent_agent_id')
+    .select('id, username, role, agent_id')
     .eq('id', playerId)
     .single()
 
-  const playerAgentId = targetProfile?.parent_agent_id || targetProfile?.agent_id || userData.user.user_metadata?.agent_id
-
-  // Security check (A-9): Agent can only manage their own players
-  if (auth.user.role === 'agent' && playerAgentId && playerAgentId !== auth.user.id) {
-    return { error: 'Unauthorized. You can only manage your own assigned players.' }
+  if (error || !data) return { ok: false, error: 'Player account not found.' }
+  if (data.role !== 'player') return { ok: false, error: 'That account is not a player.' }
+  if (caller.role === 'agent' && data.agent_id !== caller.id) {
+    return { ok: false, error: 'Unauthorized: that player belongs to another agent.' }
   }
-
-  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
-    user_metadata: {
-      ...userData.user.user_metadata,
-      status: newStatus
-    }
-  })
-
-  if (updateError) {
-    return { error: updateError.message }
-  }
-
-  await supabaseAdmin.from('profiles').update({
-    is_active: newStatus === 'Active',
-    status: newStatus
-  }).eq('id', playerId)
-
-  revalidatePath('/agent/players')
-  return { success: true, newStatus }
+  return { ok: true, player: { id: data.id, username: data.username, agent_id: data.agent_id } }
 }
 
-export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
-  const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) {
-    return { gamePlays: [], pointsHistory: [] }
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (!serviceRoleKey || !supabaseUrl || !playerIdentifier) {
-    return { gamePlays: [], pointsHistory: [] }
-  }
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
-
-  const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
-  if (!playerId) {
-    return { gamePlays: [], pointsHistory: [] }
-  }
-
-  const { data: targetProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('agent_id, parent_agent_id')
-    .eq('id', playerId)
-    .single()
-
-  const playerAgentId = targetProfile?.parent_agent_id || targetProfile?.agent_id
-
-  // Tenant protection (A-8): Agent can only inspect their own players
-  if (auth.user.role === 'agent' && playerAgentId && playerAgentId !== auth.user.id) {
-    return { gamePlays: [], pointsHistory: [] }
-  }
-
-  let gamePlays: Array<{
-    id: string
-    game: string
-    mode: string
-    selections: string
-    resultNumber: number
-    bet: number
-    win: number
-    status: 'WON' | 'LOST'
-    isResolved: boolean
-    date: string
-    createdAtIso: string
-    singleBets: Record<string, number>
-    doubleBets: Record<string, number>
-    tripleBets: Record<string, number>
-    redDigit: number | null
-    greenDigit: number | null
-    blackDigit: number | null
-  }> = []
-
-  try {
-    const { data: roundBets, error: betsErr } = await supabaseAdmin
-      .from('triple_chance_bets')
-      .select('*')
-      .eq('user_id', playerId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (!betsErr && roundBets && roundBets.length > 0) {
-      const roundIds = roundBets.map((b: any) => b.round_id).filter(Boolean)
-      let roundsMap: Record<string, any> = {}
-      if (roundIds.length > 0) {
-        const { data: rounds } = await supabaseAdmin
-          .from('triple_chance_rounds')
-          .select('id, red, green, black, status')
-          .in('id', roundIds)
-        ;(rounds || []).forEach((r: any) => { roundsMap[r.id] = r })
-      }
-
-      gamePlays = roundBets.map((p: any) => {
-        const round = roundsMap[p.round_id] || {}
-        const red = round.red !== null && round.red !== undefined ? Number(round.red) : null
-        const green = round.green !== null && round.green !== undefined ? Number(round.green) : null
-        const black = round.black !== null && round.black !== undefined ? Number(round.black) : null
-        const resultNumber = (red !== null && green !== null && black !== null) ? (red * 100 + green * 10 + black) : 0
-
-        const singleBetsObj = (p.single_bets || {}) as Record<string, number>
-        const doubleBetsObj = (p.double_bets || {}) as Record<string, number>
-        const tripleBetsObj = (p.triple_bets || {}) as Record<string, number>
-
-        const activeModes: string[] = []
-        if (Object.keys(singleBetsObj).length > 0) activeModes.push('SINGLE')
-        if (Object.keys(doubleBetsObj).length > 0) activeModes.push('DOUBLE')
-        if (Object.keys(tripleBetsObj).length > 0) activeModes.push('TRIPLE')
-        const modeLabel = activeModes.length > 0 ? activeModes.join(' + ') : 'TRIPLE CHANCE'
-
-        const parts: string[] = []
-        if (Object.keys(singleBetsObj).length > 0) parts.push(`Single: ${Object.keys(singleBetsObj).join(',')}`)
-        if (Object.keys(doubleBetsObj).length > 0) parts.push(`Double: ${Object.keys(doubleBetsObj).join(',')}`)
-        if (Object.keys(tripleBetsObj).length > 0) parts.push(`Triple: ${Object.keys(tripleBetsObj).join(',')}`)
-        const selText = parts.length > 0 ? parts.join(' | ') : 'Multi-board Bet'
-
-        const isResolved = p.is_resolved as boolean
-
-        let winAmt = 0
-        if (red !== null && green !== null && black !== null) {
-          const sKey = String(black)
-          const dKey = `${green}${black}`
-          const tKey = `${red}${green}${black}`
-          const sBet = Number(singleBetsObj[sKey] || 0)
-          const dBet = Number(doubleBetsObj[dKey] || doubleBetsObj[dKey.padStart(2, '0')] || 0)
-          const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
-          winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
-        } else {
-          winAmt = Number(p.win_amount || 0)
-        }
-        const rowStatus: 'WON' | 'LOST' = winAmt > 0 ? 'WON' : 'LOST'
-
-        const rawId = p.round_id || p.id || ''
-        const unifiedHandId = rawId.length > 8 ? '...' + rawId.slice(-8) : rawId
-
-        return {
-          id: unifiedHandId,
-          game: 'Triple Chance',
-          mode: modeLabel,
-          selections: selText,
-          resultNumber,
-          bet: Number(p.total_stake || 0),
-          win: winAmt,
-          status: rowStatus,
-          isResolved,
-          date: new Date(p.created_at).toLocaleString('en-US', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          createdAtIso: p.created_at,
-          singleBets: singleBetsObj,
-          doubleBets: doubleBetsObj,
-          tripleBets: tripleBetsObj,
-          redDigit: red,
-          greenDigit: green,
-          blackDigit: black
-        }
-      })
-    }
-  } catch (err) {
-    console.error('[getPlayerDetailHistoryAction] bets/rounds query failed:', err)
-  }
-
-  let pointsHistory: Array<{
-    id: string
-    type: 'deposit' | 'withdraw'
-    txType: string
-    amount: number
-    balanceAfter: number
-    date: string
-    createdAtIso: string
-  }> = []
-
-  try {
-    const { data: txns } = await supabaseAdmin
-      .from('transactions')
-      .select('*')
-      .eq('user_id', playerId)
-      .order('created_at', { ascending: false })
-      .limit(100)
-
-    if (txns && txns.length > 0) {
-      pointsHistory = txns.map((tx: any) => {
-        const amt = Number(tx.amount || 0)
-        const isCredit = isCreditTxn(tx.type, amt)
-        return {
-          id: tx.id.substring(0, 8),
-          type: (isCredit ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
-          txType: tx.type || 'transaction',
-          amount: Math.abs(amt),
-          balanceAfter: Number(tx.balance_after || 0),
-          date: new Date(tx.created_at).toLocaleString('en-US', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          createdAtIso: tx.created_at
-        }
-      })
-    }
-  } catch (err) {
-    console.error('[getPlayerDetailHistoryAction] transactions query failed:', err)
-  }
-
-  return { gamePlays, pointsHistory }
+// ─────────────────────────────────────────────────────────────────────────────
+// LIST
+// ─────────────────────────────────────────────────────────────────────────────
+export interface PlayerRow {
+  id: string
+  full_name: string
+  username: string
+  coin_balance: number
+  is_active: boolean
+  is_online: boolean
 }
 
-export async function resetPlayerPasswordAction(playerIdentifier: string, newPassword: string) {
+export async function getPlayersAction(
+  targetAgentId?: string
+): Promise<{ players: PlayerRow[]; error: string | null }> {
   const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) {
-    return { error: auth.error || 'Unauthorized: Active session required.' }
-  }
+  if (auth.error || !auth.user) return { players: [], error: auth.error }
 
-  if (!playerIdentifier || !newPassword || newPassword.trim().length < 6) {
+  // Cross-tenant guard: only a superadmin may look at someone else's roster.
+  const agentId = auth.user.role === 'superadmin' && targetAgentId ? targetAgentId : auth.user.id
+
+  try {
+    const db = createAdminClient()
+    const [profilesRes, sessionsRes] = await Promise.all([
+      db.from('profiles')
+        .select('id, username, full_name, coin_balance, is_active')
+        .eq('agent_id', agentId)
+        .order('username'),
+      db.from('active_sessions').select('user_id, last_seen_at'),
+    ])
+    if (profilesRes.error) throw new Error(profilesRes.error.message)
+
+    const seenAt = new Map((sessionsRes.data ?? []).map(s => [s.user_id, new Date(s.last_seen_at).getTime()]))
+    const now = Date.now()
+
+    return {
+      players: (profilesRes.data ?? []).map(p => ({
+        id: p.id,
+        full_name: p.full_name || p.username,
+        username: p.username,
+        coin_balance: Number(p.coin_balance ?? 0),
+        is_active: p.is_active,
+        is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
+      })),
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { players: [], error: `Could not load players: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CREATE
+// ─────────────────────────────────────────────────────────────────────────────
+export async function createPlayerAction(formData: FormData) {
+  const auth = await requireAuth(['agent'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  const full_name = (formData.get('name') as string || '').trim()
+  const username  = (formData.get('username') as string || '').trim()
+  const password  = (formData.get('password') as string || '').trim()
+
+  if (!full_name || !username || !password) {
+    return { error: 'Please provide a name, username and password.' }
+  }
+  // Matches the database CHECK on profiles.username.
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+    return { error: 'Username must be 3-20 characters, letters, numbers or underscore only.' }
+  }
+  if (password.length < 6) {
     return { error: 'Password must be at least 6 characters.' }
   }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  try {
+    const { data, error } = await createAdminClient().auth.admin.createUser({
+      email: `${username.toLowerCase()}@bestsmartgame.com`,   // matches the DB CHECK
+      password,
+      email_confirm: true,
+      user_metadata: {
+        username,
+        full_name,
+        role: 'player',
+        agent_id: auth.user.id,      // the trigger requires this for players
+      },
+    })
 
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { error: 'Service Role Key not configured.' }
+    if (error) {
+      const m = error.message.toLowerCase()
+      if (m.includes('already') || m.includes('exists') || m.includes('duplicate')) {
+        return { error: `Username "${username}" is already taken.` }
+      }
+      return { error: error.message }
+    }
+
+    revalidatePath('/agent/players')
+    revalidatePath('/agent')
+    return { success: true, player_id: data.user?.id }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not create player: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOCK / UNBLOCK
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * B-1 FIX — the signature now takes the DESIRED state, not the current one.
+ *
+ * The old action took `currentStatus` and derived the new value itself, while
+ * the page passed the *next* status it had already computed. The two
+ * cancelled out, so blocking set the player to Active and unblocking set them
+ * to Blocked — both buttons were no-ops in production.
+ *
+ * Passing the intended end state removes the whole class of error: there is no
+ * longer any inversion for the caller to get wrong.
+ */
+export async function setPlayerActiveAction(playerIdentifier: string, isActive: boolean) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  try {
+    const playerId = await resolvePlayerId(playerIdentifier)
+    if (!playerId) return { error: 'Player account not found.' }
+
+    const owned = await assertOwnership(auth.user, playerId)
+    if (!owned.ok) return { error: owned.error }
+
+    // profiles.is_active is the single source of truth: the heartbeat reads it,
+    // and every dashboard view renders from it. v1 wrote only auth metadata,
+    // so a blocked account kept playing and still displayed as Active.
+    const { error } = await createAdminClient()
+      .from('profiles')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', playerId)
+
+    if (error) return { error: error.message }
+
+    // Blocking should also end the live session, otherwise the player keeps
+    // playing until their next heartbeat.
+    if (!isActive) {
+      await createAdminClient().from('active_sessions').delete().eq('user_id', playerId)
+    }
+
+    revalidatePath('/agent/players')
+    return { success: true, is_active: isActive }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not update player: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRANSFER COINS
+// ─────────────────────────────────────────────────────────────────────────────
+export async function transferPlayerCoinsAction(
+  playerIdentifier: string,
+  amount: number,
+  direction: TransferDirection
+) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  const whole = toWholeCoins(amount)
+  if (whole === null) return { error: 'Please enter a whole number of coins greater than zero.' }
+  if (direction !== 'credit' && direction !== 'debit') return { error: 'Invalid transfer direction.' }
+
+  try {
+    const playerId = await resolvePlayerId(playerIdentifier)
+    if (!playerId) return { error: 'Player account not found.' }
+
+    // Called with the caller's own session so the database can identify them.
+    // The RPC re-checks ownership itself; this is defence in depth, not a
+    // substitute for it.
+    const supabase = await createUserClient()
+    const { data, error } = await supabase.rpc('agent_transfer_coins', {
+      p_player_id: playerId,
+      p_amount: whole,
+      p_direction: direction,
+    })
+
+    if (error) {
+      if (error.message.includes('INSUFFICIENT_COINS')) {
+        return { error: 'Not enough coins available for this transfer.' }
+      }
+      if (error.message.includes('UNAUTHORIZED_NOT_YOUR_PLAYER')) {
+        return { error: 'That player belongs to another agent.' }
+      }
+      return { error: error.message }
+    }
+
+    const result = asRpc<AgentTransferResult>(data)
+
+    revalidatePath('/agent/players')
+    revalidatePath('/agent')
+    revalidatePath('/agent/history')
+    return {
+      success: true,
+      player_coin_balance: Number(result?.player_coin_balance ?? 0),
+      agent_coin_balance: Number(result?.agent_coin_balance ?? 0),
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Transfer failed: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PASSWORD RESET
+// ─────────────────────────────────────────────────────────────────────────────
+export async function resetPlayerPasswordAction(playerIdentifier: string, newPassword: string) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  if (!newPassword || newPassword.trim().length < 6) {
+    return { error: 'Password must be at least 6 characters.' }
   }
 
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  })
+  try {
+    const playerId = await resolvePlayerId(playerIdentifier)
+    if (!playerId) return { error: 'Player account not found.' }
 
-  const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
-  if (!playerId) return { error: 'Player account not found.' }
+    const owned = await assertOwnership(auth.user, playerId)
+    if (!owned.ok) return { error: owned.error }
 
-  const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
-  if (getUserError || !userData?.user) {
-    return { error: 'Player account not found.' }
+    const { error } = await createAdminClient().auth.admin.updateUserById(playerId, {
+      password: newPassword.trim(),
+    })
+    if (error) return { error: error.message }
+
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not reset password: ${message}` }
   }
+}
 
-  const { data: targetProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('agent_id, parent_agent_id')
-    .eq('id', playerId)
-    .single()
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAYER DETAIL — game plays + coin movements
+// ─────────────────────────────────────────────────────────────────────────────
+export interface PlayerGamePlay {
+  hand_id: string
+  round_number: number
+  mode: string
+  selections: string
+  result: string
+  total_stake: number
+  total_payout: number
+  outcome: 'WON' | 'LOST'
+  is_settled: boolean
+  created_at: string
+  created_at_iso: string
+  /** Raw per-cell stakes, for the expandable board breakdown in the UI. */
+  single_bets: Record<string, number>
+  double_bets: Record<string, number>
+  triple_bets: Record<string, number>
+  red: number | null
+  green: number | null
+  black: number | null
+}
 
-  const playerAgentId = targetProfile?.parent_agent_id || targetProfile?.agent_id || userData.user.user_metadata?.agent_id
+export interface PlayerCoinMovement {
+  id: string
+  kind: LedgerKind
+  label: string
+  direction: 'deposit' | 'withdraw'
+  amount: number
+  balance_after: number
+  created_at: string
+  created_at_iso: string
+}
 
-  // Security check (A-9): Agent can only manage their own assigned players
-  if (auth.user.role === 'agent' && playerAgentId && playerAgentId !== auth.user.id) {
-    return { error: 'Unauthorized. You can only manage your own assigned players.' }
+export async function getPlayerDetailHistoryAction(playerIdentifier: string): Promise<{
+  game_plays: PlayerGamePlay[]
+  coin_movements: PlayerCoinMovement[]
+  error: string | null
+}> {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { game_plays: [], coin_movements: [], error: auth.error }
+
+  try {
+    const playerId = await resolvePlayerId(playerIdentifier)
+    if (!playerId) return { game_plays: [], coin_movements: [], error: 'Player not found.' }
+
+    const owned = await assertOwnership(auth.user, playerId)
+    if (!owned.ok) return { game_plays: [], coin_movements: [], error: owned.error }
+
+    const db = createAdminClient()
+
+    // A real foreign key now exists, so a single embedded select is safe.
+    // v1 needed a two-step fetch-and-merge because the join silently dropped
+    // rows; the payout no longer has to be recomputed client-side either —
+    // settle_round() writes the authoritative figures.
+    const [betsRes, ledgerRes] = await Promise.all([
+      db.from('bets')
+        .select(`id, round_id, single_bets, double_bets, triple_bets,
+                 total_stake, total_payout, is_settled, created_at,
+                 rounds!inner ( round_number, red, green, black )`)
+        .eq('user_id', playerId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      db.from('coin_ledger')
+        .select('id, kind, amount, balance_after, created_at')
+        .eq('user_id', playerId)
+        .order('created_at', { ascending: false })
+        .limit(200),
+    ])
+    if (betsRes.error) throw new Error(`bets: ${betsRes.error.message}`)
+    if (ledgerRes.error) throw new Error(`ledger: ${ledgerRes.error.message}`)
+
+    const game_plays: PlayerGamePlay[] = (betsRes.data ?? []).map(b => {
+      const round = (b as unknown as { rounds: { round_number: number; red: number | null; green: number | null; black: number | null } }).rounds
+      const single = (b.single_bets ?? {}) as Record<string, number>
+      const dbl    = (b.double_bets ?? {}) as Record<string, number>
+      const triple = (b.triple_bets ?? {}) as Record<string, number>
+
+      const modes: string[] = []
+      if (Object.keys(single).length) modes.push('SINGLE')
+      if (Object.keys(dbl).length)    modes.push('DOUBLE')
+      if (Object.keys(triple).length) modes.push('TRIPLE')
+
+      const parts: string[] = []
+      if (Object.keys(single).length) parts.push(`Single: ${Object.keys(single).join(',')}`)
+      if (Object.keys(dbl).length)    parts.push(`Double: ${Object.keys(dbl).join(',')}`)
+      if (Object.keys(triple).length) parts.push(`Triple: ${Object.keys(triple).join(',')}`)
+
+      const drawn = round.red !== null && round.green !== null && round.black !== null
+      const payout = Number(b.total_payout ?? 0)
+
+      return {
+        // Canonical Hand ID: last 8 characters of the round UUID, identical to
+        // what the game app shows the player.
+        hand_id: `...${String(b.round_id).slice(-8)}`,
+        round_number: Number(round.round_number),
+        mode: modes.join(' + ') || 'TRIPLE CHANCE',
+        selections: parts.join(' | ') || 'Multi-board bet',
+        result: drawn ? `${round.red} . ${round.green} . ${round.black}` : '—',
+        total_stake: Number(b.total_stake ?? 0),
+        total_payout: payout,
+        outcome: payout > 0 ? 'WON' : 'LOST',
+        is_settled: Boolean(b.is_settled),
+        created_at: istDateTime(b.created_at),
+        created_at_iso: b.created_at,
+        single_bets: single,
+        double_bets: dbl,
+        triple_bets: triple,
+        red: round.red,
+        green: round.green,
+        black: round.black,
+      }
+    })
+
+    const coin_movements: PlayerCoinMovement[] = (ledgerRes.data ?? []).map(row => ({
+      id: row.id,
+      kind: row.kind as LedgerKind,
+      label: ledgerKindLabel(row.kind),
+      direction: isCredit(Number(row.amount)) ? 'deposit' : 'withdraw',
+      amount: Math.abs(Number(row.amount)),
+      balance_after: Number(row.balance_after),
+      created_at: istDateTime(row.created_at),
+      created_at_iso: row.created_at,
+    }))
+
+    return { game_plays, coin_movements, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { game_plays: [], coin_movements: [], error: `Could not load history: ${message}` }
   }
-
-  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
-    password: newPassword.trim()
-  })
-
-  if (updateError) {
-    return { error: updateError.message }
-  }
-
-  return { success: true }
 }

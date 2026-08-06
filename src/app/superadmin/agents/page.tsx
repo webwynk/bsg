@@ -33,7 +33,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
 
 export default function AgentsPage() {
-  const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string }>>([])
+  const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; player_count: number }>>([])
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [countdown, setCountdown] = React.useState(60)
@@ -114,17 +114,18 @@ export default function AgentsPage() {
   }
 
   const filteredAgents = agents.filter(agent => {
-    const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = agent.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       agent.username.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || agent.status === statusFilter
+    const matchesStatus = statusFilter === 'all'
+      || (statusFilter === 'Active' ? agent.is_active : !agent.is_active)
     return matchesSearch && matchesStatus
   })
 
   const totalPages = Math.ceil(filteredAgents.length / itemsPerPage) || 1
   const paginatedAgents = filteredAgents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const activeCount = agents.filter(a => a.status === 'Active').length
-  const totalCirculation = agents.reduce((acc, a) => acc + Number(a.balance || 0), 0)
+  const activeCount = agents.filter(a => a.is_active).length
+  const totalCirculation = agents.reduce((acc, a) => acc + Number(a.coin_balance || 0), 0)
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -441,22 +442,22 @@ export default function AgentsPage() {
                     <TableCell className="font-bold text-foreground text-xs sticky left-0 bg-card z-10 py-2">
                       <Link href={`/superadmin/agents/${agent.username}`} className="hover:text-primary transition-colors flex items-center space-x-2">
                         <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 text-xs font-black">
-                          {agent.name[0]?.toUpperCase()}
+                          {agent.full_name[0]?.toUpperCase()}
                         </div>
-                        <span>{agent.name}</span>
+                        <span>{agent.full_name}</span>
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono text-xs py-2">@{agent.username}</TableCell>
                     <TableCell className="text-right text-foreground font-mono font-black text-xs py-2">
-                      {formatCurrency(agent.balance)}
+                      {formatCurrency(agent.coin_balance)}
                     </TableCell>
                     <TableCell className="text-center py-2">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        agent.status === 'Active' 
+                        agent.is_active 
                           ? 'bg-success-bg text-success-text border border-emerald-500/20' 
                           : 'bg-danger-bg text-danger-text border border-red-500/20'
                       }`}>
-                        {agent.status}
+                        {agent.is_active ? "Active" : "Blocked"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap py-2">
@@ -513,25 +514,25 @@ export default function AgentsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-xs shrink-0">
-                    {agent.name[0]?.toUpperCase()}
+                    {agent.full_name[0]?.toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-foreground text-xs leading-tight">{agent.name}</h3>
+                    <h3 className="font-extrabold text-foreground text-xs leading-tight">{agent.full_name}</h3>
                     <p className="text-muted-foreground font-mono text-[11px]">@{agent.username}</p>
                   </div>
                 </div>
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
-                  agent.status === 'Active' 
+                  agent.is_active 
                     ? 'bg-success-bg text-success-text border border-emerald-500/20' 
                     : 'bg-danger-bg text-danger-text border border-red-500/20'
                 }`}>
-                  {agent.status}
+                  {agent.is_active ? "Active" : "Blocked"}
                 </span>
               </div>
 
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
                 <span className="text-muted-foreground font-semibold text-[11px]">Coins Balance</span>
-                <span className="font-mono font-black text-foreground text-sm">{formatCurrency(agent.balance)}</span>
+                <span className="font-mono font-black text-foreground text-sm">{formatCurrency(agent.coin_balance)}</span>
               </div>
 
               <Link

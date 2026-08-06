@@ -21,24 +21,24 @@ import { getAgentProfitReportAction } from './actions'
 
 export default function AgentProfitPage() {
   const [summary, setSummary] = React.useState({
-    todaysPnl: 0,
-    lifetimePnl: 0,
-    totalVolume: 0,
-    totalPayouts: 0,
-    netMarginPct: 0
+    todays_profit: 0,
+    lifetime_profit: 0,
+    total_stake: 0,
+    total_payout: 0,
+    margin_pct: 0
   })
   const [players, setPlayers] = React.useState<Array<{
     id: string
-    name?: string
+    full_name: string
     username: string
-    isActive: boolean
-    balance: number
-    totalPlays: number
-    totalBets: number
-    totalWins: number
-    netPnl: number
-    marginPct: number
-    lastPlayedAt: string
+    is_active: boolean
+    coin_balance: number
+    play_count: number
+    total_stake: number
+    total_payout: number
+    net_profit: number
+    margin_pct: number
+    last_played_at: string | null
   }>>([])
 
   const [isLoading, setIsLoading] = React.useState(true)
@@ -72,8 +72,8 @@ export default function AgentProfitPage() {
       if (res) {
         setSummary(res.summary)
         setPlayers(res.players)
-        setTotalPages(res.totalPages)
-        setTotalItems(res.totalItems)
+        setTotalPages(res.total_pages)
+        setTotalItems(res.total_items)
       }
     }).catch(() => setIsLoading(false))
   }, []) // stable — reads filters from refs, not state
@@ -170,8 +170,8 @@ export default function AgentProfitPage() {
           {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.todaysPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {summary.todaysPnl >= 0 ? '+' : ''}{formatCurrency(summary.todaysPnl)}
+            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.todays_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              {summary.todays_profit >= 0 ? '+' : ''}{formatCurrency(summary.todays_profit)}
             </div>
           )}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily at 00:00</p>
@@ -186,8 +186,8 @@ export default function AgentProfitPage() {
           {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {summary.lifetimePnl >= 0 ? '+' : ''}{formatCurrency(summary.lifetimePnl)}
+            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.lifetime_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              {summary.lifetime_profit >= 0 ? '+' : ''}{formatCurrency(summary.lifetime_profit)}
             </div>
           )}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">All-time net earnings</p>
@@ -203,7 +203,7 @@ export default function AgentProfitPage() {
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate">
-              {formatCurrency(summary.totalVolume)}
+              {formatCurrency(summary.total_stake)}
             </div>
           )}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Total wagered coins</p>
@@ -219,7 +219,7 @@ export default function AgentProfitPage() {
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate">
-              {formatCurrency(summary.totalPayouts)}
+              {formatCurrency(summary.total_payout)}
             </div>
           )}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players</p>
@@ -234,8 +234,8 @@ export default function AgentProfitPage() {
           {isLoading ? (
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
-            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.netMarginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {summary.netMarginPct.toFixed(1)}%
+            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${summary.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              {summary.margin_pct.toFixed(1)}%
             </div>
           )}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Net margin percentage</p>
@@ -366,33 +366,33 @@ export default function AgentProfitPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-1.5">
                         <div>
-                          <div className="font-bold text-xs text-foreground">{p.name || p.username}</div>
+                          <div className="font-bold text-xs text-foreground">{p.full_name || p.username}</div>
                           <div className="text-[10px] text-muted-foreground font-mono">@{p.username}</div>
                         </div>
                         <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                          p.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                          p.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                         }`}>
-                          {p.isActive ? 'Active' : 'Blocked'}
+                          {p.is_active ? 'Active' : 'Blocked'}
                         </span>
                       </div>
-                      <div className={`text-xs font-mono font-black ${p.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {p.netPnl >= 0 ? '+' : ''}{formatCurrency(p.netPnl)}
+                      <div className={`text-xs font-mono font-black ${p.net_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {p.net_profit >= 0 ? '+' : ''}{formatCurrency(p.net_profit)}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-[10px] bg-secondary/30 p-2 rounded-lg border border-border/40">
                       <div>
                         <span className="text-muted-foreground block text-[9px]">Bets (In)</span>
-                        <span className="font-mono font-bold text-foreground">{formatCurrency(p.totalBets)}</span>
+                        <span className="font-mono font-bold text-foreground">{formatCurrency(p.total_stake)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground block text-[9px]">Wins (Out)</span>
-                        <span className="font-mono font-bold text-amber-500">{formatCurrency(p.totalWins)}</span>
+                        <span className="font-mono font-bold text-amber-500">{formatCurrency(p.total_payout)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground block text-[9px]">Margin %</span>
-                        <span className={`font-mono font-black ${p.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                          {p.marginPct.toFixed(1)}%
+                        <span className={`font-mono font-black ${p.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {p.margin_pct.toFixed(1)}%
                         </span>
                       </div>
                     </div>
@@ -419,30 +419,30 @@ export default function AgentProfitPage() {
                         <TableCell className="py-2.5">
                           <div className="flex items-center space-x-2">
                             <div>
-                              <div className="font-bold text-xs text-foreground">{p.name || p.username}</div>
+                              <div className="font-bold text-xs text-foreground">{p.full_name || p.username}</div>
                               <div className="text-[10px] text-muted-foreground font-mono">@{p.username}</div>
                             </div>
                             <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                              p.isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                              p.is_active ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
                             }`}>
-                              {p.isActive ? 'Active' : 'Blocked'}
+                              {p.is_active ? 'Active' : 'Blocked'}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell className="py-2.5 text-center font-mono text-xs font-bold text-muted-foreground">
-                          {p.totalPlays}
+                          {p.play_count}
                         </TableCell>
                         <TableCell className="py-2.5 text-right font-mono text-xs font-bold text-foreground">
-                          {formatCurrency(p.totalBets)}
+                          {formatCurrency(p.total_stake)}
                         </TableCell>
                         <TableCell className="py-2.5 text-right font-mono text-xs font-bold text-amber-500">
-                          {formatCurrency(p.totalWins)}
+                          {formatCurrency(p.total_payout)}
                         </TableCell>
-                        <TableCell className={`py-2.5 text-right font-mono text-xs font-black ${p.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                          {p.netPnl >= 0 ? '+' : ''}{formatCurrency(p.netPnl)}
+                        <TableCell className={`py-2.5 text-right font-mono text-xs font-black ${p.net_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {p.net_profit >= 0 ? '+' : ''}{formatCurrency(p.net_profit)}
                         </TableCell>
-                        <TableCell className={`py-2.5 text-right font-mono text-xs font-black ${p.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                          {p.marginPct.toFixed(1)}%
+                        <TableCell className={`py-2.5 text-right font-mono text-xs font-black ${p.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {p.margin_pct.toFixed(1)}%
                         </TableCell>
                       </TableRow>
                     ))}

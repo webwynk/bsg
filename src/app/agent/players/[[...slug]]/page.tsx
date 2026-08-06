@@ -25,8 +25,9 @@ import {
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { createPlayerAction, getPlayersAction, togglePlayerStatusAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction } from '@/app/agent/players/actions'
-import { transferPointsAction } from '@/app/superadmin/agents/actions'
+import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
+import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
+
 import {
   Table,
   TableBody,
@@ -37,15 +38,7 @@ import {
 } from "@/components/ui/table"
 
 export default function PlayersPage() {
-  const [players, setPlayers] = React.useState<Array<{ 
-    id: string; 
-    name: string; 
-    username: string; 
-    balance: number; 
-    status: string; 
-    isOnline?: boolean;
-    gamePlays: number 
-  }>>([])
+  const [players, setPlayers] = React.useState<PlayerRow[]>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
   const [searchQuery, setSearchQuery] = React.useState('')
@@ -62,40 +55,14 @@ export default function PlayersPage() {
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
 
   // History data states
-  const [gamePlays, setGamePlays] = React.useState<Array<{
-    id: string
-    game: string
-    mode: string
-    selections: string
-    resultNumber: number
-    bet: number
-    win: number
-    status: 'WON' | 'LOST'
-    isResolved: boolean
-    date: string
-    createdAtIso: string
-    singleBets: Record<string, number>
-    doubleBets: Record<string, number>
-    tripleBets: Record<string, number>
-    redDigit: number | null
-    greenDigit: number | null
-    blackDigit: number | null
-  }>>([])
+  const [gamePlays, setGamePlays] = React.useState<PlayerGamePlay[]>([])
   const [expandedSpins, setExpandedSpins] = React.useState<Record<string, boolean>>({})
 
   const toggleSpinExpand = (spinId: string) => {
     setExpandedSpins(prev => ({ ...prev, [spinId]: !prev[spinId] }))
   }
 
-  const [pointsHistory, setPointsHistory] = React.useState<Array<{
-    id: string
-    type: 'deposit' | 'withdraw'
-    txType: string
-    amount: number
-    balanceAfter: number
-    date: string
-    createdAtIso: string
-  }>>([])
+  const [pointsHistory, setPointsHistory] = React.useState<PlayerCoinMovement[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
 
   // Scope state for Performance Summary Bar: 'today' | 'lifetime'
@@ -133,8 +100,8 @@ export default function PlayersPage() {
     })
 
     const totalPlays = targetPlays.length
-    const totalBet = targetPlays.reduce((sum, p) => sum + p.bet, 0)
-    const totalWin = targetPlays.reduce((sum, p) => sum + p.win, 0)
+    const totalBet = targetPlays.reduce((sum, p) => sum + p.total_stake, 0)
+    const totalWin = targetPlays.reduce((sum, p) => sum + p.total_payout, 0)
     const netGgr = totalBet - totalWin
     const marginPct = totalBet > 0 ? (netGgr / totalBet) * 100 : 0
 
@@ -148,11 +115,11 @@ export default function PlayersPage() {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
         const spinDateStr = (spin as any).createdAtIso 
           ? new Date((spin as any).createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          : spin.date
+          : spin.created_at
         if (spinDateStr !== filterDateStr) return false
       }
 
-      if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
+      if (filterOutcome !== 'all' && spin.outcome !== filterOutcome) {
         return false
       }
 
@@ -169,9 +136,9 @@ export default function PlayersPage() {
     return pointsHistory.filter(tx => {
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        const txDateStr = tx.createdAtIso
-          ? new Date(tx.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          : tx.date
+        const txDateStr = tx.created_at_iso
+          ? new Date(tx.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : tx.created_at
         if (txDateStr !== filterDateStr) return false
       }
       return true
@@ -223,8 +190,8 @@ export default function PlayersPage() {
     getPlayerDetailHistoryAction(playerId).then((res) => {
       setIsLoadingHistory(false)
       if (res) {
-        setGamePlays(res.gamePlays)
-        setPointsHistory(res.pointsHistory)
+        setGamePlays(res.game_plays)
+        setPointsHistory(res.coin_movements)
       }
     }).catch(() => setIsLoadingHistory(false))
   }, [])
@@ -354,7 +321,7 @@ export default function PlayersPage() {
     setIsTransferring(true)
     setTransferError(null)
 
-    const res = await transferPointsAction(selectedPlayer.id, amountNum, type)
+    const res = await transferPlayerCoinsAction(selectedPlayer.id, amountNum, type === 'deposit' ? 'credit' : 'debit')
 
     setIsTransferring(false)
     if (res.error) {
@@ -372,10 +339,12 @@ export default function PlayersPage() {
 
   const handleToggleStatus = async () => {
     if (!selectedPlayer) return
-    const nextStatus = selectedPlayer.status === 'Active' ? 'Disabled' : 'Active'
     setIsTogglingStatus(true)
 
-    const res = await togglePlayerStatusAction(selectedPlayer.id, nextStatus)
+    // B-1 FIX: pass the DESIRED end state. The old code computed a "next
+    // status" string and the action then derived its own new value from it, so
+    // the two inversions cancelled and both buttons were no-ops.
+    const res = await setPlayerActiveAction(selectedPlayer.id, !selectedPlayer.is_active)
 
     setIsTogglingStatus(false)
     if (!res.error) {
@@ -415,7 +384,7 @@ export default function PlayersPage() {
   }
 
   const filteredPlayers = players.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.username.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -633,7 +602,7 @@ export default function PlayersPage() {
             ) : filteredPlayers.length > 0 ? (
               filteredPlayers.map((player) => {
                 const isSelected = selectedPlayer?.id === player.id
-                const isPlayerOnline = player.isOnline && player.status === 'Active'
+                const isPlayerOnline = player.is_online && player.is_active
                 return (
                   <button
                     key={player.id}
@@ -650,20 +619,20 @@ export default function PlayersPage() {
                           <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] ${
                             isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
                           }`}>
-                            {player.name[0]?.toUpperCase()}
+                            {player.full_name[0]?.toUpperCase()}
                           </div>
                           <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
                             isPlayerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                           }`} />
                         </div>
-                        <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
+                        <span className="font-extrabold text-xs truncate leading-tight">{player.full_name}</span>
                       </div>
                       <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
-                        player.status === 'Active'
+                        player.is_active
                           ? 'bg-success-bg text-success-text border border-emerald-500/20'
                           : 'bg-danger-bg text-danger-text border border-red-500/20'
                       }`}>
-                        {player.status}
+                        {player.is_active ? 'Active' : 'Blocked'}
                       </span>
                     </div>
 
@@ -672,7 +641,7 @@ export default function PlayersPage() {
                       {isRefreshing || isLoadingPlayers ? (
                         <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
                       ) : (
-                        <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
+                        <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.coin_balance)}</span>
                       )}
                     </div>
                   </button>
@@ -705,28 +674,28 @@ export default function PlayersPage() {
 
                     <div className="relative shrink-0">
                       <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm">
-                        {selectedPlayer.name[0]?.toUpperCase()}
+                        {selectedPlayer.full_name[0]?.toUpperCase()}
                       </div>
                       <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
-                        selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                        selectedPlayer.is_online && selectedPlayer.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                       }`} />
                     </div>
 
                     <div className="min-w-0">
                       <div className="flex items-center space-x-2">
-                        <h2 className="text-sm sm:text-base font-black text-foreground truncate">{selectedPlayer.name}</h2>
+                        <h2 className="text-sm sm:text-base font-black text-foreground truncate">{selectedPlayer.full_name}</h2>
                         <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black shrink-0 ${
-                          selectedPlayer.status === 'Active'
+                          selectedPlayer.is_active
                             ? 'bg-success-bg text-success-text border border-emerald-500/20'
                             : 'bg-danger-bg text-danger-text border border-red-500/20'
                         }`}>
-                          {selectedPlayer.status}
+                          {selectedPlayer.is_active ? 'Active' : 'Blocked'}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2 text-[10px] font-mono">
                         <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
                         <span className="text-muted-foreground/60">&bull;</span>
-                        {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
+                        {selectedPlayer.is_online && selectedPlayer.is_active ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
                             Real-Time Sync Active
@@ -751,7 +720,7 @@ export default function PlayersPage() {
                         <div className="h-5 w-16 bg-secondary/80 rounded animate-pulse mt-0.5" />
                       ) : (
                         <span className="text-base font-mono font-black text-foreground">
-                          {formatCurrency(selectedPlayer.balance)}
+                          {formatCurrency(selectedPlayer.coin_balance)}
                         </span>
                       )}
                     </div>
@@ -777,7 +746,7 @@ export default function PlayersPage() {
                       <DialogHeader>
                         <DialogTitle className="font-black text-lg">Deposit Coins</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
-                          Issue cashier coins to {selectedPlayer.name} (@{selectedPlayer.username}).
+                          Issue cashier coins to {selectedPlayer.full_name} (@{selectedPlayer.username}).
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-3 py-2">
@@ -835,7 +804,7 @@ export default function PlayersPage() {
                       <DialogHeader>
                         <DialogTitle className="font-black text-lg">Withdraw Coins</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
-                          Deduct cashier coins from {selectedPlayer.name} (@{selectedPlayer.username}).
+                          Deduct cashier coins from {selectedPlayer.full_name} (@{selectedPlayer.username}).
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-3 py-2">
@@ -899,7 +868,7 @@ export default function PlayersPage() {
                       <DialogHeader>
                         <DialogTitle className="font-black text-lg">Reset Player Password</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
-                          Set a new password for {selectedPlayer.name}.
+                          Set a new password for {selectedPlayer.full_name}.
                         </DialogDescription>
                       </DialogHeader>
                       <form onSubmit={handleResetPassword} className="space-y-3 py-2">
@@ -976,15 +945,15 @@ export default function PlayersPage() {
                     disabled={isTogglingStatus}
                     variant="outline"
                     className={`w-full h-8 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center ${
-                      selectedPlayer.status === 'Active'
+                      selectedPlayer.is_active
                         ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
                         : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
                     }`}
                   >
                     {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
-                      selectedPlayer.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
+                      selectedPlayer.is_active ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
                     )}
-                    {selectedPlayer.status === 'Active' ? 'Disable Player' : 'Activate Player'}
+                    {selectedPlayer.is_active ? 'Disable Player' : 'Activate Player'}
                   </Button>
                 </div>
               </Card>
@@ -1210,27 +1179,27 @@ export default function PlayersPage() {
                         {/* --- MOBILE CARDS VIEW (< sm) --- */}
                         <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
                           {paginatedGames.map((spin) => {
-                            const isExpanded = !!expandedSpins[spin.id]
-                            const singleCount = Object.keys(spin.singleBets || {}).length
-                            const doubleCount = Object.keys(spin.doubleBets || {}).length
-                            const tripleCount = Object.keys(spin.tripleBets || {}).length
+                            const isExpanded = !!expandedSpins[spin.hand_id]
+                            const singleCount = Object.keys(spin.single_bets || {}).length
+                            const doubleCount = Object.keys(spin.double_bets || {}).length
+                            const tripleCount = Object.keys(spin.triple_bets || {}).length
 
                             return (
-                              <Card key={spin.id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
+                              <Card key={spin.hand_id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
                                 {/* Card Header */}
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-2 min-w-0">
-                                    <span className="font-mono text-xs font-black text-foreground">#{spin.id}</span>
-                                    <span className="text-xs font-semibold text-muted-foreground truncate">{spin.game}</span>
+                                    <span className="font-mono text-xs font-black text-foreground">#{spin.hand_id}</span>
+                                    <span className="text-xs font-semibold text-muted-foreground truncate">{'Triple Chance'}</span>
                                   </div>
                                   <div className="flex items-center space-x-2">
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                      spin.status === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+                                      spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
                                     }`}>
-                                      {spin.status}
+                                      {spin.outcome}
                                     </span>
                                     <button
-                                      onClick={() => toggleSpinExpand(spin.id)}
+                                      onClick={() => toggleSpinExpand(spin.hand_id)}
                                       className="p-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
                                       style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
                                       aria-label="Toggle Details"
@@ -1243,7 +1212,7 @@ export default function PlayersPage() {
                                 {/* Card Sub-header */}
                                 <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
                                   <span className="font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{spin.mode}</span>
-                                  <span className="font-mono">{spin.date}</span>
+                                  <span className="font-mono">{spin.created_at}</span>
                                 </div>
 
                                 {/* Card Metrics Strip */}
@@ -1251,17 +1220,17 @@ export default function PlayersPage() {
                                   <div>
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Result</span>
                                     <span className="font-mono font-black text-primary bg-primary/10 px-1.5 py-0.2 rounded inline-block">
-                                      {spin.resultNumber.toString().padStart(3, '0')}
+                                      {spin.result.toString().padStart(3, '0')}
                                     </span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Bet</span>
-                                    <span className="font-mono font-black text-foreground">{formatCurrency(spin.bet)}</span>
+                                    <span className="font-mono font-black text-foreground">{formatCurrency(spin.total_stake)}</span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Win</span>
-                                    <span className={`font-mono font-black ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                      {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
+                                    <span className={`font-mono font-black ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                      {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
                                     </span>
                                   </div>
                                 </div>
@@ -1282,8 +1251,8 @@ export default function PlayersPage() {
                                       </div>
                                       {singleCount > 0 ? (
                                         <div className="space-y-1 max-h-[140px] overflow-y-auto pr-0.5 custom-scrollbar">
-                                          {Object.entries(spin.singleBets).map(([num, val]) => {
-                                            const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
+                                          {Object.entries(spin.single_bets).map(([num, val]) => {
+                                            const isWinning = spin.black !== null && num === spin.black.toString()
                                             return (
                                               <div key={num} className={`w-full flex items-center justify-between p-1.5 rounded-md text-[11px] ${
                                                 isWinning ? 'bg-zinc-950 text-white border border-zinc-700 font-extrabold' : 'bg-card text-foreground border border-border/40'
@@ -1312,9 +1281,9 @@ export default function PlayersPage() {
                                       </div>
                                       {doubleCount > 0 ? (
                                         <div className="space-y-1 max-h-[140px] overflow-y-auto pr-0.5 custom-scrollbar">
-                                          {Object.entries(spin.doubleBets).map(([num, val]) => {
-                                            const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
-                                              ? `${spin.greenDigit}${spin.blackDigit}` 
+                                          {Object.entries(spin.double_bets).map(([num, val]) => {
+                                            const targetDouble = (spin.green !== null && spin.black !== null) 
+                                              ? `${spin.green}${spin.black}` 
                                               : null
                                             const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
                                             return (
@@ -1345,9 +1314,9 @@ export default function PlayersPage() {
                                       </div>
                                       {tripleCount > 0 ? (
                                         <div className="space-y-1 max-h-[140px] overflow-y-auto pr-0.5 custom-scrollbar">
-                                          {Object.entries(spin.tripleBets).map(([num, val]) => {
-                                            const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
-                                              ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
+                                          {Object.entries(spin.triple_bets).map(([num, val]) => {
+                                            const targetTriple = (spin.red !== null && spin.green !== null && spin.black !== null) 
+                                              ? `${spin.red}${spin.green}${spin.black}` 
                                               : null
                                             const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
                                             return (
@@ -1389,17 +1358,17 @@ export default function PlayersPage() {
                             </TableHeader>
                             <TableBody>
                               {paginatedGames.map((spin) => {
-                                const isExpanded = !!expandedSpins[spin.id]
-                                const singleCount = Object.keys(spin.singleBets || {}).length
-                                const doubleCount = Object.keys(spin.doubleBets || {}).length
-                                const tripleCount = Object.keys(spin.tripleBets || {}).length
+                                const isExpanded = !!expandedSpins[spin.hand_id]
+                                const singleCount = Object.keys(spin.single_bets || {}).length
+                                const doubleCount = Object.keys(spin.double_bets || {}).length
+                                const tripleCount = Object.keys(spin.triple_bets || {}).length
 
                                 return (
-                                  <React.Fragment key={spin.id}>
+                                  <React.Fragment key={spin.hand_id}>
                                     <TableRow className="border-border hover:bg-secondary/30 transition-colors">
                                       <TableCell className="p-2">
                                         <button
-                                          onClick={() => toggleSpinExpand(spin.id)}
+                                          onClick={() => toggleSpinExpand(spin.hand_id)}
                                           className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
                                           style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
                                           aria-label={isExpanded ? "Collapse details" : "Expand details"}
@@ -1407,26 +1376,26 @@ export default function PlayersPage() {
                                           <ChevronRight className="h-3.5 w-3.5" />
                                         </button>
                                       </TableCell>
-                                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{spin.id}</TableCell>
-                                      <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{spin.game}</TableCell>
+                                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{spin.hand_id}</TableCell>
+                                      <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{'Triple Chance'}</TableCell>
                                       <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
-                                      <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.date}</TableCell>
+                                      <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.created_at}</TableCell>
                                       <TableCell className="text-center p-2.5">
                                         <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
-                                          {spin.resultNumber.toString().padStart(3, '0')}
+                                          {spin.result.toString().padStart(3, '0')}
                                         </span>
                                       </TableCell>
                                       <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                        {formatCurrency(spin.bet)}
+                                        {formatCurrency(spin.total_stake)}
                                       </TableCell>
-                                      <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                        {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
+                                      <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                        {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
                                       </TableCell>
                                       <TableCell className="text-center p-2.5">
                                         <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                          spin.status === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+                                          spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
                                         }`}>
-                                          {spin.status}
+                                          {spin.outcome}
                                         </span>
                                       </TableCell>
                                     </TableRow>
@@ -1449,8 +1418,8 @@ export default function PlayersPage() {
                                               </div>
                                               {singleCount > 0 ? (
                                                 <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-                                                  {Object.entries(spin.singleBets).map(([num, val]) => {
-                                                    const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
+                                                  {Object.entries(spin.single_bets).map(([num, val]) => {
+                                                    const isWinning = spin.black !== null && num === spin.black.toString()
                                                     return (
                                                       <div key={num} className={`w-full flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
                                                         isWinning ? 'bg-zinc-950 text-white border border-zinc-700 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
@@ -1479,9 +1448,9 @@ export default function PlayersPage() {
                                               </div>
                                               {doubleCount > 0 ? (
                                                 <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-                                                  {Object.entries(spin.doubleBets).map(([num, val]) => {
-                                                    const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
-                                                      ? `${spin.greenDigit}${spin.blackDigit}` 
+                                                  {Object.entries(spin.double_bets).map(([num, val]) => {
+                                                    const targetDouble = (spin.green !== null && spin.black !== null) 
+                                                      ? `${spin.green}${spin.black}` 
                                                       : null
                                                     const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
                                                     return (
@@ -1512,9 +1481,9 @@ export default function PlayersPage() {
                                               </div>
                                               {tripleCount > 0 ? (
                                                 <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-                                                  {Object.entries(spin.tripleBets).map(([num, val]) => {
-                                                    const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
-                                                      ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
+                                                  {Object.entries(spin.triple_bets).map(([num, val]) => {
+                                                    const targetTriple = (spin.red !== null && spin.green !== null && spin.black !== null) 
+                                                      ? `${spin.red}${spin.green}${spin.black}` 
                                                       : null
                                                     const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
                                                     return (
@@ -1577,23 +1546,23 @@ export default function PlayersPage() {
                             {paginatedPoints.map((tx) => (
                               <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
                                 <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
-                                <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
+                                <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.created_at}</TableCell>
                                 <TableCell className="text-[11px] p-2.5">
                                   <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
-                                    tx.type === 'deposit'
+                                    tx.direction === 'deposit'
                                       ? 'bg-success-bg text-success-text border border-emerald-500/20'
                                       : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
                                   }`}>
-                                    {tx.type}
+                                    {tx.direction}
                                   </span>
                                 </TableCell>
                                 <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
-                                  tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
+                                  tx.direction === 'deposit' ? 'text-success-text' : 'text-amber-400'
                                 }`}>
-                                  {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
+                                  {tx.direction === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                  {formatCurrency(tx.balanceAfter)}
+                                  {formatCurrency(tx.balance_after)}
                                 </TableCell>
                               </TableRow>
                             ))}

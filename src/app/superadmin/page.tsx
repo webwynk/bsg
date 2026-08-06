@@ -46,7 +46,7 @@ export default function SuperAdminDashboard() {
   }>>([])
   const [nowTime, setNowTime] = React.useState(Date.now())
 
-  const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; type: string; detail: string; time: string }>>([])
+  const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; kind: string; detail: string; time: string; actor: string }>>([])
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
@@ -78,18 +78,18 @@ export default function SuperAdminDashboard() {
     ]).then(([resMetrics, resRtp, resLogs]) => {
       setIsLoadingMetrics(false)
       if (resMetrics) {
-        setTotalCoins(resMetrics.totalCoins || 0)
-        setTodaysCoins(resMetrics.todaysCoinsIssued || 0)
-        setActiveAgents(resMetrics.activeAgents || 0)
-        setActivePlayers(resMetrics.activePlayers || 0)
-        setTotalBetsCount(resMetrics.totalBetsCount || 0)
-        setTotalBetCoins(resMetrics.totalBetCoins || 0)
-        setTotalWinCoins(resMetrics.totalWinCoins || 0)
-        setTotalLostCoins(resMetrics.totalLostCoins || 0)
-        setTodayBetsCount(resMetrics.todayBetsCount || 0)
-        setTodayBetCoins(resMetrics.todayBetCoins || 0)
-        setTodayWinCoins(resMetrics.todayWinCoins || 0)
-        setTodayLostCoins(resMetrics.todayLostCoins || 0)
+        setTotalCoins(resMetrics.total_coins || 0)
+        setTodaysCoins(resMetrics.net_issued_today || 0)
+        setActiveAgents(resMetrics.active_agents || 0)
+        setActivePlayers(resMetrics.active_players || 0)
+        setTotalBetsCount(resMetrics.lifetime_bets || 0)
+        setTotalBetCoins(resMetrics.lifetime_stake || 0)
+        setTotalWinCoins(resMetrics.lifetime_payout || 0)
+        setTotalLostCoins(resMetrics.lifetime_house || 0)
+        setTodayBetsCount(resMetrics.today_bets || 0)
+        setTodayBetCoins(resMetrics.today_stake || 0)
+        setTodayWinCoins(resMetrics.today_payout || 0)
+        setTodayLostCoins(resMetrics.today_house || 0)
       }
       if (resRtp?.rtp) {
         setRtpValue(resRtp.rtp)
@@ -141,12 +141,12 @@ export default function SuperAdminDashboard() {
   // Filtered & Paginated Logs
   const filteredLogs = React.useMemo(() => {
     return systemLogs.filter(log => {
-      if (logCategory !== 'ALL' && log.type.toUpperCase() !== logCategory.toUpperCase()) {
+      if (logCategory !== 'ALL' && log.kind.toUpperCase() !== logCategory.toUpperCase()) {
         return false
       }
       if (logSearchQuery.trim()) {
         const query = logSearchQuery.toLowerCase()
-        return log.detail.toLowerCase().includes(query) || log.type.toLowerCase().includes(query)
+        return log.detail.toLowerCase().includes(query) || log.kind.toLowerCase().includes(query)
       }
       return true
     })
@@ -598,8 +598,8 @@ export default function SuperAdminDashboard() {
                   <div key={log.id} className="relative pl-6 flex items-center justify-between gap-3 p-2 rounded-xl bg-secondary/20 border border-border/40 hover:bg-secondary/40 transition-colors">
                     <span className="absolute left-2 top-3 w-2 h-2 rounded-full border border-card bg-background flex items-center justify-center">
                       <span className={`w-1.5 h-1.5 rounded-full ${
-                        log.type.toUpperCase() === 'SECURITY' ? 'bg-red-500' :
-                        log.type.toUpperCase() === 'SYSTEM' ? 'bg-emerald-500' : 'bg-blue-500'
+                        log.kind.toUpperCase() === 'SECURITY' ? 'bg-red-500' :
+                        log.kind.toUpperCase() === 'SYSTEM' ? 'bg-emerald-500' : 'bg-blue-500'
                       }`} />
                     </span>
 
@@ -611,10 +611,10 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase tracking-wider shrink-0 ${
-                      log.type.toUpperCase() === 'SECURITY' ? 'bg-danger-bg text-danger-text border border-red-500/20' :
-                      log.type.toUpperCase() === 'SYSTEM' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-info-bg text-info-text border border-blue-500/20'
+                      log.kind.toUpperCase() === 'SECURITY' ? 'bg-danger-bg text-danger-text border border-red-500/20' :
+                      log.kind.toUpperCase() === 'SYSTEM' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-info-bg text-info-text border border-blue-500/20'
                     }`}>
-                      {log.type}
+                      {log.kind}
                     </span>
                   </div>
                 ))}

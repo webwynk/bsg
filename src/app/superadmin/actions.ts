@@ -1,458 +1,345 @@
 'use server'
 
+import { createAdminClient } from '@/lib/supabase'
+
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/auth-guard'
+import { asRpc, type CurrentRound } from '@/lib/rpc'
 
-export async function logAuditEventAction(type: string, detail: string) {
+/**
+ * SuperAdmin system actions — v2.
+ *
+ * Table renames from v1: transactions -> coin_ledger, triple_chance_bets ->
+ * bets, triple_chance_rounds -> rounds, agent_configs -> game_config,
+ * balance -> coin_balance, win_amount -> total_payout.
+ *
+ * Fixes carried in this rewrite:
+ *   B-2  "Active Network" counted every profile regardless of is_active, so
+ *        blocked accounts were reported as active.
+ *   B-3  "Today Issued" only counted positive admin_adjustment rows, so
+ *        withdrawals never reduced it and the label overstated issuance. It now
+ *        nets admin_credit against admin_debit and is labelled as net issuance.
+ *   M-7  The game_history fallback is gone; that table never existed.
+ *
+ * Errors are surfaced rather than swallowed — `catch (_) {}` around a query is
+ * what allowed three schema mismatches to reach production unnoticed.
+ */
+
+
+function istDayStartISO(): string {
+  const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  return new Date(`${day}T00:00:00+05:30`).toISOString()
+}
+
+function istTime(value: string): string {
+  return new Date(value).toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────────────────────────────────────────
+export type AuditKind = 'system' | 'coin' | 'security' | 'account'
+
+export async function logAuditEventAction(kind: AuditKind, detail: string) {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) return
+  if (auth.error || !auth.user) return
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      // Insert into audit_log table
-      try {
-        await supabaseAdmin.from('audit_log').insert({ type, detail })
-      } catch (_) {}
-
-      // Also append to admin user metadata fallback
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
-
-      if (adminUser) {
-        const existingLogs = adminUser.user_metadata?.audit_logs || []
-        const newLog = {
-          id: Math.random().toString(36).substring(2, 9),
-          time: new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }),
-          type,
-          detail,
-          created_at: new Date().toISOString()
-        }
-        const updatedLogs = [newLog, ...existingLogs].slice(0, 30)
-
-        await supabaseAdmin.auth.admin.updateUserById(adminUser.id, {
-          user_metadata: {
-            ...adminUser.user_metadata,
-            audit_logs: updatedLogs
-          }
-        })
-      }
-    } catch (_) {}
+  try {
+    await createAdminClient().from('audit_log').insert({ actor_id: auth.user.id, kind, detail })
+  } catch {
+    // Audit logging must never break the operation it is recording.
   }
 }
 
-export async function getAuditLogsAction() {
+export async function getAuditLogsAction(): Promise<{
+  logs: Array<{ id: string; kind: string; detail: string; time: string; actor: string }>
+  error: string | null
+}> {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { logs: [] }
-  }
+  if (auth.error) return { logs: [], error: auth.error }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  try {
+    const db = createAdminClient()
+    const { data, error } = await db
+      .from('audit_log')
+      .select('id, kind, detail, created_at, actor_id')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (error) throw new Error(error.message)
 
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      // Try reading from audit_log table
-      const { data, error } = await supabaseAdmin
-        .from('audit_log')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10)
-
-      if (!error && data && data.length > 0) {
-        const logs = data.map(item => ({
-          id: item.id,
-          type: item.type || 'System',
-          detail: item.detail,
-          time: new Date(item.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
-        }))
-        return { logs }
-      }
-
-      // Fallback: fetch from admin metadata
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
-      if (adminUser && adminUser.user_metadata?.audit_logs) {
-        return { logs: adminUser.user_metadata.audit_logs }
-      }
-    } catch (_) {}
-  }
-  return { logs: [] }
-}
-
-export async function getSystemOverviewMetricsAction() {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return {
-      totalCoins: 0,
-      todaysCoinsIssued: 0,
-      activeAgents: 0,
-      activePlayers: 0,
-      totalBetsCount: 0,
-      totalBetCoins: 0,
-      totalWinCoins: 0,
-      totalLostCoins: 0,
-      todayBetsCount: 0,
-      todayBetCoins: 0,
-      todayWinCoins: 0,
-      todayLostCoins: 0
+    // Actor names come from a second query rather than a PostgREST embed.
+    // Embeds silently drop rows when the relationship cannot be resolved — a
+    // failure mode this codebase has already been bitten by — and they defeat
+    // the generated column types.
+    const actorIds = [...new Set((data ?? []).map(r => r.actor_id).filter((x): x is string => !!x))]
+    const names = new Map<string, string>()
+    if (actorIds.length > 0) {
+      const { data: actors } = await db.from('profiles').select('id, username').in('id', actorIds)
+      for (const a of actors ?? []) names.set(a.id, a.username)
     }
-  }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      // Calculate Asia/Kolkata (IST - UTC+5:30) today start (00:00:00 IST)
-      const now = new Date()
-      const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-      const istTodayStart = new Date(`${istTodayString}T00:00:00+05:30`)
-      const todayStartISO = istTodayStart.toISOString()
-
-      const [profilesRes, txnsRes, roundBetsRes, todayRoundBetsRes] = await Promise.all([
-        supabaseAdmin.from('profiles').select('role, balance').range(0, 999999),
-        supabaseAdmin.from('transactions').select('amount').eq('type', 'admin_adjustment').gte('amount', 0).gte('created_at', todayStartISO).range(0, 999999),
-        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').range(0, 999999),
-        supabaseAdmin.from('triple_chance_bets').select('total_stake, win_amount').gte('created_at', todayStartISO).range(0, 999999)
-      ])
-
-      let totalCoins = 0
-      let activeAgents = 0
-      let activePlayers = 0
-
-      if (profilesRes.data && profilesRes.data.length > 0) {
-        for (const p of profilesRes.data) {
-          totalCoins += Number(p.balance || 0)
-          if (p.role === 'agent') activeAgents++
-          if (p.role === 'player') activePlayers++
-        }
-      } else {
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        const allUsers = usersData?.users || []
-        const agents = allUsers.filter(u => u.user_metadata?.role === 'agent')
-        const players = allUsers.filter(u => u.user_metadata?.role === 'player')
-        activeAgents = agents.length
-        activePlayers = players.length
-        totalCoins = allUsers.reduce((acc, u) => acc + Number(u.user_metadata?.balance || 0), 0)
-      }
-
-      // Today's coins issued (resets daily at 00:00 IST)
-      const todaysCoinsIssued = txnsRes.data ? txnsRes.data.reduce((acc, tx) => acc + Number(tx.amount || 0), 0) : 0
-
-      // Overall Lifetime Gameplay Stats
-      const roundSpins = roundBetsRes.data || []
-      const totalBetsCount = roundSpins.length
-      const totalBetCoins = roundSpins.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
-      const totalWinCoins = roundSpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
-      const totalLostCoins = totalBetCoins - totalWinCoins
-
-      // Today IST Gameplay Stats
-      const todaySpins = todayRoundBetsRes.data || []
-      const todayBetsCount = todaySpins.length
-      const todayBetCoins = todaySpins.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
-      const todayWinCoins = todaySpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
-      const todayLostCoins = todayBetCoins - todayWinCoins
-
-      return {
-        totalCoins,
-        todaysCoinsIssued,
-        activeAgents,
-        activePlayers,
-        totalBetsCount,
-        totalBetCoins,
-        totalWinCoins,
-        totalLostCoins,
-        todayBetsCount,
-        todayBetCoins,
-        todayWinCoins,
-        todayLostCoins
-      }
-    } catch (_) {}
-  }
-
-  return {
-    totalCoins: 0,
-    todaysCoinsIssued: 0,
-    activeAgents: 0,
-    activePlayers: 0,
-    totalBetsCount: 0,
-    totalBetCoins: 0,
-    totalWinCoins: 0,
-    totalLostCoins: 0,
-    todayBetsCount: 0,
-    todayBetCoins: 0,
-    todayWinCoins: 0,
-    todayLostCoins: 0
+    return {
+      logs: (data ?? []).map(row => ({
+        id: row.id,
+        kind: row.kind,
+        detail: row.detail,
+        time: istTime(row.created_at),
+        actor: row.actor_id && names.has(row.actor_id) ? `@${names.get(row.actor_id)}` : 'system',
+      })),
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { logs: [], error: `Could not load audit log: ${message}` }
   }
 }
 
-export async function getRtpAction() {
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM OVERVIEW
+// ─────────────────────────────────────────────────────────────────────────────
+export interface SystemMetrics {
+  total_coins: number
+  net_issued_today: number
+  active_agents: number
+  active_players: number
+  lifetime_bets: number
+  lifetime_stake: number
+  lifetime_payout: number
+  lifetime_house: number
+  today_bets: number
+  today_stake: number
+  today_payout: number
+  today_house: number
+  error: string | null
+}
+
+const EMPTY_METRICS: SystemMetrics = {
+  total_coins: 0, net_issued_today: 0, active_agents: 0, active_players: 0,
+  lifetime_bets: 0, lifetime_stake: 0, lifetime_payout: 0, lifetime_house: 0,
+  today_bets: 0, today_stake: 0, today_payout: 0, today_house: 0, error: null,
+}
+
+export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { rtp: 96.0 }
+  if (auth.error) return { ...EMPTY_METRICS, error: auth.error }
+
+  try {
+    const db = createAdminClient()
+    const dayStart = istDayStartISO()
+
+    const [profilesRes, issuedRes, allBetsRes, todayBetsRes] = await Promise.all([
+      // .range() defeats PostgREST's 1,000-row default cap.
+      db.from('profiles').select('role, coin_balance, is_active').range(0, 999999),
+      db.from('coin_ledger').select('amount')
+        .in('kind', ['admin_credit', 'admin_debit'])
+        .gte('created_at', dayStart).range(0, 999999),
+      db.from('bets').select('total_stake, total_payout').range(0, 999999),
+      db.from('bets').select('total_stake, total_payout')
+        .gte('created_at', dayStart).range(0, 999999),
+    ])
+    if (profilesRes.error)  throw new Error(`profiles: ${profilesRes.error.message}`)
+    if (issuedRes.error)    throw new Error(`ledger: ${issuedRes.error.message}`)
+    if (allBetsRes.error)   throw new Error(`bets: ${allBetsRes.error.message}`)
+    if (todayBetsRes.error) throw new Error(`today bets: ${todayBetsRes.error.message}`)
+
+    let total_coins = 0, active_agents = 0, active_players = 0
+    for (const p of profilesRes.data ?? []) {
+      total_coins += Number(p.coin_balance ?? 0)
+      // B-2: only count accounts that are actually active.
+      if (!p.is_active) continue
+      if (p.role === 'agent')  active_agents++
+      if (p.role === 'player') active_players++
+    }
+
+    // B-3: net issuance — credits minus withdrawals, not credits alone.
+    const net_issued_today = (issuedRes.data ?? [])
+      .reduce((sum, r) => sum + Number(r.amount ?? 0), 0)
+
+    const sum = (rows: Array<{ total_stake: unknown; total_payout: unknown }>) => ({
+      count: rows.length,
+      stake: rows.reduce((s, r) => s + Number(r.total_stake ?? 0), 0),
+      payout: rows.reduce((s, r) => s + Number(r.total_payout ?? 0), 0),
+    })
+    const lifetime = sum(allBetsRes.data ?? [])
+    const today = sum(todayBetsRes.data ?? [])
+
+    return {
+      total_coins,
+      net_issued_today,
+      active_agents,
+      active_players,
+      lifetime_bets: lifetime.count,
+      lifetime_stake: lifetime.stake,
+      lifetime_payout: lifetime.payout,
+      lifetime_house: lifetime.stake - lifetime.payout,
+      today_bets: today.count,
+      today_stake: today.stake,
+      today_payout: today.payout,
+      today_house: today.stake - today.payout,
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { ...EMPTY_METRICS, error: `Could not load metrics: ${message}` }
   }
+}
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+// ─────────────────────────────────────────────────────────────────────────────
+// RTP CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getRtpAction(): Promise<{ rtp: number; error: string | null }> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { rtp: 96, error: auth.error }
 
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      const { data, error } = await supabaseAdmin
-        .from('agent_configs')
-        .select('rtp_percentage, target_win_percentage')
-        .or('agent_id.is.null,id.eq.global_system_config')
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (!error && data) {
-        const val = data.target_win_percentage ?? data.rtp_percentage
-        if (val !== undefined && val !== null) {
-          return { rtp: Number(val) }
-        }
-      }
-
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
-      if (adminUser?.user_metadata?.rtp !== undefined) {
-        return { rtp: Number(adminUser.user_metadata.rtp) }
-      }
-    } catch (_) {}
+  try {
+    const { data, error } = await createAdminClient()
+      .from('game_config').select('rtp_percentage').eq('id', 'global').single()
+    if (error) throw new Error(error.message)
+    return { rtp: Number(data.rtp_percentage), error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { rtp: 96, error: `Could not read RTP: ${message}` }
   }
-
-  return { rtp: 96.0 }
 }
 
 export async function updateRtpAction(rtpPercentage: number) {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { success: false, error: auth.error }
-  }
+  if (auth.error || !auth.user) return { success: false, error: auth.error ?? 'Unauthorized' }
 
-  if (typeof rtpPercentage !== 'number' || rtpPercentage < 50 || rtpPercentage > 100) {
-    return { success: false, error: 'Invalid RTP value. Must be between 50% and 100%.' }
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (serviceRoleKey && supabaseUrl) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      })
-
-      await supabaseAdmin
-        .from('agent_configs')
-        .upsert({
-          id: 'global_system_config',
-          rtp_percentage: rtpPercentage,
-          target_win_percentage: rtpPercentage,
-          updated_at: new Date().toISOString()
-        })
-
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
-
-      if (adminUser) {
-        const existingLogs = adminUser.user_metadata?.audit_logs || []
-        const newLog = {
-          id: Math.random().toString(36).substring(2, 9),
-          time: new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }),
-          type: 'System',
-          detail: `Global RTP target updated to ${rtpPercentage}%`,
-          created_at: new Date().toISOString()
-        }
-
-        const updatedLogs = [newLog, ...existingLogs].slice(0, 30)
-
-        await supabaseAdmin.auth.admin.updateUserById(adminUser.id, {
-          user_metadata: {
-            ...adminUser.user_metadata,
-            rtp: rtpPercentage,
-            audit_logs: updatedLogs
-          }
-        })
-
-        try {
-          await supabaseAdmin.from('audit_log').insert({
-            type: 'System',
-            detail: `Global RTP target updated to ${rtpPercentage}%`
-          })
-        } catch (_) {}
-      }
-
-      revalidatePath('/superadmin')
-      return { success: true, rtp: rtpPercentage }
-    } catch (err: any) {
-      return { success: false, error: err.message }
-    }
-  }
-
-  return { success: false, error: 'Database service role key missing' }
-}
-
-export async function getLatestGameDrawsAction() {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return { draws: [], activeRound: null }
-  }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  if (!serviceRoleKey || !supabaseUrl) {
-    return { draws: [], activeRound: null }
+  // The database enforces this range too (CHECK on game_config); validating
+  // here just produces a friendlier message.
+  if (typeof rtpPercentage !== 'number' || !Number.isFinite(rtpPercentage)
+      || rtpPercentage < 50 || rtpPercentage > 100) {
+    return { success: false, error: 'RTP must be a number between 50 and 100.' }
   }
 
   try {
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
+    const { error } = await createAdminClient()
+      .from('game_config')
+      .update({ rtp_percentage: rtpPercentage, updated_at: new Date().toISOString() })
+      .eq('id', 'global')
+    if (error) throw new Error(error.message)
 
-    let roundRows: any[] = []
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('triple_chance_rounds')
-        .select('*, triple_chance_bets(*)')
-        .order('created_at', { ascending: false })
-        .limit(20)
-      if (error || !data || data.length === 0) {
-        const { data: fallbackData } = await supabaseAdmin
-          .from('triple_chance_rounds')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(20)
-        roundRows = fallbackData || []
-      } else {
-        roundRows = data || []
-      }
-    } catch (_) {}
+    await logAuditEventAction('system', `Global RTP target set to ${rtpPercentage}%`)
+    revalidatePath('/superadmin')
+    return { success: true, rtp: rtpPercentage, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, error: `Could not update RTP: ${message}` }
+  }
+}
 
-    const aggregatedDraws = roundRows.map(row => {
-      const red = row.red !== null && row.red !== undefined ? Number(row.red) : 0
-      const green = row.green !== null && row.green !== undefined ? Number(row.green) : 0
-      const black = row.black !== null && row.black !== undefined ? Number(row.black) : 0
-      const resNum = (row.result_number !== null && row.result_number !== undefined)
-        ? Number(row.result_number)
-        : (red * 100 + green * 10 + black)
+// ─────────────────────────────────────────────────────────────────────────────
+// LIVE GAME TELEMETRY
+// ─────────────────────────────────────────────────────────────────────────────
+export interface DrawRow {
+  round_id: string
+  round_number: number
+  hand_id: string
+  red: number
+  green: number
+  black: number
+  result: string
+  total_stake: number
+  total_payout: number
+  player_count: number
+  outcome: 'WON' | 'LOST' | 'NO BETS'
+  created_at: string
+  player_bets: Array<{ username: string; total_stake: number; total_payout: number }>
+}
 
-      const bets = (row.triple_chance_bets || []) as any[]
-      const sKey = `${black}`
-      const dKey = `${green}${black}`
-      const tKey = `${red}${green}${black}`
+export async function getLatestGameDrawsAction(): Promise<{
+  draws: DrawRow[]
+  active_round: {
+    round_number: number
+    round_id: string
+    phase: string
+    seconds_remaining: number
+    seconds_into: number
+    draw_at_second: number
+    has_digits: boolean
+    red: number | null
+    green: number | null
+    black: number | null
+  } | null
+  error: string | null
+}> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { draws: [], active_round: null, error: auth.error }
 
-      const playerBets = bets.map(b => {
-        const singleBetsObj = (b.single_bets || {}) as Record<string, number>
-        const doubleBetsObj = (b.double_bets || {}) as Record<string, number>
-        const tripleBetsObj = (b.triple_bets || {}) as Record<string, number>
+  try {
+    const db = createAdminClient()
 
-        const sBet = Number(singleBetsObj[sKey] || singleBetsObj[parseInt(sKey, 10).toString()] || 0)
-        const dBet = Number(
-          doubleBetsObj[dKey] || 
-          doubleBetsObj[dKey.padStart(2, '0')] || 
-          doubleBetsObj[parseInt(dKey, 10).toString()] || 0
-        )
-        const tBet = Number(
-          tripleBetsObj[tKey] || 
-          tripleBetsObj[tKey.padStart(3, '0')] || 
-          tripleBetsObj[parseInt(tKey, 10).toString()] || 0
-        )
+    const roundsRes = await db
+      .from('rounds')
+      .select(`id, round_number, red, green, black, total_stake, total_payout,
+               scheduled_at, drawn_at,
+               bets ( total_stake, total_payout, profiles:user_id ( username ) )`)
+      .not('red', 'is', null)
+      .order('round_number', { ascending: false })
+      .limit(20)
+    if (roundsRes.error) throw new Error(`rounds: ${roundsRes.error.message}`)
 
-        let winAmt = 0
-        if (red !== null && green !== null && black !== null) {
-          winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
-        } else {
-          winAmt = Number(b.win_amount || 0)
-        }
+    const draws: DrawRow[] = (roundsRes.data ?? []).map(r => {
+      const bets = (r as unknown as {
+        bets: Array<{ total_stake: number; total_payout: number; profiles: { username: string } | null }>
+      }).bets ?? []
 
-        const profileObj = Array.isArray(b.profiles) ? (b.profiles[0] || {}) : (b.profiles || {})
-        const username = profileObj.username || 'player'
+      const player_bets = bets.map(b => ({
+        username: b.profiles?.username ?? 'player',
+        total_stake: Number(b.total_stake ?? 0),
+        // settle_round() writes the authoritative payout, so nothing is
+        // recomputed here. v1 recalculated in three separate places, each with
+        // its own key-format fallbacks.
+        total_payout: Number(b.total_payout ?? 0),
+      }))
 
-        return {
-          username,
-          betAmount: Number(b.total_stake || 0),
-          winAmount: winAmt,
-          status: winAmt > 0 ? 'WON' : 'LOST'
-        }
-      })
-
-      const playerCount = bets.length
-      const totalWagered = bets.reduce((acc, b) => acc + Number(b.total_stake || 0), 0)
-      const totalPayout = playerBets.reduce((acc, b) => acc + b.winAmount, 0)
-
-      let playerUsername = 'System (No Bets)'
-      if (playerCount === 1) {
-        playerUsername = bets[0].profiles?.username ? `@${bets[0].profiles.username}` : '@player1'
-      } else if (playerCount > 1) {
-        playerUsername = `👥 ${playerCount} Players`
-      }
+      const stake = player_bets.reduce((s, b) => s + b.total_stake, 0)
+      const payout = player_bets.reduce((s, b) => s + b.total_payout, 0)
 
       return {
-        id: row.id || `round_${row.round_number}`,
-        roundNumber: row.round_number,
-        game: 'Triple Chance',
-        resultNumber: resNum,
-        redDigit: red,
-        greenDigit: green,
-        blackDigit: black,
-        betAmount: totalWagered,
-        winAmount: totalPayout,
-        playerCount,
-        status: totalPayout > 0 ? 'WON' : (totalWagered > 0 ? 'LOST' : 'COMPLETED'),
-        playerUsername,
-        playerBets,
-        createdAt: row.created_at || row.scheduled_at || new Date().toISOString()
+        round_id: r.id,
+        round_number: Number(r.round_number),
+        hand_id: `...${String(r.id).slice(-8)}`,
+        red: Number(r.red), green: Number(r.green), black: Number(r.black),
+        result: `${r.red}${r.green}${r.black}`,
+        total_stake: stake,
+        total_payout: payout,
+        player_count: player_bets.length,
+        outcome: player_bets.length === 0 ? 'NO BETS' : payout > 0 ? 'WON' : 'LOST',
+        created_at: r.drawn_at ?? r.scheduled_at,
+        player_bets,
       }
     })
 
-    let activeRound: any = null
-    try {
-      const { data: curRoundData } = await supabaseAdmin.rpc('get_current_round')
-      if (curRoundData) {
-        const hasDigits = curRoundData.red !== null && curRoundData.red !== undefined &&
-                          curRoundData.green !== null && curRoundData.green !== undefined &&
-                          curRoundData.black !== null && curRoundData.black !== undefined
-        const red = hasDigits ? Number(curRoundData.red) : null
-        const green = hasDigits ? Number(curRoundData.green) : null
-        const black = hasDigits ? Number(curRoundData.black) : null
-        activeRound = {
-          roundNumber: curRoundData.round_number,
-          roundId: curRoundData.round_id,
-          hasDigits,
-          redDigit: red,
-          greenDigit: green,
-          blackDigit: black,
-          resultNumber: hasDigits ? (red! * 100 + green! * 10 + black!) : null,
-          status: curRoundData.status,
-          secondsRemaining: curRoundData.seconds_remaining,
-          scheduledAt: curRoundData.scheduled_at
-        }
-      }
-    } catch (_) {}
+    // Current round telemetry. get_current_round() only reveals digits once the
+    // betting window has closed, so this cannot leak an outcome even to an
+    // admin screen that is polling every 5 seconds.
+    const { data: rawCur, error: curError } = await db.rpc('get_current_round')
+    if (curError) throw new Error(`current round: ${curError.message}`)
+    const cur = asRpc<CurrentRound | null>(rawCur)
 
-    return { draws: aggregatedDraws, activeRound }
-  } catch (_) {
-    return { draws: [], activeRound: null }
+    const hasDigits = cur?.red !== null && cur?.red !== undefined
+    return {
+      draws,
+      active_round: cur ? {
+        round_number: Number(cur.round_number),
+        round_id: cur.round_id,
+        phase: cur.phase,
+        seconds_remaining: Number(cur.seconds_remaining),
+        seconds_into: Number(cur.seconds_into),
+        draw_at_second: Number(cur.draw_at_second),
+        has_digits: hasDigits,
+        red: hasDigits ? Number(cur.red) : null,
+        green: hasDigits ? Number(cur.green) : null,
+        black: hasDigits ? Number(cur.black) : null,
+      } : null,
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { draws: [], active_round: null, error: `Could not load telemetry: ${message}` }
   }
 }

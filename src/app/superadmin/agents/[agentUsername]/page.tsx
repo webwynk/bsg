@@ -28,7 +28,9 @@ import { Label } from "@/components/ui/label"
 import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award, CheckCircle2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { getAgentDetailAction, transferPointsAction, toggleAgentStatusAction, updateAgentPasswordAction } from '../actions'
+import type { PlayerProfitRow } from '@/app/agent/profit/actions'
+import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
+import { getAgentDetailAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
 import { getAgentProfitReportAction } from '@/app/agent/profit/actions'
 
@@ -40,8 +42,22 @@ export default function AgentDetailPage({ params }: Props) {
   const { agentUsername } = React.use(params)
   const resolvedAgentIdRef = React.useRef<string>('') // UUID resolved from username by server action
   
-  const [agentInfo, setAgentInfo] = React.useState<{ id: string; name: string; username: string; balance: number; status: string; joinedDate?: string } | null>(null)
-  const [players, setPlayers] = React.useState<Array<{ id: string; name: string; username: string; balance: number; status: string; isOnline?: boolean; gamePlays: number }>>([])
+  const [agentInfo, setAgentInfo] = React.useState<{
+    id: string
+    full_name: string
+    username: string
+    coin_balance: number
+    is_active: boolean
+    joined_date: string
+  } | null>(null)
+  const [players, setPlayers] = React.useState<Array<{
+    id: string
+    full_name: string
+    username: string
+    coin_balance: number
+    is_active: boolean
+    is_online: boolean
+  }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -52,46 +68,17 @@ export default function AgentDetailPage({ params }: Props) {
   const statsScopeRef = React.useRef<'today' | 'lifetime'>('today')
   const isInitialMountRef = React.useRef(true)
 
-  const [gamePlays, setGamePlays] = React.useState<Array<{
-    id: string
-    game: string
-    mode: string
-    selections: string
-    resultNumber: number
-    bet: number
-    win: number
-    status: 'WON' | 'LOST'
-    isResolved: boolean
-    date: string
-    createdAtIso: string
-    singleBets: Record<string, number>
-    doubleBets: Record<string, number>
-    tripleBets: Record<string, number>
-    redDigit: number | null
-    greenDigit: number | null
-    blackDigit: number | null
-  }>>([])
+  const [gamePlays, setGamePlays] = React.useState<PlayerGamePlay[]>([])
   const [expandedSpins, setExpandedSpins] = React.useState<Record<string, boolean>>({})
 
   const toggleSpinExpand = (spinId: string) => {
     setExpandedSpins(prev => ({ ...prev, [spinId]: !prev[spinId] }))
   }
-  const [pointsHistory, setPointsHistory] = React.useState<Array<{ id: string; type: 'deposit' | 'withdraw'; txType: string; amount: number; balanceAfter: number; date: string; createdAtIso: string }>>([])
+  const [pointsHistory, setPointsHistory] = React.useState<PlayerCoinMovement[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points' | 'profit'>('games')
-  const [profitSummary, setProfitSummary] = React.useState({ todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 })
-  const [profitPlayers, setProfitPlayers] = React.useState<Array<{
-    id: string
-    username: string
-    isActive: boolean
-    balance: number
-    totalPlays: number
-    totalBets: number
-    totalWins: number
-    netPnl: number
-    marginPct: number
-    lastPlayedAt: string
-  }>>([])
+  const [profitSummary, setProfitSummary] = React.useState({ todays_profit: 0, lifetime_profit: 0, total_stake: 0, total_payout: 0, margin_pct: 0 })
+  const [profitPlayers, setProfitPlayers] = React.useState<PlayerProfitRow[]>([])
   
   // Filter & Scope States
   const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
@@ -133,8 +120,8 @@ export default function AgentDetailPage({ params }: Props) {
 
     const targetPlays = gamePlays.filter(spin => {
       if (statsScope === 'today') {
-        if (spin.createdAtIso) {
-          const spinIstStr = new Date(spin.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        if (spin.created_at_iso) {
+          const spinIstStr = new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
           return spinIstStr === todayIstStr
         }
         return true
@@ -143,8 +130,8 @@ export default function AgentDetailPage({ params }: Props) {
     })
 
     const totalPlays = targetPlays.length
-    const totalBet = targetPlays.reduce((sum, p) => sum + p.bet, 0)
-    const totalWin = targetPlays.reduce((sum, p) => sum + p.win, 0)
+    const totalBet = targetPlays.reduce((sum, p) => sum + p.total_stake, 0)
+    const totalWin = targetPlays.reduce((sum, p) => sum + p.total_payout, 0)
     const netGgr = totalBet - totalWin
     const marginPct = totalBet > 0 ? (netGgr / totalBet) * 100 : 0
 
@@ -157,14 +144,14 @@ export default function AgentDetailPage({ params }: Props) {
       // Date Filter
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        const spinDateStr = spin.createdAtIso 
-          ? new Date(spin.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          : spin.date
+        const spinDateStr = spin.created_at_iso 
+          ? new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : spin.created_at
         if (spinDateStr !== filterDateStr) return false
       }
 
       // Outcome Filter
-      if (filterOutcome !== 'all' && spin.status !== filterOutcome) {
+      if (filterOutcome !== 'all' && spin.outcome !== filterOutcome) {
         return false
       }
 
@@ -182,9 +169,9 @@ export default function AgentDetailPage({ params }: Props) {
     return pointsHistory.filter(tx => {
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        const txDateStr = tx.createdAtIso
-          ? new Date(tx.createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          : tx.date
+        const txDateStr = tx.created_at_iso
+          ? new Date(tx.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : tx.created_at
         if (txDateStr !== filterDateStr) return false
       }
       return true
@@ -208,8 +195,8 @@ export default function AgentDetailPage({ params }: Props) {
     getPlayerDetailHistoryAction(playerId).then((res) => {
       setIsLoadingHistory(false)
       if (res) {
-        setGamePlays(res.gamePlays)
-        setPointsHistory(res.pointsHistory)
+        setGamePlays(res.game_plays)
+        setPointsHistory(res.coin_movements)
       }
     })
   }, [])
@@ -229,7 +216,7 @@ export default function AgentDetailPage({ params }: Props) {
       if (showIndicator) setIsRefreshing(false)
       if (res.agent) setAgentInfo(res.agent)
       // Store the resolved UUID so other actions (transfer, toggle, password) can use it
-      if (res.resolvedAgentId) resolvedAgentIdRef.current = res.resolvedAgentId
+      if (res.agent?.id) resolvedAgentIdRef.current = res.agent?.id
       else if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
       if (res.players) {
         setPlayers(res.players)
@@ -311,10 +298,11 @@ export default function AgentDetailPage({ params }: Props) {
   const handleToggleAgentStatus = async () => {
     if (!agentInfo) return
     setIsTogglingStatus(true)
-    const res = await toggleAgentStatusAction(resolvedAgentIdRef.current, agentInfo.status)
+    // B-1 pattern: pass the DESIRED end state, never a derived "next status".
+    const res = await setAgentActiveAction(resolvedAgentIdRef.current, !agentInfo.is_active)
     setIsTogglingStatus(false)
-    if (res.success && res.newStatus) {
-      setAgentInfo({ ...agentInfo, status: res.newStatus })
+    if (res.success) {
+      setAgentInfo({ ...agentInfo, is_active: !agentInfo.is_active })
       loadAgentDetails({ showIndicator: false, reloadHistory: false })
     }
   }
@@ -350,7 +338,7 @@ export default function AgentDetailPage({ params }: Props) {
     setIsTransferring(true)
     setTransferError(null)
 
-    const res = await transferPointsAction(resolvedAgentIdRef.current, amountNum, type)
+    const res = await issueAgentCoinsAction(resolvedAgentIdRef.current, amountNum, type === 'deposit' ? 'credit' : 'debit')
 
     setIsTransferring(false)
     if (res.error) {
@@ -380,18 +368,18 @@ export default function AgentDetailPage({ params }: Props) {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-                {agentInfo ? agentInfo.name : 'Agent Details'}
+                {agentInfo ? agentInfo.full_name : 'Agent Details'}
               </h1>
               <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black ${
-                agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+                agentInfo?.is_active ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
               }`}>
-                {agentInfo?.status || 'Active'}
+                {agentInfo?.is_active ? 'Active' : 'Blocked'}
               </span>
             </div>
             <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs flex items-center space-x-2 font-mono">
               <span>@{agentInfo ? agentInfo.username : '...'}</span>
               <span>&bull;</span>
-              <span className="text-[10px]">Joined: {agentInfo?.joinedDate || 'Jul 28, 2026'}</span>
+              <span className="text-[10px]">Joined: {agentInfo?.joined_date || 'Jul 28, 2026'}</span>
             </p>
           </div>
         </div>
@@ -422,7 +410,7 @@ export default function AgentDetailPage({ params }: Props) {
               <DialogHeader>
                 <DialogTitle className="font-black text-lg">Deposit Coins to Agent</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Issue coins to {agentInfo?.name}&apos;s account.
+                  Issue coins to {agentInfo?.full_name}&apos;s account.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -439,7 +427,7 @@ export default function AgentDetailPage({ params }: Props) {
                 )}
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground font-semibold">Current Balance:</span>
-                  <span className="font-mono font-black text-success-text">{formatCurrency(agentInfo?.balance || 0)}</span>
+                  <span className="font-mono font-black text-success-text">{formatCurrency(agentInfo?.coin_balance || 0)}</span>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="agent-deposit-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
@@ -485,7 +473,7 @@ export default function AgentDetailPage({ params }: Props) {
               <DialogHeader>
                 <DialogTitle className="font-black text-lg">Withdraw Coins from Agent</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Retrieve coins from {agentInfo?.name}&apos;s account back to cashier pool.
+                  Retrieve coins from {agentInfo?.full_name}&apos;s account back to cashier pool.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
@@ -502,7 +490,7 @@ export default function AgentDetailPage({ params }: Props) {
                 )}
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground font-semibold">Current Balance:</span>
-                  <span className="font-mono font-black text-danger-text">{formatCurrency(agentInfo?.balance || 0)}</span>
+                  <span className="font-mono font-black text-danger-text">{formatCurrency(agentInfo?.coin_balance || 0)}</span>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="agent-withdraw-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
@@ -541,7 +529,7 @@ export default function AgentDetailPage({ params }: Props) {
               <DialogHeader>
                 <DialogTitle className="font-black text-lg">Update Agent Password</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Set a new password for {agentInfo?.name}.
+                  Set a new password for {agentInfo?.full_name}.
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleUpdatePassword} className="space-y-3 py-2">
@@ -593,15 +581,15 @@ export default function AgentDetailPage({ params }: Props) {
             disabled={isTogglingStatus}
             variant="outline"
             className={`h-8 sm:h-10 px-2.5 sm:px-3 font-extrabold cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center ${
-              agentInfo?.status === 'Active' 
+              agentInfo?.is_active 
                 ? 'border-red-500/40 text-red-400 hover:bg-red-500/10' 
                 : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
             }`}
           >
             {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
-              agentInfo?.status === 'Active' ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
+              agentInfo?.is_active ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
             )}
-            {agentInfo?.status === 'Active' ? 'Block' : 'Unblock'}
+            {agentInfo?.is_active ? 'Block' : 'Unblock'}
           </Button>
         </div>
       </div>
@@ -622,7 +610,7 @@ export default function AgentDetailPage({ params }: Props) {
               <div className="h-5 w-16 bg-secondary/80 rounded animate-pulse" />
             ) : (
               <div className="text-xs sm:text-lg font-mono font-black text-foreground tracking-tight truncate">
-                {formatCurrency(agentInfo?.balance || 0)}
+                {formatCurrency(agentInfo?.coin_balance || 0)}
               </div>
             )}
             <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Available for allocation</span>
@@ -661,9 +649,9 @@ export default function AgentDetailPage({ params }: Props) {
           </div>
           <div className="flex items-center justify-between mt-1">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-              agentInfo?.status === 'Active' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+              agentInfo?.is_active ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
             }`}>
-              {agentInfo?.status || 'Active'}
+              {agentInfo?.is_active ? 'Active' : 'Blocked'}
             </span>
             <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Operational status</span>
           </div>
@@ -690,7 +678,7 @@ export default function AgentDetailPage({ params }: Props) {
               {players.length > 0 ? (
                 players.map((player) => {
                   const isSelected = selectedPlayer?.id === player.id
-                  const isPlayerOnline = player.isOnline && player.status === 'Active'
+                  const isPlayerOnline = player.is_online && player.is_active
                   return (
                     <button
                       key={player.id}
@@ -707,20 +695,20 @@ export default function AgentDetailPage({ params }: Props) {
                             <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] ${
                               isSelected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary border border-primary/20'
                             }`}>
-                              {player.name[0]?.toUpperCase()}
+                              {player.full_name[0]?.toUpperCase()}
                             </div>
                             <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
                               isPlayerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                             }`} />
                           </div>
-                          <span className="font-extrabold text-xs truncate leading-tight">{player.name}</span>
+                          <span className="font-extrabold text-xs truncate leading-tight">{player.full_name}</span>
                         </div>
                         <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
-                          player.status === 'Active'
+                          player.is_active
                             ? 'bg-success-bg text-success-text border border-emerald-500/20'
                             : 'bg-danger-bg text-danger-text border border-red-500/20'
                         }`}>
-                          {player.status}
+                          {player.is_active ? 'Active' : 'Blocked'}
                         </span>
                       </div>
 
@@ -729,7 +717,7 @@ export default function AgentDetailPage({ params }: Props) {
                         {isRefreshing ? (
                           <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
                         ) : (
-                          <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.balance)}</span>
+                          <span className="font-mono font-black text-foreground text-xs">{formatCurrency(player.coin_balance)}</span>
                         )}
                       </div>
                     </button>
@@ -847,26 +835,26 @@ export default function AgentDetailPage({ params }: Props) {
 
                     <div className="relative shrink-0">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-sm">
-                        {selectedPlayer.name[0]?.toUpperCase()}
+                        {selectedPlayer.full_name[0]?.toUpperCase()}
                       </div>
                       <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${
-                        selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                        selectedPlayer.is_online && selectedPlayer.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                       }`} />
                     </div>
 
                     <div className="min-w-0">
                       <div className="flex items-center space-x-2">
                         <h3 className="text-xs sm:text-sm font-black text-foreground leading-tight truncate">
-                          History of {selectedPlayer.name}
+                          History of {selectedPlayer.full_name}
                         </h3>
                         <span className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 py-0.2 rounded font-bold">
-                          {formatCurrency(selectedPlayer.balance)}
+                          {formatCurrency(selectedPlayer.coin_balance)}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2 text-[10px] font-mono">
                         <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
                         <span className="text-muted-foreground/60">&bull;</span>
-                        {selectedPlayer.isOnline && selectedPlayer.status === 'Active' ? (
+                        {selectedPlayer.is_online && selectedPlayer.is_active ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
                             Real-Time Sync Active
@@ -1033,19 +1021,19 @@ export default function AgentDetailPage({ params }: Props) {
                         {/* --- MOBILE CARDS VIEW (< sm) --- */}
                         <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
                           {paginatedGames.map((spin) => {
-                            const isExpanded = !!expandedSpins[spin.id]
-                            const singleCount = Object.keys(spin.singleBets || {}).length
-                            const doubleCount = Object.keys(spin.doubleBets || {}).length
-                            const tripleCount = Object.keys(spin.tripleBets || {}).length
-                            const isWon = spin.win > 0
+                            const isExpanded = !!expandedSpins[spin.hand_id]
+                            const singleCount = Object.keys(spin.single_bets || {}).length
+                            const doubleCount = Object.keys(spin.double_bets || {}).length
+                            const tripleCount = Object.keys(spin.triple_bets || {}).length
+                            const isWon = spin.total_payout > 0
 
                             return (
-                              <Card key={spin.id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
+                              <Card key={spin.hand_id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
                                 {/* Card Header */}
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-2 min-w-0">
-                                    <span className="font-mono text-xs font-black text-foreground">#{spin.id}</span>
-                                    <span className="text-xs font-semibold text-muted-foreground truncate">{spin.game}</span>
+                                    <span className="font-mono text-xs font-black text-foreground">#{spin.hand_id}</span>
+                                    <span className="text-xs font-semibold text-muted-foreground truncate">{'Triple Chance'}</span>
                                   </div>
                                   <div className="flex items-center space-x-2">
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
@@ -1054,7 +1042,7 @@ export default function AgentDetailPage({ params }: Props) {
                                       {isWon ? 'WON' : 'LOST'}
                                     </span>
                                     <button
-                                      onClick={() => toggleSpinExpand(spin.id)}
+                                      onClick={() => toggleSpinExpand(spin.hand_id)}
                                       className="p-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
                                       style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
                                       aria-label="Toggle Details"
@@ -1067,7 +1055,7 @@ export default function AgentDetailPage({ params }: Props) {
                                 {/* Card Sub-header */}
                                 <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
                                   <span className="font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{spin.mode}</span>
-                                  <span className="font-mono">{spin.date}</span>
+                                  <span className="font-mono">{spin.created_at}</span>
                                 </div>
 
                                 {/* Card Metrics Strip */}
@@ -1075,17 +1063,17 @@ export default function AgentDetailPage({ params }: Props) {
                                   <div>
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Result</span>
                                     <span className="font-mono font-black text-primary bg-primary/10 px-1.5 py-0.2 rounded inline-block">
-                                      {spin.resultNumber.toString().padStart(3, '0')}
+                                      {spin.result.toString().padStart(3, '0')}
                                     </span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Bet</span>
-                                    <span className="font-mono font-black text-foreground">{formatCurrency(spin.bet)}</span>
+                                    <span className="font-mono font-black text-foreground">{formatCurrency(spin.total_stake)}</span>
                                   </div>
                                   <div>
                                     <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Win</span>
-                                    <span className={`font-mono font-black ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                      {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
+                                    <span className={`font-mono font-black ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                      {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
                                     </span>
                                   </div>
                                 </div>
@@ -1106,8 +1094,8 @@ export default function AgentDetailPage({ params }: Props) {
                                       </div>
                                       {singleCount > 0 ? (
                                         <div className="space-y-1 max-h-[140px] overflow-y-auto pr-0.5 custom-scrollbar">
-                                          {Object.entries(spin.singleBets).map(([num, val]) => {
-                                            const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
+                                          {Object.entries(spin.single_bets).map(([num, val]) => {
+                                            const isWinning = spin.black !== null && num === spin.black.toString()
                                             return (
                                               <div key={num} className={`w-full flex items-center justify-between p-1.5 rounded-md text-[11px] ${
                                                 isWinning ? 'bg-zinc-950 text-white border border-zinc-700 font-extrabold' : 'bg-card text-foreground border border-border/40'
@@ -1136,9 +1124,9 @@ export default function AgentDetailPage({ params }: Props) {
                                       </div>
                                       {doubleCount > 0 ? (
                                         <div className="space-y-1 max-h-[140px] overflow-y-auto pr-0.5 custom-scrollbar">
-                                          {Object.entries(spin.doubleBets).map(([num, val]) => {
-                                            const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
-                                              ? `${spin.greenDigit}${spin.blackDigit}` 
+                                          {Object.entries(spin.double_bets).map(([num, val]) => {
+                                            const targetDouble = (spin.green !== null && spin.black !== null) 
+                                              ? `${spin.green}${spin.black}` 
                                               : null
                                             const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
                                             return (
@@ -1169,9 +1157,9 @@ export default function AgentDetailPage({ params }: Props) {
                                       </div>
                                       {tripleCount > 0 ? (
                                         <div className="space-y-1 max-h-[140px] overflow-y-auto pr-0.5 custom-scrollbar">
-                                          {Object.entries(spin.tripleBets).map(([num, val]) => {
-                                            const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
-                                              ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
+                                          {Object.entries(spin.triple_bets).map(([num, val]) => {
+                                            const targetTriple = (spin.red !== null && spin.green !== null && spin.black !== null) 
+                                              ? `${spin.red}${spin.green}${spin.black}` 
                                               : null
                                             const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
                                             return (
@@ -1213,17 +1201,17 @@ export default function AgentDetailPage({ params }: Props) {
                             </TableHeader>
                             <TableBody>
                               {paginatedGames.map((spin) => {
-                                const isExpanded = !!expandedSpins[spin.id]
-                                const singleCount = Object.keys(spin.singleBets || {}).length
-                                const doubleCount = Object.keys(spin.doubleBets || {}).length
-                                const tripleCount = Object.keys(spin.tripleBets || {}).length
+                                const isExpanded = !!expandedSpins[spin.hand_id]
+                                const singleCount = Object.keys(spin.single_bets || {}).length
+                                const doubleCount = Object.keys(spin.double_bets || {}).length
+                                const tripleCount = Object.keys(spin.triple_bets || {}).length
 
                                 return (
-                                  <React.Fragment key={spin.id}>
+                                  <React.Fragment key={spin.hand_id}>
                                     <TableRow className="border-border hover:bg-secondary/30 transition-colors">
                                       <TableCell className="p-2">
                                         <button
-                                          onClick={() => toggleSpinExpand(spin.id)}
+                                          onClick={() => toggleSpinExpand(spin.hand_id)}
                                           className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-transform duration-200"
                                           style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
                                           aria-label={isExpanded ? "Collapse details" : "Expand details"}
@@ -1231,26 +1219,26 @@ export default function AgentDetailPage({ params }: Props) {
                                           <ChevronRight className="h-3.5 w-3.5" />
                                         </button>
                                       </TableCell>
-                                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{spin.id}</TableCell>
-                                      <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{spin.game}</TableCell>
+                                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{spin.hand_id}</TableCell>
+                                      <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{'Triple Chance'}</TableCell>
                                       <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
-                                      <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.date}</TableCell>
+                                      <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.created_at}</TableCell>
                                       <TableCell className="text-center p-2.5">
                                         <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
-                                          {spin.resultNumber.toString().padStart(3, '0')}
+                                          {spin.result.toString().padStart(3, '0')}
                                         </span>
                                       </TableCell>
                                       <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                        {formatCurrency(spin.bet)}
+                                        {formatCurrency(spin.total_stake)}
                                       </TableCell>
-                                      <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.win > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                        {spin.win > 0 ? `+${formatCurrency(spin.win)}` : '-'}
+                                      <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                        {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
                                       </TableCell>
                                       <TableCell className="text-center p-2.5">
                                         <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                          spin.status === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+                                          spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
                                         }`}>
-                                          {spin.status}
+                                          {spin.outcome}
                                         </span>
                                       </TableCell>
                                     </TableRow>
@@ -1273,8 +1261,8 @@ export default function AgentDetailPage({ params }: Props) {
                                               </div>
                                               {singleCount > 0 ? (
                                                 <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-                                                  {Object.entries(spin.singleBets).map(([num, val]) => {
-                                                    const isWinning = spin.blackDigit !== null && num === spin.blackDigit.toString()
+                                                  {Object.entries(spin.single_bets).map(([num, val]) => {
+                                                    const isWinning = spin.black !== null && num === spin.black.toString()
                                                     return (
                                                       <div key={num} className={`w-full flex items-center justify-between p-1.5 rounded-lg text-[11px] ${
                                                         isWinning ? 'bg-zinc-950 text-white border border-zinc-700 font-extrabold shadow-sm' : 'bg-secondary/30 text-foreground border border-border/40'
@@ -1303,9 +1291,9 @@ export default function AgentDetailPage({ params }: Props) {
                                               </div>
                                               {doubleCount > 0 ? (
                                                 <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-                                                  {Object.entries(spin.doubleBets).map(([num, val]) => {
-                                                    const targetDouble = (spin.greenDigit !== null && spin.blackDigit !== null) 
-                                                      ? `${spin.greenDigit}${spin.blackDigit}` 
+                                                  {Object.entries(spin.double_bets).map(([num, val]) => {
+                                                    const targetDouble = (spin.green !== null && spin.black !== null) 
+                                                      ? `${spin.green}${spin.black}` 
                                                       : null
                                                     const isWinning = targetDouble !== null && num.padStart(2, '0') === targetDouble.padStart(2, '0')
                                                     return (
@@ -1336,9 +1324,9 @@ export default function AgentDetailPage({ params }: Props) {
                                               </div>
                                               {tripleCount > 0 ? (
                                                 <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-                                                  {Object.entries(spin.tripleBets).map(([num, val]) => {
-                                                    const targetTriple = (spin.redDigit !== null && spin.greenDigit !== null && spin.blackDigit !== null) 
-                                                      ? `${spin.redDigit}${spin.greenDigit}${spin.blackDigit}` 
+                                                  {Object.entries(spin.triple_bets).map(([num, val]) => {
+                                                    const targetTriple = (spin.red !== null && spin.green !== null && spin.black !== null) 
+                                                      ? `${spin.red}${spin.green}${spin.black}` 
                                                       : null
                                                     const isWinning = targetTriple !== null && num.padStart(3, '0') === targetTriple.padStart(3, '0')
                                                     return (
@@ -1401,23 +1389,23 @@ export default function AgentDetailPage({ params }: Props) {
                             {paginatedPoints.map((tx) => (
                               <TableRow key={tx.id} className="border-border hover:bg-secondary/30 transition-colors">
                                 <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{tx.id}</TableCell>
-                                <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.date}</TableCell>
+                                <TableCell className="text-[11px] text-muted-foreground p-2.5">{tx.created_at}</TableCell>
                                 <TableCell className="text-[11px] p-2.5">
                                   <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
-                                    tx.type === 'deposit'
+                                    tx.direction === 'deposit'
                                       ? 'bg-success-bg text-success-text border border-emerald-500/20'
                                       : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'
                                   }`}>
-                                    {tx.type}
+                                    {tx.direction}
                                   </span>
                                 </TableCell>
                                 <TableCell className={`text-right font-mono text-[11px] font-extrabold p-2.5 ${
-                                  tx.type === 'deposit' ? 'text-success-text' : 'text-amber-400'
+                                  tx.direction === 'deposit' ? 'text-success-text' : 'text-amber-400'
                                 }`}>
-                                  {tx.type === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
+                                  {tx.direction === 'deposit' ? `+${formatCurrency(tx.amount)}` : `-${formatCurrency(tx.amount)}`}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                  {formatCurrency(tx.balanceAfter)}
+                                  {formatCurrency(tx.balance_after)}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -1449,24 +1437,24 @@ export default function AgentDetailPage({ params }: Props) {
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-secondary/20 p-2.5 rounded-xl border border-border/50 text-xs">
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Today&apos;s P/L</span>
-                            <span className={`font-mono font-black ${profitSummary.todaysPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                              {profitSummary.todaysPnl >= 0 ? '+' : ''}{formatCurrency(profitSummary.todaysPnl)}
+                            <span className={`font-mono font-black ${profitSummary.todays_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.todays_profit >= 0 ? '+' : ''}{formatCurrency(profitSummary.todays_profit)}
                             </span>
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Lifetime P/L</span>
-                            <span className={`font-mono font-black ${profitSummary.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                              {profitSummary.lifetimePnl >= 0 ? '+' : ''}{formatCurrency(profitSummary.lifetimePnl)}
+                            <span className={`font-mono font-black ${profitSummary.lifetime_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.lifetime_profit >= 0 ? '+' : ''}{formatCurrency(profitSummary.lifetime_profit)}
                             </span>
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Bets</span>
-                            <span className="font-mono font-bold text-foreground">{formatCurrency(profitSummary.totalVolume)}</span>
+                            <span className="font-mono font-bold text-foreground">{formatCurrency(profitSummary.total_stake)}</span>
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">House Margin</span>
-                            <span className={`font-mono font-black ${profitSummary.netMarginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                              {profitSummary.netMarginPct.toFixed(1)}%
+                            <span className={`font-mono font-black ${profitSummary.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {profitSummary.margin_pct.toFixed(1)}%
                             </span>
                           </div>
                         </div>
@@ -1490,19 +1478,19 @@ export default function AgentDetailPage({ params }: Props) {
                                   <span className="font-mono text-xs font-black text-foreground">@{p.username}</span>
                                 </TableCell>
                                 <TableCell className="py-2 text-center font-mono text-xs text-muted-foreground font-bold">
-                                  {p.totalPlays}
+                                  {p.play_count}
                                 </TableCell>
                                 <TableCell className="py-2 text-right font-mono text-xs text-foreground font-bold">
-                                  {formatCurrency(p.totalBets)}
+                                  {formatCurrency(p.total_stake)}
                                 </TableCell>
                                 <TableCell className="py-2 text-right font-mono text-xs text-amber-500 font-bold">
-                                  {formatCurrency(p.totalWins)}
+                                  {formatCurrency(p.total_payout)}
                                 </TableCell>
-                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.netPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                  {p.netPnl >= 0 ? '+' : ''}{formatCurrency(p.netPnl)}
+                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.net_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                  {p.net_profit >= 0 ? '+' : ''}{formatCurrency(p.net_profit)}
                                 </TableCell>
-                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.marginPct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                  {p.marginPct.toFixed(1)}%
+                                <TableCell className={`py-2 text-right font-mono text-xs font-black ${p.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                  {p.margin_pct.toFixed(1)}%
                                 </TableCell>
                               </TableRow>
                             ))}

@@ -1,70 +1,79 @@
 /**
- * Single source of truth for the coin ledger vocabulary and coin arithmetic.
+ * Single source of truth for the coin vocabulary.
  *
- * M-4 FIX: before this file, three different lists of transaction types were
- * maintained independently (the Flutter app, the agent feeds, the player detail
- * view). Between them they referenced nine values that no RPC has ever written
- * -- `admin_topup`, `game_bet`, `game_win`, `agent_credit`, `agent_debit`,
- * `deposit`, `withdraw`, `win_credit` -- while the database only ever inserts
- * the five below. Filters silently dropped rows they were written to catch.
+ * These names mirror the database exactly. `coin_ledger.kind` is constrained to
+ * this list by a CHECK, so anything not here cannot exist — and anything here
+ * cannot be silently dropped by a filter.
  *
- * M-2 FIX: coins are whole units. Chip denominations are 2/5/10/50/100 and
- * every stake and payout in the game is an integer, but the cashier accepted
- * two decimal places while the Flutter client truncates balance with .toInt().
- * A 100.75 deposit displayed as 100 in the app, stranding the remainder.
+ * v1 kept three divergent lists across the app and the dashboard, between them
+ * referencing nine values no RPC ever wrote (`admin_topup`, `game_bet`,
+ * `game_win`, `agent_credit`… ). Filters quietly discarded rows they were
+ * written to catch.
  */
 
-/** Every `transactions.type` value written by a database RPC. */
-export const TXN_TYPES = [
-  'bet_stake',        // submit_round_bet
-  'win_payout',       // resolve_round_payouts, get_my_round_result
-  'agent_topup',      // transfer_coins_agent_to_player, agent_topup_player
-  'agent_deduct',     // withdraw_coins_player_to_agent, agent_deduct_player
-  'admin_adjustment', // issue_agent_coins
+/** Every `coin_ledger.kind` the database can produce. Mirrors the CHECK. */
+export const LEDGER_KINDS = [
+  'stake',         // player wagers                      (negative)
+  'stake_refund',  // bet reduced before the draw        (positive)
+  'payout',        // player wins                        (positive)
+  'agent_credit',  // agent -> player                    (positive)
+  'agent_debit',   // player -> agent                    (negative)
+  'admin_credit',  // superadmin -> agent                (positive)
+  'admin_debit',   // agent -> superadmin                (negative)
 ] as const
 
-export type TxnType = (typeof TXN_TYPES)[number]
+export type LedgerKind = (typeof LEDGER_KINDS)[number]
 
-/** Types that move coins between a cashier and an account (excludes gameplay). */
-export const CASHIER_TXN_TYPES: readonly TxnType[] = [
-  'agent_topup',
-  'agent_deduct',
-  'admin_adjustment',
+/** Movements produced by gameplay rather than by a cashier. */
+export const GAMEPLAY_KINDS: readonly LedgerKind[] = ['stake', 'stake_refund', 'payout']
+
+/** Movements a cashier (agent or superadmin) initiates. */
+export const CASHIER_KINDS: readonly LedgerKind[] = [
+  'agent_credit',
+  'agent_debit',
+  'admin_credit',
+  'admin_debit',
 ]
 
-/** Types that increase an account's balance. */
-export const CREDIT_TXN_TYPES: readonly TxnType[] = ['agent_topup', 'win_payout']
-
 /**
- * True when a transaction increased the account's balance.
- * `admin_adjustment` carries its direction in the sign of `amount`, so the
- * sign is authoritative and the type list is only a fallback for zero amounts.
+ * True when a movement increased the account's balance.
+ * The database guarantees the sign agrees with the kind
+ * (constraint `ledger_sign_matches_kind`), so the sign is authoritative.
  */
-export function isCreditTxn(type: string, amount: number): boolean {
-  if (amount !== 0) return amount > 0
-  return (CREDIT_TXN_TYPES as readonly string[]).includes(type)
+export function isCredit(amount: number): boolean {
+  return amount > 0
 }
 
-/** Human-readable label for a transaction type. */
-export function txnTypeLabel(type: string): string {
-  switch (type) {
-    case 'bet_stake':        return 'Game Bet'
-    case 'win_payout':       return 'Game Win'
-    case 'agent_topup':      return 'Agent Top-up'
-    case 'agent_deduct':     return 'Agent Deduction'
-    case 'admin_adjustment': return 'Admin Adjustment'
-    default:                 return type
+/** Human-readable label for a ledger kind. */
+export function ledgerKindLabel(kind: string): string {
+  switch (kind) {
+    case 'stake':        return 'Bet Placed'
+    case 'stake_refund': return 'Bet Refunded'
+    case 'payout':       return 'Game Win'
+    case 'agent_credit': return 'Agent Deposit'
+    case 'agent_debit':  return 'Agent Withdrawal'
+    case 'admin_credit': return 'Admin Deposit'
+    case 'admin_debit':  return 'Admin Withdrawal'
+    default:             return kind
   }
 }
 
+/** Direction argument accepted by the transfer RPCs. */
+export type TransferDirection = 'credit' | 'debit'
+
 /**
  * Coerces a user-supplied coin amount to a positive whole number.
- * Returns null when the input is not a usable amount.
+ * Coins are integers everywhere: `coin_balance` is BIGINT and the chip
+ * denominations are 2/5/10/50/100. Returns null when unusable.
  */
 export function toWholeCoins(amount: unknown): number | null {
   const n = typeof amount === 'number' ? amount : Number(amount)
   if (!Number.isFinite(n)) return null
   const whole = Math.floor(n)
-  if (whole <= 0) return null
-  return whole
+  return whole > 0 ? whole : null
+}
+
+/** Formats a coin amount for display (grouping only, no currency symbol). */
+export function formatCoins(amount: number): string {
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount)
 }

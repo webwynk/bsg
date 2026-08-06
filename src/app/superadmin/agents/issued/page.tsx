@@ -18,21 +18,23 @@ import { Input } from "@/components/ui/input"
 import { Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, ShieldCheck, Search } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { getAgentsAction, getAgentCoinTransactionsAction } from '../actions'
+import { getAgentsAction, getAgentCoinLedgerAction } from '../actions'
 
 export default function CoinsIssuedPage() {
-  const [agents, setAgents] = React.useState<Array<{ id: string; name: string; username: string }>>([])
+  const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string }>>([])
   const [transactions, setTransactions] = React.useState<Array<{
     id: string
-    agentId: string
-    agentName: string
-    agentUsername: string
-    type: 'deposit' | 'withdraw'
+    agent_id: string
+    agent_name: string
+    agent_username: string
+    direction: 'credit' | 'debit'
     amount: number
-    date: string
+    balance_after: number
+    created_at: string
+    created_at_iso: string
   }>>([])
 
-  const [summary, setSummary] = React.useState({ totalDeposited: 0, totalWithdrawn: 0, netIssued: 0 })
+  const [summary, setSummary] = React.useState({ credited: 0, debited: 0, net: 0 })
   const [currentPage, setCurrentPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalItems, setTotalItems] = React.useState(0)
@@ -42,7 +44,7 @@ export default function CoinsIssuedPage() {
 
   // Stable refs — avoids useCallback dep on filter state (interval leak fix)
   const selectedAgentIdRef = React.useRef('all')
-  const selectedTypeRef = React.useRef<'all' | 'deposit' | 'withdraw'>('all')
+  const selectedTypeRef = React.useRef<'all' | 'credit' | 'debit'>('all')
   const filterDateRef = React.useRef<Date | undefined>(undefined)
   const datePresetRef = React.useRef<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
   const currentPageRef = React.useRef(1)
@@ -50,7 +52,7 @@ export default function CoinsIssuedPage() {
 
   // Filters state
   const [selectedAgentId, setSelectedAgentId] = React.useState('all')
-  const [selectedType, setSelectedType] = React.useState<'all' | 'deposit' | 'withdraw'>('all')
+  const [selectedType, setSelectedType] = React.useState<'all' | 'credit' | 'debit'>('all')
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
   const [datePreset, setDatePreset] = React.useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
   const [searchTxQuery, setSearchTxQuery] = React.useState('')
@@ -61,7 +63,7 @@ export default function CoinsIssuedPage() {
   React.useEffect(() => {
     getAgentsAction().then((res) => {
       if (res.agents) {
-        setAgents(res.agents.map(a => ({ id: a.id, name: a.name, username: a.username })))
+        setAgents(res.agents.map(a => ({ id: a.id, full_name: a.full_name, username: a.username })))
       }
     })
   }, [])
@@ -98,9 +100,9 @@ export default function CoinsIssuedPage() {
       startDate = thirtyDaysAgo.toISOString()
     }
 
-    getAgentCoinTransactionsAction({
+    getAgentCoinLedgerAction({
       agentId: selectedAgentIdRef.current,
-      type: selectedTypeRef.current,
+      direction: selectedTypeRef.current,
       startDate,
       endDate,
       page: currentPageRef.current,
@@ -108,9 +110,9 @@ export default function CoinsIssuedPage() {
     }).then((res) => {
       setIsLoading(false)
       if (res) {
-        setTransactions(res.transactions)
-        setTotalPages(res.totalPages)
-        setTotalItems(res.totalItems)
+        setTransactions(res.rows)
+        setTotalPages(res.total_pages)
+        setTotalItems(res.total_items)
         setSummary(res.summary)
       }
     }).catch(() => setIsLoading(false))
@@ -168,8 +170,8 @@ export default function CoinsIssuedPage() {
     if (!searchTxQuery) return true
     const q = searchTxQuery.toLowerCase()
     return tx.id.toLowerCase().includes(q) ||
-      tx.agentName.toLowerCase().includes(q) ||
-      tx.agentUsername.toLowerCase().includes(q)
+      tx.agent_name.toLowerCase().includes(q) ||
+      tx.agent_username.toLowerCase().includes(q)
   })
 
   return (
@@ -228,7 +230,7 @@ export default function CoinsIssuedPage() {
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-xs sm:text-base font-black font-mono text-emerald-500 mt-0.5 truncate">
-              +{formatCurrency(summary.totalDeposited)}
+              +{formatCurrency(summary.credited)}
             </div>
           )}
         </Card>
@@ -242,7 +244,7 @@ export default function CoinsIssuedPage() {
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-sm sm:text-base font-black font-mono text-red-500 mt-0.5">
-              -{formatCurrency(summary.totalWithdrawn)}
+              -{formatCurrency(summary.debited)}
             </div>
           )}
         </Card>
@@ -256,7 +258,7 @@ export default function CoinsIssuedPage() {
             <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
           ) : (
             <div className="text-sm sm:text-base font-black font-mono text-foreground mt-0.5">
-              {formatCurrency(summary.netIssued)}
+              {formatCurrency(summary.net)}
             </div>
           )}
         </Card>
@@ -281,7 +283,7 @@ export default function CoinsIssuedPage() {
                 <option value="all">All Agents</option>
                 {agents.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.name} (@{a.username})
+                    {a.full_name} (@{a.username})
                   </option>
                 ))}
               </select>
@@ -297,8 +299,8 @@ export default function CoinsIssuedPage() {
               className="h-8 px-2 rounded-lg border border-border bg-background text-foreground text-xs font-semibold focus:outline-none cursor-pointer"
             >
               <option value="all">All Types</option>
-              <option value="deposit">Deposits (+)</option>
-              <option value="withdraw">Withdrawals (-)</option>
+              <option value="credit">Deposits (+)</option>
+              <option value="debit">Withdrawals (-)</option>
             </select>
 
             {/* Date Quick Pills */}
@@ -405,28 +407,28 @@ export default function CoinsIssuedPage() {
                       {tx.id.substring(0, 8)}...
                     </TableCell>
                     <TableCell className="text-foreground text-xs py-2">
-                      <Link href={`/superadmin/agents/${tx.agentUsername}`} className="font-bold hover:underline text-primary">
-                        {tx.agentName}
+                      <Link href={`/superadmin/agents/${tx.agent_username}`} className="font-bold hover:underline text-primary">
+                        {tx.agent_name}
                       </Link>
-                      <span className="text-muted-foreground block text-[10px]">@{tx.agentUsername}</span>
+                      <span className="text-muted-foreground block text-[10px]">@{tx.agent_username}</span>
                     </TableCell>
                     <TableCell className="py-2">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        tx.type === 'deposit'
+                        tx.direction === 'credit'
                           ? 'bg-success-bg text-success-text border border-emerald-500/20'
                           : 'bg-danger-bg text-danger-text border border-red-500/20'
                       }`}>
-                        {tx.type === 'deposit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
-                        {tx.type === 'deposit' ? 'Deposit (+)' : 'Withdrawal (-)'}
+                        {tx.direction === 'credit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
+                        {tx.direction === 'credit' ? 'Deposit (+)' : 'Withdrawal (-)'}
                       </span>
                     </TableCell>
                     <TableCell className={`text-right font-mono font-black text-xs py-2 ${
-                      tx.type === 'deposit' ? 'text-emerald-500' : 'text-red-500'
+                      tx.direction === 'credit' ? 'text-emerald-500' : 'text-red-500'
                     }`}>
-                      {tx.type === 'deposit' ? '+' : '-'}{formatCurrency(tx.amount)}
+                      {tx.direction === 'credit' ? '+' : '-'}{formatCurrency(tx.amount)}
                     </TableCell>
                     <TableCell className="text-right text-[11px] text-muted-foreground font-mono py-2">
-                      {tx.date}
+                      {tx.created_at}
                     </TableCell>
                   </TableRow>
                 ))
@@ -475,29 +477,29 @@ export default function CoinsIssuedPage() {
                   ID: {tx.id.substring(0, 8)}...
                 </div>
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  tx.type === 'deposit'
+                  tx.direction === 'credit'
                     ? 'bg-success-bg text-success-text border border-emerald-500/20'
                     : 'bg-danger-bg text-danger-text border border-red-500/20'
                 }`}>
-                  {tx.type === 'deposit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
-                  {tx.type === 'deposit' ? 'Deposit' : 'Withdrawal'}
+                  {tx.direction === 'credit' ? <ArrowUpRight className="mr-1 h-3 w-3" /> : <ArrowDownRight className="mr-1 h-3 w-3" />}
+                  {tx.direction === 'credit' ? 'Deposit' : 'Withdrawal'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
                 <div>
-                  <Link href={`/superadmin/agents/${tx.agentUsername}`} className="font-bold text-foreground hover:text-primary">
-                    {tx.agentName}
+                  <Link href={`/superadmin/agents/${tx.agent_username}`} className="font-bold text-foreground hover:text-primary">
+                    {tx.agent_name}
                   </Link>
-                  <span className="text-muted-foreground block text-[10px]">@{tx.agentUsername}</span>
+                  <span className="text-muted-foreground block text-[10px]">@{tx.agent_username}</span>
                 </div>
                 <div className="text-right">
                   <div className={`font-mono font-black text-sm ${
-                    tx.type === 'deposit' ? 'text-emerald-500' : 'text-red-500'
+                    tx.direction === 'credit' ? 'text-emerald-500' : 'text-red-500'
                   }`}>
-                    {tx.type === 'deposit' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    {tx.direction === 'credit' ? '+' : '-'}{formatCurrency(tx.amount)}
                   </div>
-                  <span className="text-[10px] text-muted-foreground font-mono">{tx.date}</span>
+                  <span className="text-[10px] text-muted-foreground font-mono">{tx.created_at}</span>
                 </div>
               </div>
             </Card>
