@@ -2,8 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth-guard'
 
 export async function logAuditEventAction(type: string, detail: string) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -45,6 +49,11 @@ export async function logAuditEventAction(type: string, detail: string) {
 }
 
 export async function getAuditLogsAction() {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) {
+    return { logs: [] }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -83,6 +92,24 @@ export async function getAuditLogsAction() {
 }
 
 export async function getSystemOverviewMetricsAction() {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) {
+    return {
+      totalCoins: 0,
+      todaysCoinsIssued: 0,
+      activeAgents: 0,
+      activePlayers: 0,
+      totalBetsCount: 0,
+      totalBetCoins: 0,
+      totalWinCoins: 0,
+      totalLostCoins: 0,
+      todayBetsCount: 0,
+      todayBetCoins: 0,
+      todayWinCoins: 0,
+      todayLostCoins: 0
+    }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -94,13 +121,10 @@ export async function getSystemOverviewMetricsAction() {
 
       // Calculate Asia/Kolkata (IST - UTC+5:30) today start (00:00:00 IST)
       const now = new Date()
-      const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
+      const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       const istTodayStart = new Date(`${istTodayString}T00:00:00+05:30`)
       const todayStartISO = istTodayStart.toISOString()
-      // Execute all database queries in parallel via Promise.all
-      // M-7 FIX: the `game_history` fallback query was removed. That table does
-      // not exist in this database (to_regclass returns NULL), so it always
-      // returned an error and silently contributed nothing.
+
       const [profilesRes, txnsRes, roundBetsRes, todayRoundBetsRes] = await Promise.all([
         supabaseAdmin.from('profiles').select('role, balance').range(0, 999999),
         supabaseAdmin.from('transactions').select('amount').eq('type', 'admin_adjustment').gte('amount', 0).gte('created_at', todayStartISO).range(0, 999999),
@@ -131,9 +155,8 @@ export async function getSystemOverviewMetricsAction() {
       // Today's coins issued (resets daily at 00:00 IST)
       const todaysCoinsIssued = txnsRes.data ? txnsRes.data.reduce((acc, tx) => acc + Number(tx.amount || 0), 0) : 0
 
-      // Overall Lifetime Gameplay Stats — triple_chance_bets is the only source.
+      // Overall Lifetime Gameplay Stats
       const roundSpins = roundBetsRes.data || []
-
       const totalBetsCount = roundSpins.length
       const totalBetCoins = roundSpins.reduce((acc, s) => acc + Number(s.total_stake || 0), 0)
       const totalWinCoins = roundSpins.reduce((acc, s) => acc + Number(s.win_amount || 0), 0)
@@ -180,6 +203,11 @@ export async function getSystemOverviewMetricsAction() {
 }
 
 export async function getRtpAction() {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) {
+    return { rtp: 96.0 }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -189,7 +217,6 @@ export async function getRtpAction() {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Query agent_configs table for global system config (agent_id IS NULL or id = 'global_system_config')
       const { data, error } = await supabaseAdmin
         .from('agent_configs')
         .select('rtp_percentage, target_win_percentage')
@@ -205,7 +232,6 @@ export async function getRtpAction() {
         }
       }
 
-      // Fallback: query admin user metadata
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
       const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
       if (adminUser?.user_metadata?.rtp !== undefined) {
@@ -218,6 +244,11 @@ export async function getRtpAction() {
 }
 
 export async function updateRtpAction(rtpPercentage: number) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) {
+    return { success: false, error: auth.error }
+  }
+
   if (typeof rtpPercentage !== 'number' || rtpPercentage < 50 || rtpPercentage > 100) {
     return { success: false, error: 'Invalid RTP value. Must be between 50% and 100%.' }
   }
@@ -231,7 +262,6 @@ export async function updateRtpAction(rtpPercentage: number) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Upsert into agent_configs table with both column aliases for 100% database compatibility
       await supabaseAdmin
         .from('agent_configs')
         .upsert({
@@ -241,7 +271,6 @@ export async function updateRtpAction(rtpPercentage: number) {
           updated_at: new Date().toISOString()
         })
 
-      // Update admin user metadata & append audit log
       const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
       const adminUser = usersData?.users.find(u => u.email === 'admin@bestsmartgame.com')
 
@@ -265,7 +294,6 @@ export async function updateRtpAction(rtpPercentage: number) {
           }
         })
 
-        // Also insert into audit_log table if exists
         try {
           await supabaseAdmin.from('audit_log').insert({
             type: 'System',
@@ -285,11 +313,16 @@ export async function updateRtpAction(rtpPercentage: number) {
 }
 
 export async function getLatestGameDrawsAction() {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) {
+    return { draws: [], activeRound: null }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
   if (!serviceRoleKey || !supabaseUrl) {
-    return { draws: [] }
+    return { draws: [], activeRound: null }
   }
 
   try {
@@ -297,7 +330,6 @@ export async function getLatestGameDrawsAction() {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Fetch recent global rounds (up to 20)
     let roundRows: any[] = []
     try {
       const { data, error } = await supabaseAdmin
@@ -317,7 +349,6 @@ export async function getLatestGameDrawsAction() {
       }
     } catch (_) {}
 
-    // Transform rounds into aggregated draw objects
     const aggregatedDraws = roundRows.map(row => {
       const red = row.red !== null && row.red !== undefined ? Number(row.red) : 0
       const green = row.green !== null && row.green !== undefined ? Number(row.green) : 0
@@ -348,8 +379,6 @@ export async function getLatestGameDrawsAction() {
           tripleBetsObj[parseInt(tKey, 10).toString()] || 0
         )
 
-        // FIX: Always recalculate win from raw bet data + round digits
-        // (don't trust stored win_amount which can be stale after UPSERT corruption)
         let winAmt = 0
         if (red !== null && green !== null && black !== null) {
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
@@ -397,7 +426,6 @@ export async function getLatestGameDrawsAction() {
       }
     })
 
-    // Fetch active round telemetry via get_current_round RPC
     let activeRound: any = null
     try {
       const { data: curRoundData } = await supabaseAdmin.rpc('get_current_round')
@@ -428,4 +456,3 @@ export async function getLatestGameDrawsAction() {
     return { draws: [], activeRound: null }
   }
 }
-

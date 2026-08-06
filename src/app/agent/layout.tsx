@@ -19,9 +19,9 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
   const isProfitActive = !!pathname?.startsWith('/agent/profit')
   const isHistoryActive = !!pathname?.startsWith('/agent/history')
 
-  const handleSignOut = () => {
-    document.cookie = "mock_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
-    window.location.href = '/agent/login'
+  const handleSignOut = async () => {
+    const { signOutAction } = await import('@/app/actions/auth')
+    await signOutAction('/agent/login')
   }
 
   return (

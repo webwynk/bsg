@@ -16,8 +16,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/agent/login', request.url))
   }
 
-  // Allow login pages, static assets, and API routes to proceed
-  if (pathname.includes('/login') || pathname.startsWith('/_next') || pathname.includes('.')) {
+  // Exclude login pages, _next internal routes, api routes, and static asset extensions
+  const isStaticFile = /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2|ttf|eot|map|json)$/i.test(pathname)
+  if (pathname.includes('/login') || pathname.startsWith('/_next') || pathname.startsWith('/api') || isStaticFile) {
     return response
   }
 
@@ -46,17 +47,16 @@ export async function middleware(request: NextRequest) {
   })
 
   const { data: { user } } = await supabase.auth.getUser()
-  const mockSession = request.cookies.get('mock_session')?.value
 
-  // Extract user role from JWT user metadata or fallback cookie
-  const userRole = user?.user_metadata?.role || mockSession
+  // Extract user role strictly from JWT user metadata
+  const userRole = user?.user_metadata?.role
 
   // Protect /superadmin routes
   if (pathname.startsWith('/superadmin')) {
-    if (!user && mockSession !== 'superadmin') {
+    if (!user) {
       return NextResponse.redirect(new URL('/superadmin/login', request.url))
     }
-    // Strict RBAC: If logged-in user is NOT a SuperAdmin (e.g., Agent or Player)
+    // Strict RBAC: If logged-in user is NOT a SuperAdmin
     if (userRole && userRole !== 'superadmin') {
       if (userRole === 'agent') {
         return NextResponse.redirect(new URL('/agent', request.url))
@@ -67,10 +67,10 @@ export async function middleware(request: NextRequest) {
 
   // Protect /agent routes
   if (pathname.startsWith('/agent')) {
-    if (!user && mockSession !== 'agent') {
+    if (!user) {
       return NextResponse.redirect(new URL('/agent/login', request.url))
     }
-    // Strict RBAC: If logged-in user is a SuperAdmin, redirect to /superadmin (never open Agent Dashboard)
+    // Strict RBAC: If logged-in user is a SuperAdmin, redirect to /superadmin
     if (userRole === 'superadmin') {
       return NextResponse.redirect(new URL('/superadmin', request.url))
     }

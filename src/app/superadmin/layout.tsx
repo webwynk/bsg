@@ -18,9 +18,9 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const isLiveGameActive = !!pathname?.startsWith('/superadmin/live-game')
   const isAgentsActive = !!pathname?.startsWith('/superadmin/agents')
 
-  const handleSignOut = () => {
-    document.cookie = "mock_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
-    window.location.href = '/superadmin/login'
+  const handleSignOut = async () => {
+    const { signOutAction } = await import('@/app/actions/auth')
+    await signOutAction('/superadmin/login')
   }
 
   return (

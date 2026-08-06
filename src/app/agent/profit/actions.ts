@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/auth-guard'
 
 export interface AgentProfitReportParams {
   targetAgentId?: string
@@ -12,10 +13,9 @@ export interface AgentProfitReportParams {
   limit?: number
 }
 
-// Helper to compute Asia/Kolkata (IST) date boundaries for daily reset
 function getISTDateRange(datePreset?: string, filterDate?: string) {
   const now = new Date()
-  const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
+  const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
   const todayStart = new Date(`${istTodayString}T00:00:00+05:30`)
 
   let startDate: string | undefined = undefined
@@ -35,16 +35,13 @@ function getISTDateRange(datePreset?: string, filterDate?: string) {
     const d30 = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000)
     startDate = d30.toISOString()
   }
-  // 'lifetime' or 'all' leaves startDate and endDate undefined
 
   return { todayStartISO: todayStart.toISOString(), startDate, endDate }
 }
 
 export async function getAgentProfitReportAction(params: AgentProfitReportParams = {}) {
-  const supabase = await createServerClient()
-  const { data: { user: authUser } } = await supabase.auth.getUser()
-
-  if (!authUser) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) {
     return {
       summary: { todaysPnl: 0, lifetimePnl: 0, totalVolume: 0, totalPayouts: 0, netMarginPct: 0 },
       players: [],
@@ -53,7 +50,6 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     }
   }
 
-  // (the effective agent id is resolved below as targetAgentIdResolved)
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -71,7 +67,11 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    let targetAgentIdResolved = params.targetAgentId || authUser.id
+    // Cross-tenant protection (A-8): Agent callers can ONLY read their own profit report
+    let targetAgentIdResolved = auth.user.role === 'superadmin' && params.targetAgentId
+      ? params.targetAgentId
+      : auth.user.id
+
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetAgentIdResolved)
     if (!isUuid) {
       const { data: lookup } = await supabaseAdmin.from('profiles').select('id').ilike('username', targetAgentIdResolved).single()
@@ -91,7 +91,6 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
 
     const { todayStartISO, startDate, endDate } = getISTDateRange(params.datePreset, params.filterDate)
 
-    // Build history queries for round_bets (primary multiplayer source)
     let roundQuery = supabaseAdmin
       .from('triple_chance_bets')
       .select('user_id, total_stake, win_amount, created_at, profiles!inner(agent_id)')
@@ -104,24 +103,18 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       roundQuery = roundQuery.lte('created_at', endDate)
     }
 
-    // M-7 FIX: the three `game_history` fallback queries were removed. That
-    // table does not exist in this database, so every one of them errored and
-    // the `roundX.length > 0 ? roundX : histX` merges could only ever pick the
-    // triple_chance_bets side.
     const [allRoundsRes, todayRoundsRes, filteredRoundsRes, profilesRes, authUsersRes] = await Promise.all([
       supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId),
       supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId).gte('created_at', todayStartISO),
       roundQuery,
-      supabaseAdmin.from('profiles').select('id, username, is_active, balance').eq('agent_id', agentId),
+      supabaseAdmin.from('profiles').select('id, username, is_active, balance').or(`agent_id.eq.${agentId},parent_agent_id.eq.${agentId}`),
       supabaseAdmin.auth.admin.listUsers()
     ])
 
-    // Map round_bets to standard { user_id, bet_amount, win_amount, created_at } format
     const allSpins = (allRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
     const todaySpins = (todayRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
     const filteredSpins = (filteredRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
 
-    // Summary calculations
     const todaysPnl = todaySpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)
     const lifetimePnl = allSpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)
 
@@ -130,10 +123,8 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     const filteredPnl = totalVolume - totalPayouts
     const netMarginPct = totalVolume > 0 ? (filteredPnl / totalVolume) * 100 : 0
 
-    // Build combined player dictionary (profiles + auth.users)
     const playerDict: Record<string, { name: string; username: string; isActive: boolean; balance: number }> = {}
 
-    // First populate from profiles table
     if (profilesRes.data) {
       profilesRes.data.forEach(p => {
         const u = authUsersRes.data?.users?.find(user => user.id === p.id)
@@ -147,11 +138,10 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       })
     }
 
-    // Next populate/override from auth.users metadata
     if (authUsersRes.data?.users) {
       authUsersRes.data.users.forEach(u => {
         const meta = u.user_metadata || {}
-        if (meta.role === 'player' && (meta.agent_id === agentId || !playerDict[u.id])) {
+        if (meta.role === 'player' && (meta.agent_id === agentId || meta.parent_agent_id === agentId || !playerDict[u.id])) {
           const pUsername = meta.username || u.email?.split('@')[0] || 'player'
           const pName = meta.full_name || meta.name || pUsername
           playerDict[u.id] = {
@@ -164,7 +154,6 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       })
     }
 
-    // Group filtered spins by player user_id
     const playerStatsMap: Record<string, { totalPlays: number; totalBets: number; totalWins: number; lastPlayedAt: string }> = {}
 
     filteredSpins.forEach(spin => {
@@ -181,7 +170,6 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       }
     })
 
-    // Collect all player IDs from dictionary AND from spin stats map
     const allPlayerIds = Array.from(new Set([...Object.keys(playerDict), ...Object.keys(playerStatsMap)]))
 
     let playerBreakdowns = allPlayerIds.map(uid => {
@@ -205,21 +193,17 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       }
     })
 
-    // If filtering by date or preset, keep only players who had activity or are registered
     if (startDate || endDate) {
       playerBreakdowns = playerBreakdowns.filter(p => p.totalPlays > 0)
     }
 
-    // Search filter
     if (params.searchQuery && params.searchQuery.trim()) {
       const q = params.searchQuery.trim().toLowerCase()
       playerBreakdowns = playerBreakdowns.filter(p => p.username.toLowerCase().includes(q))
     }
 
-    // Sort by Total Bets descending
     playerBreakdowns.sort((a, b) => b.totalBets - a.totalBets)
 
-    // Pagination
     const page = params.page || 1
     const limit = params.limit || 10
     const totalItems = playerBreakdowns.length
@@ -247,4 +231,3 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     }
   }
 }
-

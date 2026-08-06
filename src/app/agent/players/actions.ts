@@ -4,11 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 import { isCreditTxn } from '@/lib/ledger'
+import { requireAuth } from '@/lib/auth-guard'
 
 export async function getPlayersAction(targetAgentId?: string) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const agentId = targetAgentId || user?.id
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) {
+    return { players: [] }
+  }
+
+  // Cross-tenant protection (A-8): Agent callers can ONLY read their own players
+  const agentId = auth.user.role === 'superadmin' && targetAgentId ? targetAgentId : auth.user.id
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -19,10 +24,9 @@ export async function getPlayersAction(targetAgentId?: string) {
         auth: { autoRefreshToken: false, persistSession: false }
       })
 
-      // Query active_sessions, profiles, and auth users in parallel using Promise.all
       const [sessRes, profRes, usersRes] = await Promise.all([
         supabaseAdmin.from('active_sessions').select('user_id, last_seen_at'),
-        supabaseAdmin.from('profiles').select('id, username, balance, is_active').eq('agent_id', agentId),
+        supabaseAdmin.from('profiles').select('id, username, balance, is_active').or(`agent_id.eq.${agentId},parent_agent_id.eq.${agentId}`),
         supabaseAdmin.auth.admin.listUsers()
       ])
 
@@ -49,11 +53,10 @@ export async function getPlayersAction(targetAgentId?: string) {
         return { players }
       }
 
-      // Fallback to auth listUsers if profiles table query returns empty
       const { data, error } = await supabaseAdmin.auth.admin.listUsers()
       if (!error && data?.users) {
         const players = data.users
-          .filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
+          .filter(u => u.user_metadata?.role === 'player' && (u.user_metadata?.agent_id === agentId || u.user_metadata?.parent_agent_id === agentId))
           .map(u => {
             const activeSess = sessions?.find(s => s.user_id === u.id)
             const isOnline = activeSess ? (now - new Date(activeSess.last_seen_at).getTime() < 60000) : false
@@ -61,7 +64,7 @@ export async function getPlayersAction(targetAgentId?: string) {
               id: u.id,
               name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Player',
               username: u.user_metadata?.username || u.email?.split('@')[0] || '',
-              balance: 0, // always 0 in fallback — profiles table is authoritative for live balance
+              balance: 0,
               status: u.user_metadata?.status || 'Active',
               isOnline,
               gamePlays: 0
@@ -76,6 +79,11 @@ export async function getPlayersAction(targetAgentId?: string) {
 }
 
 export async function createPlayerAction(formData: FormData) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) {
+    return { error: auth.error || 'Unauthorized access' }
+  }
+
   const name = (formData.get('name') as string || '').trim()
   const username = (formData.get('username') as string || '').trim()
   const password = (formData.get('password') as string || '').trim()
@@ -89,77 +97,54 @@ export async function createPlayerAction(formData: FormData) {
     return { error: 'Username must be 3 to 20 characters and contain ONLY letters and numbers (no symbols, spaces, or special characters).' }
   }
 
-  const supabase = await createServerClient()
-  const { data: { user: agentUser } } = await supabase.auth.getUser()
-  const agentId = agentUser?.id
-
+  const agentId = auth.user.id
   const email = username.includes('@') ? username : `${username.toLowerCase()}@bestsmartgame.com`
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (serviceRoleKey) {
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
-
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: name,
-        username,
-        role: 'player',
-        agent_id: agentId || null,
-        balance: 0,
-        status: 'Active',
-      },
-    })
-
-    if (error) {
-      if (error.message.toLowerCase().includes('already') || error.message.toLowerCase().includes('exists')) {
-        return { error: `Username "${username}" is already taken by another player. Please choose a different username.` }
-      }
-      return { error: error.message }
-    }
-
-    if (data?.user) {
-      try {
-        await supabaseAdmin.from('profiles').upsert({
-          id: data.user.id,
-          username,
-          role: 'player',
-          agent_id: agentId || null,
-          balance: 0,
-          is_active: true
-        })
-      } catch (_) {}
-    }
-
-    revalidatePath('/agent/players')
-    revalidatePath('/agent')
-    revalidatePath('/superadmin/agents')
-    return { success: true, user: data.user }
+  if (!serviceRoleKey) {
+    return { error: 'Server configuration error.' }
   }
 
-  const { data, error } = await supabase.auth.signUp({
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceRoleKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
-    options: {
-      data: {
-        full_name: name,
-        username,
-        role: 'player',
-        agent_id: agentId || null,
-        balance: 0,
-        status: 'Active',
-      },
+    email_confirm: true,
+    user_metadata: {
+      full_name: name,
+      username,
+      role: 'player',
+      agent_id: agentId,
+      parent_agent_id: agentId,
+      balance: 0,
+      status: 'Active',
     },
   })
 
   if (error) {
+    if (error.message.toLowerCase().includes('already') || error.message.toLowerCase().includes('exists')) {
+      return { error: `Username "${username}" is already taken by another player. Please choose a different username.` }
+    }
     return { error: error.message }
+  }
+
+  if (data?.user) {
+    try {
+      await supabaseAdmin.from('profiles').upsert({
+        id: data.user.id,
+        username,
+        role: 'player',
+        agent_id: agentId,
+        parent_agent_id: agentId,
+        balance: 0,
+        is_active: true
+      })
+    } catch (_) {}
   }
 
   revalidatePath('/agent/players')
@@ -195,55 +180,70 @@ async function resolveUserIdentifier(supabaseAdmin: any, identifier: string): Pr
 }
 
 export async function togglePlayerStatusAction(playerIdentifier: string, currentStatus: string) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) {
+    return { error: auth.error || 'Unauthorized: Active session required.' }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
-  if (serviceRoleKey && supabaseUrl) {
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
-
-    const supabase = await createServerClient()
-    const { data: { user: callerUser } } = await supabase.auth.getUser()
-
-    const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
-    if (!playerId) return { error: 'Player account not found.' }
-
-    const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
-    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
-    if (getUserError || !userData?.user) {
-      return { error: 'Player account not found.' }
-    }
-
-    // Security check: Agent can only manage their own players
-    if (callerUser && userData.user.user_metadata?.agent_id && userData.user.user_metadata?.agent_id !== callerUser.id) {
-      return { error: 'Unauthorized. You can only manage your own assigned players.' }
-    }
-
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
-      user_metadata: {
-        ...userData.user.user_metadata,
-        status: newStatus
-      }
-    })
-
-    if (updateError) {
-      return { error: updateError.message }
-    }
-
-    // Sync profiles.is_active so dashboard reads correct status from profiles table
-    await supabaseAdmin.from('profiles').update({
-      is_active: newStatus === 'Active'
-    }).eq('id', playerId)
-
-    revalidatePath('/agent/players')
-    return { success: true, newStatus }
+  if (!serviceRoleKey || !supabaseUrl) {
+    return { error: 'Service Role Key not configured.' }
   }
 
-  return { error: 'Service Role Key not configured.' }
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
+
+  const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
+  if (!playerId) return { error: 'Player account not found.' }
+
+  const newStatus = currentStatus === 'Active' ? 'Blocked' : 'Active'
+  const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
+  if (getUserError || !userData?.user) {
+    return { error: 'Player account not found.' }
+  }
+
+  const { data: targetProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('agent_id, parent_agent_id')
+    .eq('id', playerId)
+    .single()
+
+  const playerAgentId = targetProfile?.parent_agent_id || targetProfile?.agent_id || userData.user.user_metadata?.agent_id
+
+  // Security check (A-9): Agent can only manage their own players
+  if (auth.user.role === 'agent' && playerAgentId && playerAgentId !== auth.user.id) {
+    return { error: 'Unauthorized. You can only manage your own assigned players.' }
+  }
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
+    user_metadata: {
+      ...userData.user.user_metadata,
+      status: newStatus
+    }
+  })
+
+  if (updateError) {
+    return { error: updateError.message }
+  }
+
+  await supabaseAdmin.from('profiles').update({
+    is_active: newStatus === 'Active',
+    status: newStatus
+  }).eq('id', playerId)
+
+  revalidatePath('/agent/players')
+  return { success: true, newStatus }
 }
 
 export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) {
+    return { gamePlays: [], pointsHistory: [] }
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -260,12 +260,19 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     return { gamePlays: [], pointsHistory: [] }
   }
 
-  // 1. Fetch game plays from triple_chance_bets using TWO-STEP query
-  // WHY TWO-STEP: PostgREST relational joins do NOT bypass RLS on the joined table even when
-  // using service role key. The join strips triple_chance_rounds rows silently because
-  // triple_chance_rounds has RLS enabled and no user auth context is set on supabaseAdmin.
-  // Solution: fetch bets directly (service role bypasses RLS on direct queries),
-  // then fetch the relevant rounds directly, then merge in JS.
+  const { data: targetProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('agent_id, parent_agent_id')
+    .eq('id', playerId)
+    .single()
+
+  const playerAgentId = targetProfile?.parent_agent_id || targetProfile?.agent_id
+
+  // Tenant protection (A-8): Agent can only inspect their own players
+  if (auth.user.role === 'agent' && playerAgentId && playerAgentId !== auth.user.id) {
+    return { gamePlays: [], pointsHistory: [] }
+  }
+
   let gamePlays: Array<{
     id: string
     game: string
@@ -287,7 +294,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
   }> = []
 
   try {
-    // Step 1: Fetch bets directly — service role bypasses RLS on direct table queries
     const { data: roundBets, error: betsErr } = await supabaseAdmin
       .from('triple_chance_bets')
       .select('*')
@@ -296,7 +302,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
       .limit(50)
 
     if (!betsErr && roundBets && roundBets.length > 0) {
-      // Step 2: Fetch related rounds directly — service role bypasses RLS here too
       const roundIds = roundBets.map((b: any) => b.round_id).filter(Boolean)
       let roundsMap: Record<string, any> = {}
       if (roundIds.length > 0) {
@@ -307,7 +312,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         ;(rounds || []).forEach((r: any) => { roundsMap[r.id] = r })
       }
 
-      // Step 3: Merge rounds data into bets
       gamePlays = roundBets.map((p: any) => {
         const round = roundsMap[p.round_id] || {}
         const red = round.red !== null && round.red !== undefined ? Number(round.red) : null
@@ -333,8 +337,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
 
         const isResolved = p.is_resolved as boolean
 
-        // FIX: Recalculate win from raw bet data + round digits (don't trust stored win_amount
-        // which can be stale if a bet row was corrupted by a post-resolution UPSERT)
         let winAmt = 0
         if (red !== null && green !== null && black !== null) {
           const sKey = String(black)
@@ -345,7 +347,7 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
           const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
         } else {
-          winAmt = Number(p.win_amount || 0) // fallback if round digits not available
+          winAmt = Number(p.win_amount || 0)
         }
         const rowStatus: 'WON' | 'LOST' = winAmt > 0 ? 'WON' : 'LOST'
 
@@ -384,11 +386,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     console.error('[getPlayerDetailHistoryAction] bets/rounds query failed:', err)
   }
 
-  // 2. Fetch all transaction history from public.transactions
-  // WHY NO TYPE FILTER: The only transaction types that exist for players from gameplay
-  // are 'bet_stake' and 'win_credit'. The old filter whitelisted only cashier types
-  // (agent_topup, deposit, etc.) which excluded ALL gameplay transactions.
-  // Fix: include ALL transaction types and label them properly.
   let pointsHistory: Array<{
     id: string
     type: 'deposit' | 'withdraw'
@@ -410,10 +407,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     if (txns && txns.length > 0) {
       pointsHistory = txns.map((tx: any) => {
         const amt = Number(tx.amount || 0)
-        // M-4 FIX: the previous list referenced agent_credit / deposit /
-        // win_credit, none of which exist. isCreditTxn treats the sign of
-        // `amount` as authoritative, which is what actually distinguishes a
-        // credit from a debit for admin_adjustment rows.
         const isCredit = isCreditTxn(tx.type, amt)
         return {
           id: tx.id.substring(0, 8),
@@ -441,6 +434,11 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
 }
 
 export async function resetPlayerPasswordAction(playerIdentifier: string, newPassword: string) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) {
+    return { error: auth.error || 'Unauthorized: Active session required.' }
+  }
+
   if (!playerIdentifier || !newPassword || newPassword.trim().length < 6) {
     return { error: 'Password must be at least 6 characters.' }
   }
@@ -448,39 +446,42 @@ export async function resetPlayerPasswordAction(playerIdentifier: string, newPas
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
-  if (serviceRoleKey && supabaseUrl) {
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
-
-    const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
-    if (!playerId) return { error: 'Player account not found.' }
-
-    const supabase = await createServerClient()
-    const { data: { user: callerUser } } = await supabase.auth.getUser()
-
-    const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
-    if (getUserError || !userData?.user) {
-      return { error: 'Player account not found.' }
-    }
-
-    // Security check: Agent can only manage their own players
-    if (callerUser && userData.user.user_metadata?.agent_id && userData.user.user_metadata?.agent_id !== callerUser.id) {
-      return { error: 'Unauthorized. You can only manage your own assigned players.' }
-    }
-
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
-      password: newPassword.trim()
-    })
-
-    if (updateError) {
-      return { error: updateError.message }
-    }
-
-    return { success: true }
+  if (!serviceRoleKey || !supabaseUrl) {
+    return { error: 'Service Role Key not configured.' }
   }
 
-  return { error: 'Service Role Key not configured.' }
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
+
+  const playerId = await resolveUserIdentifier(supabaseAdmin, playerIdentifier)
+  if (!playerId) return { error: 'Player account not found.' }
+
+  const { data: userData, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(playerId)
+  if (getUserError || !userData?.user) {
+    return { error: 'Player account not found.' }
+  }
+
+  const { data: targetProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('agent_id, parent_agent_id')
+    .eq('id', playerId)
+    .single()
+
+  const playerAgentId = targetProfile?.parent_agent_id || targetProfile?.agent_id || userData.user.user_metadata?.agent_id
+
+  // Security check (A-9): Agent can only manage their own assigned players
+  if (auth.user.role === 'agent' && playerAgentId && playerAgentId !== auth.user.id) {
+    return { error: 'Unauthorized. You can only manage your own assigned players.' }
+  }
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(playerId, {
+    password: newPassword.trim()
+  })
+
+  if (updateError) {
+    return { error: updateError.message }
+  }
+
+  return { success: true }
 }
-
-
