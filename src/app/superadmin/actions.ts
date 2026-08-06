@@ -353,9 +353,13 @@ export async function getLatestGameDrawsAction() {
           tripleBetsObj[parseInt(tKey, 10).toString()] || 0
         )
 
-        let winAmt = Number(b.win_amount || 0)
-        if (!b.is_resolved && red !== null && green !== null && black !== null) {
+        // FIX: Always recalculate win from raw bet data + round digits
+        // (don't trust stored win_amount which can be stale after UPSERT corruption)
+        let winAmt = 0
+        if (red !== null && green !== null && black !== null) {
           winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
+        } else {
+          winAmt = Number(b.win_amount || 0)
         }
 
         const profileObj = Array.isArray(b.profiles) ? (b.profiles[0] || {}) : (b.profiles || {})

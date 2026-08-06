@@ -331,8 +331,22 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
         const selText = parts.length > 0 ? parts.join(' | ') : 'Multi-board Bet'
 
         const isResolved = p.is_resolved as boolean
-        const winAmt = Number(p.win_amount || 0)
-        const rowStatus: 'WON' | 'LOST' = isResolved && winAmt > 0 ? 'WON' : 'LOST'
+
+        // FIX: Recalculate win from raw bet data + round digits (don't trust stored win_amount
+        // which can be stale if a bet row was corrupted by a post-resolution UPSERT)
+        let winAmt = 0
+        if (red !== null && green !== null && black !== null) {
+          const sKey = String(black)
+          const dKey = `${green}${black}`
+          const tKey = `${red}${green}${black}`
+          const sBet = Number(singleBetsObj[sKey] || 0)
+          const dBet = Number(doubleBetsObj[dKey] || doubleBetsObj[dKey.padStart(2, '0')] || 0)
+          const tBet = Number(tripleBetsObj[tKey] || tripleBetsObj[tKey.padStart(3, '0')] || 0)
+          winAmt = (sBet * 9) + (dBet * 90) + (tBet * 900)
+        } else {
+          winAmt = Number(p.win_amount || 0) // fallback if round digits not available
+        }
+        const rowStatus: 'WON' | 'LOST' = winAmt > 0 ? 'WON' : 'LOST'
 
         const rawId = p.round_id || p.id || ''
         const unifiedHandId = rawId.length > 8 ? '...' + rawId.slice(-8) : rawId
