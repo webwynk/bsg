@@ -47,6 +47,7 @@ export default function CoinsIssuedPage() {
   const selectedTypeRef = React.useRef<'all' | 'credit' | 'debit'>('all')
   const filterDateRef = React.useRef<Date | undefined>(undefined)
   const datePresetRef = React.useRef<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
+  const searchRef = React.useRef('')
   const currentPageRef = React.useRef(1)
   const isInitialMountRef = React.useRef(true)
 
@@ -105,6 +106,7 @@ export default function CoinsIssuedPage() {
       direction: selectedTypeRef.current,
       startDate,
       endDate,
+      search: searchRef.current,
       page: currentPageRef.current,
       limit: itemsPerPage
     }).then((res) => {
@@ -125,12 +127,13 @@ export default function CoinsIssuedPage() {
     filterDateRef.current = filterDate
     datePresetRef.current = datePreset
     currentPageRef.current = currentPage
+    searchRef.current = searchTxQuery
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false
       return
     }
     loadData(false)
-  }, [selectedAgentId, selectedType, filterDate, datePreset, currentPage, loadData])
+  }, [selectedAgentId, selectedType, filterDate, datePreset, currentPage, searchTxQuery, loadData])
 
   React.useEffect(() => {
     loadData(true)
@@ -166,13 +169,9 @@ export default function CoinsIssuedPage() {
     setCurrentPage(1)
   }
 
-  const filteredTransactions = transactions.filter(tx => {
-    if (!searchTxQuery) return true
-    const q = searchTxQuery.toLowerCase()
-    return tx.id.toLowerCase().includes(q) ||
-      tx.agent_name.toLowerCase().includes(q) ||
-      tx.agent_username.toLowerCase().includes(q)
-  })
+  // B-6: the search is applied server-side, so this is the full result set
+  // for the current page rather than a second filter over ten rows.
+  const filteredTransactions = transactions
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">

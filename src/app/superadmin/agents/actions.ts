@@ -334,6 +334,12 @@ export async function getAgentCoinLedgerAction(params?: {
   startDate?: string
   endDate?: string
   direction?: 'credit' | 'debit' | 'all'
+  /**
+   * B-6 FIX: search is applied server-side. The page previously filtered the
+   * ten rows it had already been given, so a match on any other page was
+   * invisible and the result count was misleading.
+   */
+  search?: string
   page?: number
   limit?: number
 }) {
@@ -359,6 +365,24 @@ export async function getAgentCoinLedgerAction(params?: {
       const id = await resolveAgentId(params.agentId)
       if (id) base = base.eq('user_id', id)
     }
+
+    // Resolve a free-text search to the set of agent ids it matches, then
+    // filter the ledger by those ids — so the search spans every page.
+    let searchIds: string[] | null = null
+    if (params?.search?.trim()) {
+      const term = `%${params.search.trim()}%`
+      const { data: matches } = await db
+        .from('profiles').select('id').eq('role', 'agent')
+        .or(`username.ilike.${term},full_name.ilike.${term}`)
+      searchIds = (matches ?? []).map(m => m.id)
+      // No agent matched: return an empty page rather than an unfiltered one.
+      if (searchIds.length === 0) {
+        return { rows: [], total_items: 0, total_pages: 1,
+                 summary: { credited: 0, debited: 0, net: 0 }, error: null }
+      }
+      base = base.in('user_id', searchIds)
+    }
+
     if (params?.direction === 'credit') base = base.gt('amount', 0)
     if (params?.direction === 'debit')  base = base.lt('amount', 0)
     if (params?.startDate) base = base.gte('created_at', new Date(params.startDate).toISOString())
@@ -380,6 +404,10 @@ export async function getAgentCoinLedgerAction(params?: {
       const id = await resolveAgentId(params.agentId)
       if (id) summaryQuery = summaryQuery.eq('user_id', id)
     }
+    // The summary honours the same search as the table.
+    if (searchIds) summaryQuery = summaryQuery.in('user_id', searchIds)
+    if (params?.direction === 'credit') summaryQuery = summaryQuery.gt('amount', 0)
+    if (params?.direction === 'debit') summaryQuery = summaryQuery.lt('amount', 0)
     if (params?.startDate) summaryQuery = summaryQuery.gte('created_at', new Date(params.startDate).toISOString())
     if (params?.endDate) {
       const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)

@@ -10,6 +10,35 @@ interface PaginationProps {
   itemsPerPage: number
 }
 
+const ELLIPSIS = -1
+
+/**
+ * Page numbers to render: always the first and last, plus a window around the
+ * current page, with gaps collapsed to an ellipsis.
+ *   1 … 4 5 6 … 42
+ */
+function pageWindow(current: number, total: number): number[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+
+  const pages = new Set<number>([1, total, current])
+  if (current - 1 > 1) pages.add(current - 1)
+  if (current + 1 < total) pages.add(current + 1)
+  // Keep the row a stable width near the ends.
+  if (current <= 3) { pages.add(2); pages.add(3); pages.add(4) }
+  if (current >= total - 2) { pages.add(total - 1); pages.add(total - 2); pages.add(total - 3) }
+
+  const sorted = [...pages].filter(p => p >= 1 && p <= total).sort((a, b) => a - b)
+
+  const out: number[] = []
+  let previous = 0
+  for (const p of sorted) {
+    if (previous && p - previous > 1) out.push(ELLIPSIS)
+    out.push(p)
+    previous = p
+  }
+  return out
+}
+
 export function ResponsivePagination({
   currentPage,
   totalPages,
@@ -64,9 +93,13 @@ export function ResponsivePagination({
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        {Array.from({ length: totalPages }, (_, index) => {
-          const pageNum = index + 1
-          return (
+        {/* B-8 FIX: a windowed pager. This rendered one button per page via
+            Array.from({ length: totalPages }), so a few hundred records
+            produced hundreds of buttons across the layout. */}
+        {pageWindow(currentPage, totalPages).map((pageNum, i) =>
+          pageNum === ELLIPSIS ? (
+            <span key={`gap-${i}`} className="px-1 text-muted-foreground select-none">…</span>
+          ) : (
             <Button
               key={pageNum}
               variant={currentPage === pageNum ? "default" : "ghost"}
@@ -79,7 +112,7 @@ export function ResponsivePagination({
               {pageNum}
             </Button>
           )
-        })}
+        )}
 
         <Button
           variant="outline"

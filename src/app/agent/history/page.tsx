@@ -104,7 +104,12 @@ export default function HistoryPage() {
       const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       const istTodayStart = new Date(`${todayIST}T00:00:00+05:30`).getTime()
 
-      const txnTime = new Date(txn.created_at).getTime()
+      // B-4 FIX: parse the ISO instant, not the localised display string.
+      // This read `txn.created_at`, which is already formatted for display
+      // ("Jul 28, 2026, 03:45 PM"). Parsing that back is engine-dependent and
+      // drops the IST offset, so date filtering was unreliable. The action now
+      // also returns `created_at_iso` for exactly this purpose.
+      const txnTime = new Date(txn.created_at_iso).getTime()
 
       if (datePreset === 'today') {
         matchesDate = txnTime >= istTodayStart
@@ -123,9 +128,16 @@ export default function HistoryPage() {
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1
   const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const currentTabTxns = transactions.filter(t => t.category === activeTab)
-  const totalDeposited = currentTabTxns.filter(t => t.direction === 'deposit').reduce((acc, t) => acc + Number(t.amount || 0), 0)
-  const totalWithdrawn = currentTabTxns.filter(t => t.direction === 'withdraw').reduce((acc, t) => acc + Number(t.amount || 0), 0)
+  // B-7 FIX: the summary cards now reflect the ACTIVE FILTERS.
+  // They were computed from every row in the tab, so applying a date filter
+  // changed the table beneath while the totals above it stayed put — the two
+  // silently disagreed.
+  const totalDeposited = filteredTransactions
+    .filter(t => t.direction === 'deposit')
+    .reduce((acc, t) => acc + Number(t.amount || 0), 0)
+  const totalWithdrawn = filteredTransactions
+    .filter(t => t.direction === 'withdraw')
+    .reduce((acc, t) => acc + Number(t.amount || 0), 0)
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
