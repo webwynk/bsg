@@ -797,9 +797,11 @@ export default function PlayersPage() {
                             Amount (Coins)
                           </Label>
                           <Input 
-                            id="deposit-amount" 
-                            type="number" 
-                            placeholder="e.g. 500" 
+                            id="deposit-amount"
+                            type="number"
+                            step="1"
+                            min="1"
+                            placeholder="e.g. 500"
                             value={transferAmount}
                             onChange={(e) => setTransferAmount(e.target.value)}
                             className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 
@@ -853,9 +855,11 @@ export default function PlayersPage() {
                             Amount (Coins)
                           </Label>
                           <Input 
-                            id="withdraw-amount" 
-                            type="number" 
-                            placeholder="e.g. 200" 
+                            id="withdraw-amount"
+                            type="number"
+                            step="1"
+                            min="1"
+                            placeholder="e.g. 200"
                             value={transferAmount}
                             onChange={(e) => setTransferAmount(e.target.value)}
                             className="h-10 bg-background border-border text-foreground text-xs rounded-lg" 

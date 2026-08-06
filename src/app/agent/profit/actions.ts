@@ -53,8 +53,7 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
     }
   }
 
-  const agentId = params.targetAgentId || authUser.id
-
+  // (the effective agent id is resolved below as targetAgentIdResolved)
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -105,30 +104,22 @@ export async function getAgentProfitReportAction(params: AgentProfitReportParams
       roundQuery = roundQuery.lte('created_at', endDate)
     }
 
-    // Execute queries in parallel
-    const [allRoundsRes, todayRoundsRes, filteredRoundsRes, allHistRes, todayHistRes, filteredHistRes, profilesRes, authUsersRes] = await Promise.all([
+    // M-7 FIX: the three `game_history` fallback queries were removed. That
+    // table does not exist in this database, so every one of them errored and
+    // the `roundX.length > 0 ? roundX : histX` merges could only ever pick the
+    // triple_chance_bets side.
+    const [allRoundsRes, todayRoundsRes, filteredRoundsRes, profilesRes, authUsersRes] = await Promise.all([
       supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId),
       supabaseAdmin.from('triple_chance_bets').select('user_id, total_stake, win_amount, profiles!inner(agent_id)').eq('profiles.agent_id', agentId).gte('created_at', todayStartISO),
       roundQuery,
-      supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId),
-      supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId).gte('created_at', todayStartISO),
-      supabaseAdmin.from('game_history').select('user_id, bet_amount, win_amount, created_at').eq('agent_id', agentId),
       supabaseAdmin.from('profiles').select('id, username, is_active, balance').eq('agent_id', agentId),
       supabaseAdmin.auth.admin.listUsers()
     ])
 
     // Map round_bets to standard { user_id, bet_amount, win_amount, created_at } format
-    const roundAllSpins = (allRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
-    const roundTodaySpins = (todayRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
-    const roundFilteredSpins = (filteredRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
-
-    const histAllSpins = (allHistRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.bet_amount || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
-    const histTodaySpins = (todayHistRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.bet_amount || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
-    const histFilteredSpins = (filteredHistRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.bet_amount || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
-
-    const allSpins = roundAllSpins.length > 0 ? roundAllSpins : histAllSpins
-    const todaySpins = roundTodaySpins.length > 0 ? roundTodaySpins : histTodaySpins
-    const filteredSpins = roundFilteredSpins.length > 0 ? roundFilteredSpins : histFilteredSpins
+    const allSpins = (allRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
+    const todaySpins = (todayRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: '' }))
+    const filteredSpins = (filteredRoundsRes.data || []).map(s => ({ user_id: s.user_id, bet_amount: Number(s.total_stake || 0), win_amount: Number(s.win_amount || 0), created_at: s.created_at }))
 
     // Summary calculations
     const todaysPnl = todaySpins.reduce((acc, s) => acc + (s.bet_amount - s.win_amount), 0)

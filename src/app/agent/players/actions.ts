@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
+import { isCreditTxn } from '@/lib/ledger'
 
 export async function getPlayersAction(targetAgentId?: string) {
   const supabase = await createServerClient()
@@ -409,8 +410,11 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string) {
     if (txns && txns.length > 0) {
       pointsHistory = txns.map((tx: any) => {
         const amt = Number(tx.amount || 0)
-        // Credits: deposits from agent, win payouts, positive adjustments
-        const isCredit = amt > 0 || ['agent_topup', 'agent_credit', 'deposit', 'win_credit', 'win_payout'].includes(tx.type)
+        // M-4 FIX: the previous list referenced agent_credit / deposit /
+        // win_credit, none of which exist. isCreditTxn treats the sign of
+        // `amount` as authoritative, which is what actually distinguishes a
+        // credit from a debit for admin_adjustment rows.
+        const isCredit = isCreditTxn(tx.type, amt)
         return {
           id: tx.id.substring(0, 8),
           type: (isCredit ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',

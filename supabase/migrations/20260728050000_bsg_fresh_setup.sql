@@ -1,3 +1,34 @@
+-- #############################################################################
+-- ##  ⚠  STALE BASELINE — DO NOT RE-RUN AGAINST PRODUCTION  (finding N-0)   ##
+-- #############################################################################
+--
+-- Production (pkwifufxakvwyqjamywo) has been patched directly since this file
+-- was written and NO LONGER MATCHES IT. Verified differences:
+--
+--   * submit_round_bet — live has ONE function, signature (text, jsonb, jsonb,
+--     jsonb, numeric). This file creates TWO overloads (uuid + text), which
+--     reintroduces PostgREST candidate-resolution ambiguity (finding M-8).
+--   * submit_round_bet — live carries guards this file lacks:
+--         IF v_round.red IS NOT NULL  -> P0009 'Round already resolved'
+--         IF v_already_resolved       -> P0010 'Bet already settled'
+--     and its UPSERT resets is_resolved/win_amount/single_win/double_win/
+--     triple_win. Running this file would REVERT that hardening.
+--   * tc_bets_agent_select — live uses the Step-6 form (agent-of-owner only),
+--     not the Step-9 form defined further down this file.
+--
+-- Running this file would also DESTROY ALL LIVE DATA: STEP 1 below opens with
+-- DROP TABLE ... CASCADE on triple_chance_bets, triple_chance_rounds,
+-- transactions, active_sessions and play_limits.
+--
+-- Superseded in part by:
+--   20260806120000_fix_rtp_timing.sql                  (N-1, N-2)
+--   20260806123000_ledger_version_and_constraints.sql  (M-5, M-2, M-4)
+--
+-- TO RESYNC: dump production and commit it as a new baseline --
+--   supabase db dump --schema public -f supabase/migrations/<ts>_baseline.sql
+-- then delete this file. Until then, treat it as historical reference only.
+-- #############################################################################
+
 -- =============================================================================
 -- BSG FRESH DATABASE SETUP
 -- Migration: 20260728050000_bsg_fresh_setup.sql

@@ -444,9 +444,11 @@ export default function AgentDetailPage({ params }: Props) {
                 <div className="space-y-1">
                   <Label htmlFor="agent-deposit-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
                   <Input 
-                    id="agent-deposit-amount" 
-                    type="number" 
-                    placeholder="e.g. 1000" 
+                    id="agent-deposit-amount"
+                    type="number"
+                    step="1"
+                    min="1"
+                    placeholder="e.g. 1000"
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
                     className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
@@ -505,9 +507,11 @@ export default function AgentDetailPage({ params }: Props) {
                 <div className="space-y-1">
                   <Label htmlFor="agent-withdraw-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
                   <Input 
-                    id="agent-withdraw-amount" 
-                    type="number" 
-                    placeholder="e.g. 500" 
+                    id="agent-withdraw-amount"
+                    type="number"
+                    step="1"
+                    min="1"
+                    placeholder="e.g. 500"
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
                     className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 

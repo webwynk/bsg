@@ -1,6 +1,23 @@
 ﻿import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+/**
+ * ⚠ DEAD ENDPOINT — RECOMMENDED FOR DELETION (mismatch M-6).
+ *
+ * This route duplicates the mobile login flow, but `bsg_app` does not call it:
+ * ApiService.login talks to Supabase directly. It is therefore a second,
+ * divergent implementation of the most security-sensitive operation in the
+ * system, and every future auth rule has to be written twice or it applies to
+ * only one path.
+ *
+ * It is also an unauthenticated POST endpoint that reaches for the service-role
+ * key (to resolve the agent's display name), and unlike the app's own flow it
+ * cannot enforce the single-device rule — that lives in the
+ * check_and_update_login_session RPC, which only the app calls.
+ *
+ * Left in place only because this workspace is not under version control, so a
+ * deletion here would be unrecoverable. Delete the file once it is in git.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -71,6 +88,11 @@ export async function POST(request: Request) {
         username: userMetadata.username || username,
         name: userMetadata.full_name || username,
         balance,
+        // M-6 FIX: the Flutter UserModel.fromJson reads snake_case 'agent_name'.
+        // This route emitted camelCase 'agentName', so even if the app were
+        // pointed at it the field would have been dropped. Both keys are sent
+        // for one release so nothing breaks if another consumer exists.
+        agent_name: agentName,
         agentName,
         status: userMetadata.status || 'Active',
       },

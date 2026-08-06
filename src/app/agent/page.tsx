@@ -327,9 +327,11 @@ export default function AgentDashboard() {
               )}
             </div>
             <Input 
-              id="quick-amount" 
-              type="number" 
-              placeholder="e.g. 1000" 
+              id="quick-amount"
+              type="number"
+              step="1"
+              min="1"
+              placeholder="e.g. 1000"
               value={quickAmount}
               onChange={(e) => {
                 setQuickAmount(e.target.value)

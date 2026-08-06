@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
+import { CASHIER_TXN_TYPES, isCreditTxn } from '@/lib/ledger'
 
 export async function getAgentDashboardDataAction() {
   const supabase = await createServerClient()
@@ -125,12 +126,15 @@ export async function getAgentDashboardDataAction() {
       // Format last 20 cashier transactions
       let recentTransactions: Array<{ id: string; type: 'deposit' | 'withdraw'; amount: number; target: string; targetUsername: string; date: string }> = []
       if (txnsData && txnsData.length > 0) {
+        // M-4 FIX: filter against the five types the database actually writes.
+        // The previous list included agent_credit / agent_debit / deposit /
+        // withdraw, none of which any RPC has ever inserted.
         recentTransactions = txnsData
-          .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
+          .filter(tx => (CASHIER_TXN_TYPES as readonly string[]).includes(tx.type))
           .map(tx => {
             const amt = Number(tx.amount || 0)
-            const isDep = tx.type === 'agent_topup' || tx.type === 'agent_credit' || tx.type === 'deposit' || (tx.type === 'admin_adjustment' && amt >= 0)
-            
+            const isDep = isCreditTxn(tx.type, amt)
+
             const playerProf = (playersProfRes.data || []).find(p => p.id === tx.user_id)
             const playerUser = allUsers.find(u => u.id === tx.user_id)
             
@@ -229,7 +233,7 @@ export async function getAgentTransactionHistoryAction() {
     }
 
     const formatted = txnsData
-      .filter(tx => ['agent_topup', 'agent_deduct', 'agent_credit', 'agent_debit', 'deposit', 'withdraw', 'admin_adjustment'].includes(tx.type))
+      .filter(tx => (CASHIER_TXN_TYPES as readonly string[]).includes(tx.type))
       .map(tx => {
         const isAgentPlayerTxn = tx.agent_id === authUser.id && tx.user_id !== authUser.id
         const isSuperadminTxn = tx.user_id === authUser.id
@@ -245,12 +249,7 @@ export async function getAgentTransactionHistoryAction() {
         }
 
         const amt = Number(tx.amount || 0)
-        let txType: 'deposit' | 'withdraw' = 'deposit'
-        if (tx.type === 'agent_topup' || tx.type === 'agent_credit' || (tx.type === 'admin_adjustment' && amt >= 0)) {
-          txType = 'deposit'
-        } else if (tx.type === 'agent_deduct' || tx.type === 'agent_debit' || (tx.type === 'admin_adjustment' && amt < 0)) {
-          txType = 'withdraw'
-        }
+        const txType: 'deposit' | 'withdraw' = isCreditTxn(tx.type, amt) ? 'deposit' : 'withdraw'
 
         return {
           id: tx.id,

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 import { logAuditEventAction } from '../actions'
+import { toWholeCoins } from '@/lib/ledger'
 
 export async function getAgentsAction() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -280,10 +281,14 @@ export async function createAgentAction(formData: FormData) {
 }
 
 export async function transferPointsAction(targetIdentifier: string, amount: number, type: 'deposit' | 'withdraw') {
-  const sanitizedAmount = Math.round((amount || 0) * 100) / 100
+  // M-2 FIX: coins are whole units. This previously kept two decimal places
+  // (Math.round(amount * 100) / 100), but the Flutter client parses balance
+  // with .toInt() at every boundary, so any fraction was invisible to the
+  // player and could never be bet or withdrawn.
+  const sanitizedAmount = toWholeCoins(amount)
 
-  if (!targetIdentifier || isNaN(sanitizedAmount) || sanitizedAmount <= 0) {
-    return { error: 'Please enter a valid positive amount.' }
+  if (!targetIdentifier || sanitizedAmount === null) {
+    return { error: 'Please enter a valid whole number of coins.' }
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -651,32 +656,63 @@ export async function toggleAgentStatusAction(agentIdentifier: string, currentSt
       return { error: updateAgentError.message }
     }
 
-    // 2. Cascading Block/Unblock for all players under this Agent
-    let blockedPlayersCount = 0
-    if (newStatus === 'Blocked') {
-      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-      if (usersData?.users) {
-        const agentPlayers = usersData.users.filter(u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId)
-        for (const player of agentPlayers) {
-          await supabaseAdmin.auth.admin.updateUserById(player.id, {
-            user_metadata: {
-              ...player.user_metadata,
-              status: 'Blocked'
-            }
-          })
-          blockedPlayersCount++
-        }
-      }
+    // M-1 FIX: mirror the status onto profiles.is_active.
+    // update_user_heartbeat() reads ONLY profiles.is_active, and every dashboard
+    // read (getAgentsAction, getAgentDetailAction) renders status from it too.
+    // Writing metadata alone left blocked agents showing "Active" and never
+    // kicked anyone out of a live game session.
+    const { error: agentProfileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ is_active: newStatus === 'Active', updated_at: new Date().toISOString() })
+      .eq('id', agentId)
+
+    if (agentProfileError) {
+      return { error: agentProfileError.message }
     }
 
-    const logDetail = newStatus === 'Blocked' 
-      ? `Blocked Agent @${agentUsername} and cascading blocked ${blockedPlayersCount} player accounts`
-      : `Unblocked Agent @${agentUsername}`
+    // 2. Cascading Block/Unblock for all players under this Agent.
+    // M-1 FIX: the cascade now runs in BOTH directions. Previously only the
+    // block cascaded, so unblocking an agent left every one of their players
+    // permanently locked out with no working UI to restore them.
+    // Players blocked by a cascade are tagged so that an unblock restores only
+    // those, leaving individually-blocked players blocked.
+    let cascadedPlayersCount = 0
+    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
+    const agentPlayers = (usersData?.users || []).filter(
+      u => u.user_metadata?.role === 'player' && u.user_metadata?.agent_id === agentId
+    )
+
+    const cascadeTargets = newStatus === 'Blocked'
+      ? agentPlayers
+      // Only restore players this cascade blocked, not ones blocked on their own.
+      : agentPlayers.filter(p => p.user_metadata?.blocked_by_agent_cascade === true)
+
+    for (const player of cascadeTargets) {
+      await supabaseAdmin.auth.admin.updateUserById(player.id, {
+        user_metadata: {
+          ...player.user_metadata,
+          status: newStatus,
+          blocked_by_agent_cascade: newStatus === 'Blocked'
+        }
+      })
+      cascadedPlayersCount++
+    }
+
+    if (cascadeTargets.length > 0) {
+      await supabaseAdmin
+        .from('profiles')
+        .update({ is_active: newStatus === 'Active', updated_at: new Date().toISOString() })
+        .in('id', cascadeTargets.map(p => p.id))
+    }
+
+    const logDetail = newStatus === 'Blocked'
+      ? `Blocked Agent @${agentUsername} and cascading blocked ${cascadedPlayersCount} player accounts`
+      : `Unblocked Agent @${agentUsername} and restored ${cascadedPlayersCount} cascade-blocked player accounts`
     
     await logAuditEventAction('Security', logDetail)
     revalidatePath('/superadmin/agents')
     revalidatePath(`/superadmin/agents/${agentId}`)
-    return { success: true, newStatus, blockedPlayersCount }
+    return { success: true, newStatus, cascadedPlayersCount }
   }
 
   return { error: 'Service Role Key not configured.' }
