@@ -281,6 +281,31 @@ export async function setAgentActiveAction(agentIdentifier: string, isActive: bo
       await db.from('active_sessions').delete().in('user_id', [agentId, ...playerIds])
     }
 
+    // Revoke (or restore) the actual Supabase Auth session for the agent and
+    // every cascaded player. profiles.is_active alone does not invalidate an
+    // already-issued JWT -- without this, a blocked account's existing login
+    // keeps working (including direct calls to agent_transfer_coins /
+    // admin_issue_coins) until that token naturally expires on its own.
+    // ban_duration is enforced by Supabase Auth on every request, independent
+    // of token TTL, so this closes that window immediately.
+    const banTargets = [agentId, ...playerIds]
+    const banFailures: string[] = []
+    for (const userId of banTargets) {
+      const { error: banError } = await db.auth.admin.updateUserById(userId, {
+        ban_duration: isActive ? 'none' : '876000h',
+      })
+      if (banError) banFailures.push(userId)
+    }
+    // A ban failure does not roll back the is_active state above. The
+    // database-level authorization fix in agent_transfer_coins /
+    // admin_issue_coins (P0132 / P0135) is the backstop that still applies
+    // even if this call is ever skipped or fails for some accounts.
+    if (banFailures.length > 0) {
+      console.error(
+        `setAgentActiveAction: failed to ${isActive ? 'unban' : 'ban'} Auth session(s) for: ${banFailures.join(', ')}`
+      )
+    }
+
     await logAuditEventAction(
       'security',
       isActive

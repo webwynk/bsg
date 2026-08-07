@@ -202,6 +202,18 @@ export async function setPlayerActiveAction(playerIdentifier: string, isActive: 
       await createAdminClient().from('active_sessions').delete().eq('user_id', playerId)
     }
 
+    // Revoke (or restore) the player's actual Supabase Auth session.
+    // profiles.is_active alone does not invalidate an already-issued JWT --
+    // without this, a blocked player's existing login keeps working until
+    // that token naturally expires. ban_duration is enforced by Supabase Auth
+    // on every request, independent of token TTL.
+    const { error: banError } = await createAdminClient().auth.admin.updateUserById(playerId, {
+      ban_duration: isActive ? 'none' : '876000h',
+    })
+    if (banError) {
+      console.error(`setPlayerActiveAction: failed to ${isActive ? 'unban' : 'ban'} Auth session for ${playerId}: ${banError.message}`)
+    }
+
     revalidatePath('/agent/players')
     return { success: true, is_active: isActive }
   } catch (err) {
