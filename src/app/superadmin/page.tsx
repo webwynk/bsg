@@ -8,7 +8,7 @@ import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
-import { getRtpAction, updateRtpAction, getPayoutMultipliersAction, updatePayoutMultipliersAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
+import { getRtpAction, updateRtpAction, getPayoutMultipliersAction, updatePayoutMultipliersAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
@@ -57,6 +57,12 @@ export default function SuperAdminDashboard() {
   const [isSavingMultipliers, setIsSavingMultipliers] = React.useState(false)
   const [multiplierSuccess, setMultiplierSuccess] = React.useState<string | null>(null)
   const [multiplierError, setMultiplierError] = React.useState<string | null>(null)
+  // Locks the Payout Multipliers widget in a round's closing seconds, so a
+  // change can't be submitted right as the next round is about to capture
+  // whatever the rate currently is -- unlocks the instant a new round starts
+  // (seconds_remaining jumps back up). See getActiveRoundTimingAction.
+  const [roundSecondsRemaining, setRoundSecondsRemaining] = React.useState<number | null>(null)
+  const multipliersLocked = roundSecondsRemaining !== null && roundSecondsRemaining <= 11
   const [countdown, setCountdown] = React.useState(60)
 
   // Log Filter, Search & Pagination states
@@ -162,6 +168,25 @@ export default function SuperAdminDashboard() {
     return () => {
       clearInterval(countdownTick)
       clearInterval(autoPoll)
+    }
+  }, [])
+
+  // Separate, faster poll dedicated to the multiplier-lock countdown -- 60s
+  // (the metrics poll above) is far too coarse to reliably catch an 11-second
+  // window. Deliberately lightweight (getActiveRoundTimingAction only calls
+  // get_current_round(), not the heavier draws/bets query fetchMetrics uses).
+  React.useEffect(() => {
+    let cancelled = false
+    const poll = () => {
+      getActiveRoundTimingAction().then(res => {
+        if (!cancelled) setRoundSecondsRemaining(res.seconds_remaining)
+      })
+    }
+    poll()
+    const timingPoll = setInterval(poll, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(timingPoll)
     }
   }, [])
 
@@ -597,6 +622,13 @@ export default function SuperAdminDashboard() {
                 </div>
               )}
 
+              {multipliersLocked && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>Locked — round is finishing ({roundSecondsRemaining}s left). Unlocks automatically when the next round starts.</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Singles (x)</span>
@@ -606,7 +638,8 @@ export default function SuperAdminDashboard() {
                     step={0.5}
                     value={singleMult}
                     onChange={(e) => setSingleMult(Number(e.target.value))}
-                    className="h-8 text-xs font-mono font-black"
+                    disabled={multipliersLocked}
+                    className="h-8 text-xs font-mono font-black disabled:opacity-50"
                   />
                 </div>
                 <div className="space-y-1">
@@ -617,7 +650,8 @@ export default function SuperAdminDashboard() {
                     step={0.5}
                     value={doubleMult}
                     onChange={(e) => setDoubleMult(Number(e.target.value))}
-                    className="h-8 text-xs font-mono font-black"
+                    disabled={multipliersLocked}
+                    className="h-8 text-xs font-mono font-black disabled:opacity-50"
                   />
                 </div>
                 <div className="space-y-1">
@@ -628,18 +662,19 @@ export default function SuperAdminDashboard() {
                     step={0.5}
                     value={tripleMult}
                     onChange={(e) => setTripleMult(Number(e.target.value))}
-                    className="h-8 text-xs font-mono font-black"
+                    disabled={multipliersLocked}
+                    className="h-8 text-xs font-mono font-black disabled:opacity-50"
                   />
                 </div>
               </div>
 
               <Button
                 onClick={handleApplyMultipliers}
-                disabled={isSavingMultipliers}
-                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs"
+                disabled={isSavingMultipliers || multipliersLocked}
+                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingMultipliers ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {isSavingMultipliers ? 'Saving Configuration...' : 'Apply Multipliers'}
+                {isSavingMultipliers ? 'Saving Configuration...' : multipliersLocked ? 'Locked Until Next Round' : 'Apply Multipliers'}
               </Button>
             </div>
           )}

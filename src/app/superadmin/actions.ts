@@ -300,6 +300,41 @@ export async function updatePayoutMultipliersAction(multipliers: PayoutMultiplie
   }
 }
 
+// Lightweight, poll-friendly round-timing check — used only to lock the
+// Payout Multipliers widget in the closing seconds of a round. Deliberately
+// separate from getLatestGameDrawsAction (which also fetches 20 rounds of
+// nested bet history) since this needs to be polled every couple of seconds
+// and that one does not.
+//
+// This lock is a UX/discipline convenience only, not a correctness
+// requirement -- a change submitted at any point still only ever affects the
+// next round (each round pins its own payout_multiplier_* at creation time,
+// see draw_round/settle_round), so a stale or failed poll here fails open
+// (unlocked) rather than risking the widget getting stuck disabled.
+export async function getActiveRoundTimingAction(): Promise<{
+  seconds_remaining: number | null
+  round_number: number | null
+  error: string | null
+}> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { seconds_remaining: null, round_number: null, error: auth.error }
+
+  try {
+    const db = createAdminClient()
+    const { data: rawCur, error } = await db.rpc('get_current_round')
+    if (error) throw new Error(error.message)
+    const cur = asRpc<CurrentRound | null>(rawCur)
+    return {
+      seconds_remaining: cur ? Number(cur.seconds_remaining) : null,
+      round_number: cur ? Number(cur.round_number) : null,
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { seconds_remaining: null, round_number: null, error: `Could not read round timing: ${message}` }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LIVE GAME TELEMETRY
 // ─────────────────────────────────────────────────────────────────────────────
