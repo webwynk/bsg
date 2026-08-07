@@ -57,12 +57,23 @@ export default function SuperAdminDashboard() {
   const [isSavingMultipliers, setIsSavingMultipliers] = React.useState(false)
   const [multiplierSuccess, setMultiplierSuccess] = React.useState<string | null>(null)
   const [multiplierError, setMultiplierError] = React.useState<string | null>(null)
-  // Locks the Payout Multipliers widget in a round's closing seconds, so a
-  // change can't be submitted right as the next round is about to capture
-  // whatever the rate currently is -- unlocks the instant a new round starts
-  // (seconds_remaining jumps back up). See getActiveRoundTimingAction.
-  const [roundSecondsRemaining, setRoundSecondsRemaining] = React.useState<number | null>(null)
-  const multipliersLocked = roundSecondsRemaining !== null && roundSecondsRemaining <= 11
+  // Locks the RTP Configuration and Payout Multipliers widgets (both --
+  // Issue #43) in a round's closing seconds. Uses the SAME 0-90 countdown
+  // players actually see in the app (derived from seconds_into, mirroring
+  // bsg_app's own _cycleToCountdown), not the raw server seconds_remaining
+  // (which counts down over the full 103-second cycle -- a different,
+  // later-ending clock). Unlocks the instant a new round starts, since this
+  // countdown jumps back up to ~90 at that point. See getActiveRoundTimingAction.
+  //
+  // This is a UX/discipline courtesy only, not a correctness requirement --
+  // both RTP and the payout multiplier are pinned onto each round at
+  // creation (draw_round/settle_round read the round's own value, never live
+  // game_config), so a change is safe to submit at any second regardless of
+  // this lock. It just avoids the admin submitting a change in a moment that
+  // might feel confusing about which round it's about to affect.
+  const [roundSecondsInto, setRoundSecondsInto] = React.useState<number | null>(null)
+  const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
+  const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
   const [countdown, setCountdown] = React.useState(60)
 
   // Log Filter, Search & Pagination states
@@ -179,7 +190,7 @@ export default function SuperAdminDashboard() {
     let cancelled = false
     const poll = () => {
       getActiveRoundTimingAction().then(res => {
-        if (!cancelled) setRoundSecondsRemaining(res.seconds_remaining)
+        if (!cancelled) setRoundSecondsInto(res.seconds_into)
       })
     }
     poll()
@@ -467,13 +478,20 @@ export default function SuperAdminDashboard() {
                 </div>
               )}
 
+              {roundConfigLocked && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
+                </div>
+              )}
+
               {/* Slider Controls */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-[10px] font-mono font-bold">
                   <span className="text-muted-foreground">Adjust Target RTP</span>
                   <span className="text-amber-500 font-black">{rtpValue}%</span>
                 </div>
-                <Slider 
+                <Slider
                   value={[rtpValue]}
                   onValueChange={(val) => {
                     if (typeof val === 'number') {
@@ -482,10 +500,11 @@ export default function SuperAdminDashboard() {
                       setRtpValue(val[0])
                     }
                   }}
-                  max={100} 
-                  min={50} 
+                  max={100}
+                  min={50}
                   step={0.5}
-                  className="w-full cursor-pointer"
+                  disabled={roundConfigLocked}
+                  className="w-full cursor-pointer disabled:opacity-50"
                 />
                 <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
                   <span>50% (Max House Margin)</span>
@@ -510,8 +529,8 @@ export default function SuperAdminDashboard() {
                     <button
                       key={preset.val}
                       onClick={() => handleApplyRtp(preset.val)}
-                      disabled={isSavingRtp}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border ${
+                      disabled={isSavingRtp || roundConfigLocked}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
                         rtpValue === preset.val
                           ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                           : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
@@ -573,13 +592,13 @@ export default function SuperAdminDashboard() {
                 </div>
               </div>
 
-              <Button 
-                onClick={() => handleApplyRtp()} 
-                disabled={isSavingRtp}
-                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs"
+              <Button
+                onClick={() => handleApplyRtp()}
+                disabled={isSavingRtp || roundConfigLocked}
+                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {isSavingRtp ? 'Saving Configuration...' : 'Apply Configuration'}
+                {isSavingRtp ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Configuration'}
               </Button>
             </div>
           )}
@@ -622,10 +641,10 @@ export default function SuperAdminDashboard() {
                 </div>
               )}
 
-              {multipliersLocked && (
+              {roundConfigLocked && (
                 <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
                   <Clock className="h-3.5 w-3.5 shrink-0" />
-                  <span>Locked — round is finishing ({roundSecondsRemaining}s left). Unlocks automatically when the next round starts.</span>
+                  <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
                 </div>
               )}
 
@@ -638,7 +657,7 @@ export default function SuperAdminDashboard() {
                     step={0.5}
                     value={singleMult}
                     onChange={(e) => setSingleMult(Number(e.target.value))}
-                    disabled={multipliersLocked}
+                    disabled={roundConfigLocked}
                     className="h-8 text-xs font-mono font-black disabled:opacity-50"
                   />
                 </div>
@@ -650,7 +669,7 @@ export default function SuperAdminDashboard() {
                     step={0.5}
                     value={doubleMult}
                     onChange={(e) => setDoubleMult(Number(e.target.value))}
-                    disabled={multipliersLocked}
+                    disabled={roundConfigLocked}
                     className="h-8 text-xs font-mono font-black disabled:opacity-50"
                   />
                 </div>
@@ -662,7 +681,7 @@ export default function SuperAdminDashboard() {
                     step={0.5}
                     value={tripleMult}
                     onChange={(e) => setTripleMult(Number(e.target.value))}
-                    disabled={multipliersLocked}
+                    disabled={roundConfigLocked}
                     className="h-8 text-xs font-mono font-black disabled:opacity-50"
                   />
                 </div>
@@ -670,11 +689,11 @@ export default function SuperAdminDashboard() {
 
               <Button
                 onClick={handleApplyMultipliers}
-                disabled={isSavingMultipliers || multipliersLocked}
+                disabled={isSavingMultipliers || roundConfigLocked}
                 className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingMultipliers ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {isSavingMultipliers ? 'Saving Configuration...' : multipliersLocked ? 'Locked Until Next Round' : 'Apply Multipliers'}
+                {isSavingMultipliers ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Multipliers'}
               </Button>
             </div>
           )}

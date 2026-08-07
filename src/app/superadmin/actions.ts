@@ -306,6 +306,13 @@ export async function updatePayoutMultipliersAction(multipliers: PayoutMultiplie
 // nested bet history) since this needs to be polled every couple of seconds
 // and that one does not.
 //
+// Returns seconds_into (not just seconds_remaining) so the caller can derive
+// the SAME 0-90 countdown the player-facing app displays
+// (bsg_app/lib/providers/game_provider.dart's _cycleToCountdown: roughly
+// `90 - seconds_into`, clamped to 0). seconds_remaining alone counts down
+// over the full 103-second server cycle, which is a different, later-ending
+// clock than what players (and now, this widget) actually watch.
+//
 // This lock is a UX/discipline convenience only, not a correctness
 // requirement -- a change submitted at any point still only ever affects the
 // next round (each round pins its own payout_multiplier_* at creation time,
@@ -313,11 +320,12 @@ export async function updatePayoutMultipliersAction(multipliers: PayoutMultiplie
 // (unlocked) rather than risking the widget getting stuck disabled.
 export async function getActiveRoundTimingAction(): Promise<{
   seconds_remaining: number | null
+  seconds_into: number | null
   round_number: number | null
   error: string | null
 }> {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { seconds_remaining: null, round_number: null, error: auth.error }
+  if (auth.error) return { seconds_remaining: null, seconds_into: null, round_number: null, error: auth.error }
 
   try {
     const db = createAdminClient()
@@ -326,12 +334,13 @@ export async function getActiveRoundTimingAction(): Promise<{
     const cur = asRpc<CurrentRound | null>(rawCur)
     return {
       seconds_remaining: cur ? Number(cur.seconds_remaining) : null,
+      seconds_into: cur ? Number(cur.seconds_into) : null,
       round_number: cur ? Number(cur.round_number) : null,
       error: null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    return { seconds_remaining: null, round_number: null, error: `Could not read round timing: ${message}` }
+    return { seconds_remaining: null, seconds_into: null, round_number: null, error: `Could not read round timing: ${message}` }
   }
 }
 
