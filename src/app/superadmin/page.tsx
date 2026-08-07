@@ -8,11 +8,14 @@ import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
-import { getRtpAction, updateRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
+import { getRtpAction, updateRtpAction, getPayoutMultipliersAction, updatePayoutMultipliersAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
+  const [singleMult, setSingleMult] = React.useState(9)
+  const [doubleMult, setDoubleMult] = React.useState(90)
+  const [tripleMult, setTripleMult] = React.useState(900)
   const [totalCoins, setTotalCoins] = React.useState(0)
   const [todaysCoins, setTodaysCoins] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
@@ -51,6 +54,9 @@ export default function SuperAdminDashboard() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
+  const [isSavingMultipliers, setIsSavingMultipliers] = React.useState(false)
+  const [multiplierSuccess, setMultiplierSuccess] = React.useState<string | null>(null)
+  const [multiplierError, setMultiplierError] = React.useState<string | null>(null)
   const [countdown, setCountdown] = React.useState(60)
 
   // Log Filter, Search & Pagination states
@@ -74,8 +80,9 @@ export default function SuperAdminDashboard() {
     Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
+      getPayoutMultipliersAction(),
       getAuditLogsAction()
-    ]).then(([resMetrics, resRtp, resLogs]) => {
+    ]).then(([resMetrics, resRtp, resMultipliers, resLogs]) => {
       setIsLoadingMetrics(false)
       if (resMetrics) {
         setTotalCoins(resMetrics.total_coins || 0)
@@ -93,6 +100,11 @@ export default function SuperAdminDashboard() {
       }
       if (resRtp?.rtp) {
         setRtpValue(resRtp.rtp)
+      }
+      if (resMultipliers?.multipliers) {
+        setSingleMult(resMultipliers.multipliers.single)
+        setDoubleMult(resMultipliers.multipliers.double)
+        setTripleMult(resMultipliers.multipliers.triple)
       }
       if (resLogs?.logs) {
         setSystemLogs(resLogs.logs)
@@ -117,6 +129,21 @@ export default function SuperAdminDashboard() {
       setRtpSuccess(`RTP updated to ${valToApply}%`)
       fetchMetrics(false)
       setTimeout(() => setRtpSuccess(null), 2500)
+    }
+  }
+
+  const handleApplyMultipliers = async () => {
+    setIsSavingMultipliers(true)
+    setMultiplierSuccess(null)
+    setMultiplierError(null)
+    const res = await updatePayoutMultipliersAction({ single: singleMult, double: doubleMult, triple: tripleMult })
+    setIsSavingMultipliers(false)
+    if (res.success) {
+      setMultiplierSuccess(`Payout multipliers updated to x${singleMult} / x${doubleMult} / x${tripleMult}`)
+      fetchMetrics(false)
+      setTimeout(() => setMultiplierSuccess(null), 2500)
+    } else {
+      setMultiplierError(res.error ?? 'Could not update payout multipliers.')
     }
   }
 
@@ -383,8 +410,9 @@ export default function SuperAdminDashboard() {
 
       {/* Main Widgets: RTP Configuration & Recent System Logs */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* RTP Configuration Card (md:col-span-5) */}
-        <Card className="md:col-span-5 bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+        {/* RTP Configuration + Payout Multipliers (md:col-span-5) */}
+        <div className="md:col-span-5 space-y-4">
+        <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
             <div className="flex items-center space-x-2">
               <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
@@ -531,6 +559,92 @@ export default function SuperAdminDashboard() {
             </div>
           )}
         </Card>
+
+        {/* Payout Multiplier Configuration Card — Issue #5: was hardcoded
+            x9/x90/x900 in draw_round, settle_round, and the mobile app.
+            This is now the single place the multiplier is ever set;
+            draw_round/settle_round read it live and the app fetches it via
+            get_play_limits(), so all copies stay in sync automatically. */}
+        <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+            <div className="flex items-center space-x-2">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                <Dices className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-foreground leading-tight">Payout Multipliers</h3>
+                <p className="text-[10px] text-muted-foreground">Win rate per board — controls the game and app together.</p>
+              </div>
+            </div>
+          </div>
+
+          {isLoadingMetrics ? (
+            <div className="space-y-3 p-2 animate-pulse">
+              <div className="h-4 bg-secondary/80 rounded w-full" />
+              <div className="h-8 bg-secondary/60 rounded w-full" />
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {multiplierSuccess && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                  <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
+                  <span>{multiplierSuccess}</span>
+                </div>
+              )}
+              {multiplierError && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
+                  {multiplierError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Singles (x)</span>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step={0.5}
+                    value={singleMult}
+                    onChange={(e) => setSingleMult(Number(e.target.value))}
+                    className="h-8 text-xs font-mono font-black"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Doubles (x)</span>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step={0.5}
+                    value={doubleMult}
+                    onChange={(e) => setDoubleMult(Number(e.target.value))}
+                    className="h-8 text-xs font-mono font-black"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Triples (x)</span>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step={0.5}
+                    value={tripleMult}
+                    onChange={(e) => setTripleMult(Number(e.target.value))}
+                    className="h-8 text-xs font-mono font-black"
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={handleApplyMultipliers}
+                disabled={isSavingMultipliers}
+                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs"
+              >
+                {isSavingMultipliers ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                {isSavingMultipliers ? 'Saving Configuration...' : 'Apply Multipliers'}
+              </Button>
+            </div>
+          )}
+        </Card>
+        </div>
 
         {/* Recent System Logs Widget (md:col-span-7) */}
         <Card className="md:col-span-7 bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">

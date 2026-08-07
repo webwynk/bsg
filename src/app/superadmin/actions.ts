@@ -232,6 +232,75 @@ export async function updateRtpAction(rtpPercentage: number) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PAYOUT MULTIPLIER CONFIGURATION
+//
+// Issue #5: was hardcoded (x9/x90/x900) in draw_round, settle_round, AND the
+// mobile app -- four independent copies, no single source of truth. Now
+// lives in game_config alongside rtp_percentage; this is the one place it's
+// ever set. draw_round/settle_round read it live; the app fetches it via
+// get_play_limits().
+// ─────────────────────────────────────────────────────────────────────────────
+export type PayoutMultipliers = { single: number; double: number; triple: number }
+
+export async function getPayoutMultipliersAction(): Promise<{ multipliers: PayoutMultipliers; error: string | null }> {
+  const auth = await requireAuth(['superadmin'])
+  const fallback: PayoutMultipliers = { single: 9, double: 90, triple: 900 }
+  if (auth.error) return { multipliers: fallback, error: auth.error }
+
+  try {
+    const { data, error } = await createAdminClient()
+      .from('game_config')
+      .select('payout_multiplier_single, payout_multiplier_double, payout_multiplier_triple')
+      .eq('id', 'global')
+      .single()
+    if (error) throw new Error(error.message)
+    return {
+      multipliers: {
+        single: Number(data.payout_multiplier_single),
+        double: Number(data.payout_multiplier_double),
+        triple: Number(data.payout_multiplier_triple),
+      },
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { multipliers: fallback, error: `Could not read payout multipliers: ${message}` }
+  }
+}
+
+export async function updatePayoutMultipliersAction(multipliers: PayoutMultipliers) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) return { success: false, error: auth.error ?? 'Unauthorized' }
+
+  const { single, double, triple } = multipliers
+  // The database enforces `> 0` too (CHECK on game_config); validating here
+  // just produces a friendlier message.
+  if (![single, double, triple].every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0)) {
+    return { success: false, error: 'Each multiplier must be a positive number.' }
+  }
+
+  try {
+    const { error } = await createAdminClient()
+      .from('game_config')
+      .update({
+        payout_multiplier_single: single,
+        payout_multiplier_double: double,
+        payout_multiplier_triple: triple,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', 'global')
+    if (error) throw new Error(error.message)
+
+    await logAuditEventAction('system', `Payout multipliers set to x${single} / x${double} / x${triple}`)
+    revalidatePath('/superadmin')
+    return { success: true, multipliers, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, error: `Could not update payout multipliers: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LIVE GAME TELEMETRY
 // ─────────────────────────────────────────────────────────────────────────────
 export interface DrawRow {

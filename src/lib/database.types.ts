@@ -153,21 +153,33 @@ export type Database = {
           id: string
           rtp_percentage: number
           draw_at_second: number
+          bet_cutoff_second: number
           session_grace_sec: number
+          payout_multiplier_single: number
+          payout_multiplier_double: number
+          payout_multiplier_triple: number
           updated_at: string
         }
         Insert: {
           id?: string
           rtp_percentage?: number
           draw_at_second?: number
+          bet_cutoff_second?: number
           session_grace_sec?: number
+          payout_multiplier_single?: number
+          payout_multiplier_double?: number
+          payout_multiplier_triple?: number
           updated_at?: string
         }
         Update: {
           id?: string
           rtp_percentage?: number
           draw_at_second?: number
+          bet_cutoff_second?: number
           session_grace_sec?: number
+          payout_multiplier_single?: number
+          payout_multiplier_double?: number
+          payout_multiplier_triple?: number
           updated_at?: string
         }
         Relationships: []
