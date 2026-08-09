@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award, CheckCircle2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
@@ -57,6 +58,7 @@ export default function AgentDetailPage({ params }: Props) {
     coin_balance: number
     is_active: boolean
     is_online: boolean
+    auto_locked_at: string | null
   }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
@@ -703,12 +705,8 @@ export default function AgentDetailPage({ params }: Props) {
                           </div>
                           <span className="font-extrabold text-xs truncate leading-tight">{player.full_name}</span>
                         </div>
-                        <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
-                          player.is_active
-                            ? 'bg-success-bg text-success-text border border-emerald-500/20'
-                            : 'bg-danger-bg text-danger-text border border-red-500/20'
-                        }`}>
-                          {player.is_active ? 'Active' : 'Blocked'}
+                        <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${playerStatus(player).badgeClass}`}>
+                          {playerStatus(player).label}
                         </span>
                       </div>
 

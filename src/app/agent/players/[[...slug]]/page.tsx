@@ -17,13 +17,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useParams, useRouter } from 'next/navigation'
-import { 
-  Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound, 
-  ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins, 
+import {
+  Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound,
+  ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins,
   Calendar as CalendarIcon, Filter, Activity, TrendingUp, TrendingDown, RefreshCw, X,
-  CheckCircle2, AlertCircle, ShieldCheck
+  CheckCircle2, AlertCircle, ShieldCheck, Lock
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
 import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
@@ -170,6 +171,7 @@ export default function PlayersPage() {
 
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
+  const [toggleStatusError, setToggleStatusError] = React.useState<string | null>(null)
 
   // Password reset state
   const [isPasswordResetOpen, setIsPasswordResetOpen] = React.useState(false)
@@ -272,6 +274,7 @@ export default function PlayersPage() {
     selectedPlayerIdRef.current = player.id // keep ref in sync
     setSelectedPlayer(player)
     setShowMobileDetail(true)
+    setToggleStatusError(null)
     setIsLoadingHistory(true)
     setGamePlays([])
     setPointsHistory([])
@@ -340,6 +343,7 @@ export default function PlayersPage() {
   const handleToggleStatus = async () => {
     if (!selectedPlayer) return
     setIsTogglingStatus(true)
+    setToggleStatusError(null)
 
     // B-1 FIX: pass the DESIRED end state. The old code computed a "next
     // status" string and the action then derived its own new value from it, so
@@ -347,7 +351,13 @@ export default function PlayersPage() {
     const res = await setPlayerActiveAction(selectedPlayer.id, !selectedPlayer.is_active)
 
     setIsTogglingStatus(false)
-    if (!res.error) {
+    if (res.error) {
+      // Reachable in practice only if the auto-lock guard fires -- the button
+      // itself is hidden for that case (see playerStatus() below), but the
+      // guard lives in the server action too, so surface it rather than fail
+      // silently if it's ever hit some other way.
+      setToggleStatusError(res.error)
+    } else {
       loadPlayers({ reloadHistory: true })
     }
   }
@@ -374,6 +384,11 @@ export default function PlayersPage() {
       setResetPasswordError(res.error)
     } else {
       setResetPasswordSuccess('Password updated successfully!')
+      // A reset on an auto-locked player also unlocks them (Issue #52, Step
+      // 3) -- without this, the badge/button would keep showing "Temporary
+      // Block" until some unrelated action happened to refresh the list,
+      // which would look like the reset silently failed to unlock anything.
+      loadPlayers({ silent: true })
       setTimeout(() => {
         setIsPasswordResetOpen(false)
         setNewPassword('')
@@ -627,12 +642,8 @@ export default function PlayersPage() {
                         </div>
                         <span className="font-extrabold text-xs truncate leading-tight">{player.full_name}</span>
                       </div>
-                      <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${
-                        player.is_active
-                          ? 'bg-success-bg text-success-text border border-emerald-500/20'
-                          : 'bg-danger-bg text-danger-text border border-red-500/20'
-                      }`}>
-                        {player.is_active ? 'Active' : 'Blocked'}
+                      <span className={`inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-black shrink-0 ${playerStatus(player).badgeClass}`}>
+                        {playerStatus(player).label}
                       </span>
                     </div>
 
@@ -684,12 +695,8 @@ export default function PlayersPage() {
                     <div className="min-w-0">
                       <div className="flex items-center space-x-2">
                         <h2 className="text-sm sm:text-base font-black text-foreground truncate">{selectedPlayer.full_name}</h2>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black shrink-0 ${
-                          selectedPlayer.is_active
-                            ? 'bg-success-bg text-success-text border border-emerald-500/20'
-                            : 'bg-danger-bg text-danger-text border border-red-500/20'
-                        }`}>
-                          {selectedPlayer.is_active ? 'Active' : 'Blocked'}
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black shrink-0 ${playerStatus(selectedPlayer).badgeClass}`}>
+                          {playerStatus(selectedPlayer).label}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2 text-[10px] font-mono">
@@ -868,9 +875,23 @@ export default function PlayersPage() {
                       <DialogHeader>
                         <DialogTitle className="font-black text-lg">Reset Player Password</DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground">
-                          Set a new password for {selectedPlayer.full_name}.
+                          Set a new password for this player.
                         </DialogDescription>
                       </DialogHeader>
+
+                      {/* Identity confirmation -- name AND username both visible before
+                          the agent commits to a reset, so there's no ambiguity about
+                          which account this affects. */}
+                      <div className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-secondary/40 border border-border/60">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-xs shrink-0">
+                          {selectedPlayer.full_name[0]?.toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-foreground truncate">{selectedPlayer.full_name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">@{selectedPlayer.username}</p>
+                        </div>
+                      </div>
+
                       <form onSubmit={handleResetPassword} className="space-y-3 py-2">
                         {resetPasswordError && (
                           <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
@@ -939,22 +960,39 @@ export default function PlayersPage() {
                     </DialogContent>
                   </Dialog>
 
-                  {/* Status Toggle Button */}
-                  <Button
-                    onClick={handleToggleStatus}
-                    disabled={isTogglingStatus}
-                    variant="outline"
-                    className={`w-full h-8 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center ${
-                      selectedPlayer.is_active
-                        ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
-                        : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
-                    }`}
-                  >
-                    {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
-                      selectedPlayer.is_active ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    {selectedPlayer.is_active ? 'Disable Player' : 'Activate Player'}
-                  </Button>
+                  {/* Status Toggle Button -- except for an auto-lock (5 failed
+                      logins), where reactivating directly is intentionally not
+                      offered: a plain, non-interactive label instead, since the
+                      only intended way out of that state is a password reset
+                      (which clears it automatically). A deliberate agent block
+                      (auto_locked_at null) keeps the normal working button. */}
+                  {!selectedPlayer.is_active && selectedPlayer.auto_locked_at ? (
+                    <div className="w-full h-8 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-400 text-[11px] font-extrabold flex items-center justify-center gap-1.5">
+                      <Lock className="h-3.5 w-3.5" />
+                      Temporary Block
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleToggleStatus}
+                      disabled={isTogglingStatus}
+                      variant="outline"
+                      className={`w-full h-8 font-extrabold cursor-pointer rounded-lg text-[11px] flex items-center justify-center ${
+                        selectedPlayer.is_active
+                          ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
+                          : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
+                      }`}
+                    >
+                      {isTogglingStatus ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : (
+                        selectedPlayer.is_active ? <UserX className="mr-1 h-3.5 w-3.5" /> : <UserCheck className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      {selectedPlayer.is_active ? 'Disable Player' : 'Activate Player'}
+                    </Button>
+                  )}
+                  {toggleStatusError && (
+                    <div className="p-2 text-[10px] font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+                      {toggleStatusError}
+                    </div>
+                  )}
                 </div>
               </Card>
 

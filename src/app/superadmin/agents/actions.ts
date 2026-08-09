@@ -105,7 +105,7 @@ export async function getAgentDetailAction(agentIdentifier: string) {
         .select('id, username, full_name, coin_balance, is_active, created_at')
         .eq('id', agentId).single(),
       db.from('profiles')
-        .select('id, username, full_name, coin_balance, is_active')
+        .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
         .eq('agent_id', agentId).order('username'),
       db.from('active_sessions').select('user_id, last_seen_at'),
     ])
@@ -134,6 +134,7 @@ export async function getAgentDetailAction(agentIdentifier: string) {
         coin_balance: Number(p.coin_balance ?? 0),
         is_active: p.is_active,
         is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
+        auto_locked_at: p.auto_locked_at,
       })),
       error: null,
     }

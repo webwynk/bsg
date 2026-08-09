@@ -42,10 +42,13 @@ async function resolvePlayerId(identifier: string): Promise<string | null> {
 async function assertOwnership(
   caller: { id: string; role: string },
   playerId: string
-): Promise<{ ok: true; player: { id: string; username: string; agent_id: string | null } } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; player: { id: string; username: string; agent_id: string | null; auto_locked_at: string | null } }
+  | { ok: false; error: string }
+> {
   const { data, error } = await createAdminClient()
     .from('profiles')
-    .select('id, username, role, agent_id')
+    .select('id, username, role, agent_id, auto_locked_at')
     .eq('id', playerId)
     .single()
 
@@ -54,7 +57,7 @@ async function assertOwnership(
   if (caller.role === 'agent' && data.agent_id !== caller.id) {
     return { ok: false, error: 'Unauthorized: that player belongs to another agent.' }
   }
-  return { ok: true, player: { id: data.id, username: data.username, agent_id: data.agent_id } }
+  return { ok: true, player: { id: data.id, username: data.username, agent_id: data.agent_id, auto_locked_at: data.auto_locked_at } }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +70,11 @@ export interface PlayerRow {
   coin_balance: number
   is_active: boolean
   is_online: boolean
+  /** Set only when is_active:false was caused by the 5-failed-login
+   * auto-lock (Issue #52) -- null for a deliberate agent/superadmin block.
+   * Lets the UI show "Temporary Block" instead of "Blocked", and route
+   * unlocking through a password reset instead of a direct Activate button. */
+  auto_locked_at: string | null
 }
 
 export async function getPlayersAction(
@@ -82,7 +90,7 @@ export async function getPlayersAction(
     const db = createAdminClient()
     const [profilesRes, sessionsRes] = await Promise.all([
       db.from('profiles')
-        .select('id, username, full_name, coin_balance, is_active')
+        .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
         .eq('agent_id', agentId)
         .order('username'),
       db.from('active_sessions').select('user_id, last_seen_at'),
@@ -100,6 +108,7 @@ export async function getPlayersAction(
         coin_balance: Number(p.coin_balance ?? 0),
         is_active: p.is_active,
         is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
+        auto_locked_at: p.auto_locked_at,
       })),
       error: null,
     }
@@ -185,6 +194,18 @@ export async function setPlayerActiveAction(playerIdentifier: string, isActive: 
 
     const owned = await assertOwnership(auth.user, playerId)
     if (!owned.ok) return { error: owned.error }
+
+    // Reactivating an auto-locked player must go through Password Reset, not
+    // this direct toggle -- enforced here, not just hidden in the UI, so a
+    // future UI change can never accidentally reopen the bypass. This is the
+    // one case setPlayerActiveAction refuses; deactivating (isActive:false)
+    // is always allowed, and reactivating a MANUALLY blocked player
+    // (auto_locked_at is null) is unaffected -- exactly the toggle's normal job.
+    if (isActive && owned.player.auto_locked_at) {
+      return {
+        error: 'This player is temporarily blocked from 5 failed login attempts. Reset their password to unlock -- activating directly is disabled for this case.',
+      }
+    }
 
     // profiles.is_active is the single source of truth: the heartbeat reads it,
     // and every dashboard view renders from it. v1 wrote only auth metadata,
