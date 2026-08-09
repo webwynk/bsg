@@ -26,8 +26,9 @@ import {
 import { formatCurrency } from "@/lib/utils"
 import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
-import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, resetPlayerPasswordAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
+import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
 
 import {
   Table,
@@ -173,17 +174,7 @@ export default function PlayersPage() {
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
   const [toggleStatusError, setToggleStatusError] = React.useState<string | null>(null)
 
-  // Password reset state
-  const [isPasswordResetOpen, setIsPasswordResetOpen] = React.useState(false)
-  const [newPassword, setNewPassword] = React.useState('')
-  const [confirmPassword, setConfirmPassword] = React.useState('')
-  const [isResettingPassword, setIsResettingPassword] = React.useState(false)
-  const [resetPasswordError, setResetPasswordError] = React.useState<string | null>(null)
-  const [resetPasswordSuccess, setResetPasswordSuccess] = React.useState<string | null>(null)
-
   const [showCreatePassword, setShowCreatePassword] = React.useState(false)
-  const [showNewPassword, setShowNewPassword] = React.useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
@@ -359,42 +350,6 @@ export default function PlayersPage() {
       setToggleStatusError(res.error)
     } else {
       loadPlayers({ reloadHistory: true })
-    }
-  }
-
-  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!selectedPlayer) return
-    if (newPassword.length < 6) {
-      setResetPasswordError('Password must be at least 6 characters long.')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setResetPasswordError('Passwords do not match.')
-      return
-    }
-
-    setIsResettingPassword(true)
-    setResetPasswordError(null)
-
-    const res = await resetPlayerPasswordAction(selectedPlayer.id, newPassword)
-
-    setIsResettingPassword(false)
-    if (res.error) {
-      setResetPasswordError(res.error)
-    } else {
-      setResetPasswordSuccess('Password updated successfully!')
-      // A reset on an auto-locked player also unlocks them (Issue #52, Step
-      // 3) -- without this, the badge/button would keep showing "Temporary
-      // Block" until some unrelated action happened to refresh the list,
-      // which would look like the reset silently failed to unlock anything.
-      loadPlayers({ silent: true })
-      setTimeout(() => {
-        setIsPasswordResetOpen(false)
-        setNewPassword('')
-        setConfirmPassword('')
-        setResetPasswordSuccess(null)
-      }, 1200)
     }
   }
 
@@ -855,110 +810,20 @@ export default function PlayersPage() {
                     </DialogContent>
                   </Dialog>
 
-                  {/* Reset Password Modal */}
-                  <Dialog 
-                    open={isPasswordResetOpen}
-                    onOpenChange={(open) => {
-                      setIsPasswordResetOpen(open)
-                      setNewPassword('')
-                      setConfirmPassword('')
-                      setResetPasswordError(null)
-                      setResetPasswordSuccess(null)
-                      setShowNewPassword(false)
-                      setShowConfirmPassword(false)
-                    }}
-                  >
-                    <DialogTrigger className="w-full h-8 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-[11px] font-extrabold rounded-lg flex items-center justify-center bg-transparent">
-                      <KeyRound className="mr-1 h-3.5 w-3.5" /> Password
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
-                      <DialogHeader>
-                        <DialogTitle className="font-black text-lg">Reset Player Password</DialogTitle>
-                        <DialogDescription className="text-xs text-muted-foreground">
-                          Set a new password for this player.
-                        </DialogDescription>
-                      </DialogHeader>
-
-                      {/* Identity confirmation -- name AND username both visible before
-                          the agent commits to a reset, so there's no ambiguity about
-                          which account this affects. */}
-                      <div className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-secondary/40 border border-border/60">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-xs shrink-0">
-                          {selectedPlayer.full_name[0]?.toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-extrabold text-foreground truncate">{selectedPlayer.full_name}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono truncate">@{selectedPlayer.username}</p>
-                        </div>
-                      </div>
-
-                      <form onSubmit={handleResetPassword} className="space-y-3 py-2">
-                        {resetPasswordError && (
-                          <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
-                            {resetPasswordError}
-                          </div>
-                        )}
-                        {resetPasswordSuccess && (
-                          <div className="p-2.5 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20">
-                            {resetPasswordSuccess}
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <Label htmlFor="new-password text-[10px]">New Password</Label>
-                          <div className="relative">
-                            <Input 
-                              id="new-password" 
-                              type={showNewPassword ? "text" : "password"} 
-                              placeholder="At least 6 characters" 
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg" 
-                              required
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowNewPassword(!showNewPassword)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
-                            >
-                              {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="confirm-password text-[10px]">Confirm Password</Label>
-                          <div className="relative">
-                            <Input 
-                              id="confirm-password" 
-                              type={showConfirmPassword ? "text" : "password"} 
-                              placeholder="Confirm new password" 
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              className="h-10 w-full bg-background border-border text-foreground pr-10 text-xs rounded-lg" 
-                              required
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground cursor-pointer focus:outline-none"
-                            >
-                              {showConfirmPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <DialogFooter className="pt-2">
-                          <Button 
-                            type="submit" 
-                            disabled={isResettingPassword}
-                            className="w-full h-10 font-extrabold cursor-pointer text-xs rounded-lg"
-                          >
-                            {isResettingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            {isResettingPassword ? 'Updating Password...' : 'Save New Password'}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
+                  {/* Reset Password Modal -- shared component, also used by the
+                      Alerts page so a security notification can trigger the
+                      exact same flow directly. */}
+                  <ResetPasswordDialog
+                    playerId={selectedPlayer.id}
+                    playerName={selectedPlayer.full_name}
+                    playerUsername={selectedPlayer.username}
+                    onSuccess={() => loadPlayers({ silent: true })}
+                    trigger={
+                      <button className="w-full h-8 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-[11px] font-extrabold rounded-lg flex items-center justify-center bg-transparent">
+                        <KeyRound className="mr-1 h-3.5 w-3.5" /> Password
+                      </button>
+                    }
+                  />
 
                   {/* Status Toggle Button -- except for an auto-lock (5 failed
                       logins), where reactivating directly is intentionally not

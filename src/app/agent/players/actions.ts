@@ -364,6 +364,13 @@ export interface AgentNotification {
   is_read: boolean
   created_at: string
   created_at_display: string
+  /** Null for a notification created before player_id existed, or whose
+   * player has since been deleted (ON DELETE SET NULL) -- the UI hides the
+   * reset-password action for those rather than acting on a name parsed
+   * back out of the message text. */
+  player_id: string | null
+  player_username: string | null
+  player_full_name: string | null
 }
 
 /** Unread-first, newest-first. Superadmin sees every agent's alerts; an
@@ -375,9 +382,10 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
   if (auth.error || !auth.user) return { notifications: [], error: auth.error }
 
   try {
-    let query = createAdminClient()
+    const db = createAdminClient()
+    let query = db
       .from('notifications')
-      .select('id, message, read_at, created_at')
+      .select('id, message, read_at, created_at, player_id')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -388,14 +396,28 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
     const { data, error } = await query
     if (error) throw new Error(error.message)
 
+    // One batched lookup for every referenced player, not one query per row.
+    const playerIds = [...new Set((data ?? []).map(n => n.player_id).filter((id): id is string => id !== null))]
+    const playersById = new Map<string, { username: string; full_name: string }>()
+    if (playerIds.length > 0) {
+      const { data: players } = await db.from('profiles').select('id, username, full_name').in('id', playerIds)
+      for (const p of players ?? []) playersById.set(p.id, { username: p.username, full_name: p.full_name || p.username })
+    }
+
     return {
-      notifications: (data ?? []).map(n => ({
-        id: n.id,
-        message: n.message,
-        is_read: n.read_at !== null,
-        created_at: n.created_at,
-        created_at_display: istDateTime(n.created_at),
-      })),
+      notifications: (data ?? []).map(n => {
+        const player = n.player_id ? playersById.get(n.player_id) : undefined
+        return {
+          id: n.id,
+          message: n.message,
+          is_read: n.read_at !== null,
+          created_at: n.created_at,
+          created_at_display: istDateTime(n.created_at),
+          player_id: player ? n.player_id : null,
+          player_username: player?.username ?? null,
+          player_full_name: player?.full_name ?? null,
+        }
+      }),
       error: null,
     }
   } catch (err) {

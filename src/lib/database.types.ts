@@ -195,6 +195,7 @@ export type Database = {
           message: string
           read_at: string | null
           created_at: string
+          player_id: string | null
         }
         Insert: {
           id?: string
@@ -203,6 +204,7 @@ export type Database = {
           message: string
           read_at?: string | null
           created_at?: string
+          player_id?: string | null
         }
         Update: {
           id?: string
@@ -211,6 +213,7 @@ export type Database = {
           message?: string
           read_at?: string | null
           created_at?: string
+          player_id?: string | null
         }
         Relationships: []
       }
