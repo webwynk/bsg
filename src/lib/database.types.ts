@@ -153,34 +153,64 @@ export type Database = {
           id: string
           rtp_percentage: number
           draw_at_second: number
-          bet_cutoff_second: number
           session_grace_sec: number
+          updated_at: string
+          bet_cutoff_second: number
           payout_multiplier_single: number
           payout_multiplier_double: number
           payout_multiplier_triple: number
-          updated_at: string
+          settle_batch_size: number
         }
         Insert: {
           id?: string
           rtp_percentage?: number
           draw_at_second?: number
-          bet_cutoff_second?: number
           session_grace_sec?: number
+          updated_at?: string
+          bet_cutoff_second?: number
           payout_multiplier_single?: number
           payout_multiplier_double?: number
           payout_multiplier_triple?: number
-          updated_at?: string
+          settle_batch_size?: number
         }
         Update: {
           id?: string
           rtp_percentage?: number
           draw_at_second?: number
-          bet_cutoff_second?: number
           session_grace_sec?: number
+          updated_at?: string
+          bet_cutoff_second?: number
           payout_multiplier_single?: number
           payout_multiplier_double?: number
           payout_multiplier_triple?: number
-          updated_at?: string
+          settle_batch_size?: number
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          id: string
+          agent_id: string
+          kind: string
+          message: string
+          read_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: string
+          kind: string
+          message: string
+          read_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          agent_id?: string
+          kind?: string
+          message?: string
+          read_at?: string | null
+          created_at?: string
         }
         Relationships: []
       }
@@ -230,6 +260,8 @@ export type Database = {
           is_active: boolean
           created_at: string
           updated_at: string
+          failed_login_attempts: number
+          auto_locked_at: string | null
         }
         Insert: {
           id: string
@@ -243,6 +275,8 @@ export type Database = {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          failed_login_attempts?: number
+          auto_locked_at?: string | null
         }
         Update: {
           id?: string
@@ -256,6 +290,8 @@ export type Database = {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          failed_login_attempts?: number
+          auto_locked_at?: string | null
         }
         Relationships: []
       }
@@ -273,6 +309,10 @@ export type Database = {
           drawn_at: string | null
           settled_at: string | null
           created_at: string
+          payout_multiplier_single: number
+          payout_multiplier_double: number
+          payout_multiplier_triple: number
+          rtp_percentage: number
         }
         Insert: {
           id?: string
@@ -287,6 +327,10 @@ export type Database = {
           drawn_at?: string | null
           settled_at?: string | null
           created_at?: string
+          payout_multiplier_single?: number
+          payout_multiplier_double?: number
+          payout_multiplier_triple?: number
+          rtp_percentage?: number
         }
         Update: {
           id?: string
@@ -301,6 +345,10 @@ export type Database = {
           drawn_at?: string | null
           settled_at?: string | null
           created_at?: string
+          payout_multiplier_single?: number
+          payout_multiplier_double?: number
+          payout_multiplier_triple?: number
+          rtp_percentage?: number
         }
         Relationships: []
       }
@@ -316,6 +364,10 @@ export type Database = {
         Returns: Json
       }
       apply_coin_movement: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
+      attempt_player_login: {
         Args: Record<string, unknown>
         Returns: Json
       }
@@ -355,6 +407,14 @@ export type Database = {
         Args: Record<string, unknown>
         Returns: Json
       }
+      random_digit_unbiased: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
+      random_index_unbiased: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
       session_heartbeat: {
         Args: Record<string, unknown>
         Returns: Json
@@ -372,6 +432,10 @@ export type Database = {
         Returns: Json
       }
       sync_role_to_app_metadata: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
+      tick_rounds: {
         Args: Record<string, unknown>
         Returns: Json
       }

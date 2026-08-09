@@ -4,6 +4,7 @@ import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { NotificationBell } from '@/components/notification-bell'
 import { Wallet, Users, History, LogOut, ShieldCheck, TrendingUp } from 'lucide-react'
 
 export default function AgentLayout({ children }: { children: ReactNode }) {
@@ -38,7 +39,10 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
               <p className="text-[10px] text-muted-foreground font-semibold">Agent Portal</p>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center space-x-1.5">
+            <NotificationBell />
+            <ThemeToggle />
+          </div>
         </div>
         <nav className="flex-1 p-2 space-y-1">
           <Link 
@@ -111,8 +115,9 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <NotificationBell />
             <ThemeToggle />
-            <button 
+            <button
               onClick={handleSignOut}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-red-500 hover:bg-red-500/10 cursor-pointer"
               aria-label="Sign Out"

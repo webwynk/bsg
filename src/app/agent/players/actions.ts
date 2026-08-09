@@ -189,9 +189,20 @@ export async function setPlayerActiveAction(playerIdentifier: string, isActive: 
     // profiles.is_active is the single source of truth: the heartbeat reads it,
     // and every dashboard view renders from it. v1 wrote only auth metadata,
     // so a blocked account kept playing and still displayed as Active.
+    //
+    // Reactivating also clears failed_login_attempts/auto_locked_at, so a
+    // player manually unblocked for an unrelated reason doesn't resume
+    // halfway toward the automatic 5-strike lockout from before they were
+    // blocked. Deactivating leaves those columns untouched -- a fresh set of
+    // 5 attempts still applies the next time they're reactivated and try to
+    // log in, unrelated to whatever reason this block happened for.
     const { error } = await createAdminClient()
       .from('profiles')
-      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .update(
+        isActive
+          ? { is_active: true, failed_login_attempts: 0, auto_locked_at: null, updated_at: new Date().toISOString() }
+          : { is_active: false, updated_at: new Date().toISOString() }
+      )
       .eq('id', playerId)
 
     if (error) return { error: error.message }
@@ -300,10 +311,102 @@ export async function resetPlayerPasswordAction(playerIdentifier: string, newPas
     })
     if (error) return { error: error.message }
 
+    // Unlock ONLY if this player was auto-locked by the failed-login counter
+    // (auto_locked_at IS NOT NULL) -- never unconditionally set is_active:true
+    // here. A player deliberately blocked by an agent for an unrelated
+    // reason (auto_locked_at stays NULL) must not be silently reactivated
+    // just because someone reset their password; that decision stays with
+    // whoever blocked them, via the separate Activate/Block toggle above.
+    const { error: unlockError } = await createAdminClient()
+      .from('profiles')
+      .update({ is_active: true, failed_login_attempts: 0, auto_locked_at: null })
+      .eq('id', playerId)
+      .not('auto_locked_at', 'is', null)
+    if (unlockError) {
+      console.error(`resetPlayerPasswordAction: failed to clear auto-lock for ${playerId}: ${unlockError.message}`)
+    }
+
+    revalidatePath('/agent/players')
     return { success: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { error: `Could not reset password: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+export interface AgentNotification {
+  id: string
+  message: string
+  is_read: boolean
+  created_at: string
+  created_at_display: string
+}
+
+/** Unread-first, newest-first. Superadmin sees every agent's alerts; an
+ * agent sees only their own -- matches getPlayersAction's existing scoping
+ * pattern (service-role client + explicit agent_id filter, not RLS, since
+ * this file's established convention is server-side scoping in TypeScript). */
+export async function getAgentNotificationsAction(): Promise<{ notifications: AgentNotification[]; error: string | null }> {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { notifications: [], error: auth.error }
+
+  try {
+    let query = createAdminClient()
+      .from('notifications')
+      .select('id, message, read_at, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (auth.user.role === 'agent') {
+      query = query.eq('agent_id', auth.user.id)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    return {
+      notifications: (data ?? []).map(n => ({
+        id: n.id,
+        message: n.message,
+        is_read: n.read_at !== null,
+        created_at: n.created_at,
+        created_at_display: istDateTime(n.created_at),
+      })),
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { notifications: [], error: `Could not load notifications: ${message}` }
+  }
+}
+
+/** Scoped to the caller's own notifications -- an agent cannot mark another
+ * agent's alert read, even by guessing an id (superadmin may, matching their
+ * read access above). */
+export async function markNotificationReadAction(notificationId: string) {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  try {
+    let query = createAdminClient()
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', notificationId)
+
+    if (auth.user.role === 'agent') {
+      query = query.eq('agent_id', auth.user.id)
+    }
+
+    const { error } = await query
+    if (error) return { error: error.message }
+
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not update notification: ${message}` }
   }
 }
 
