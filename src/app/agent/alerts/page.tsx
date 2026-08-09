@@ -3,14 +3,18 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Bell, ShieldAlert, CheckCheck, RefreshCw, Clock, KeyRound, Check } from 'lucide-react'
+import { Bell, ShieldAlert, CheckCheck, RefreshCw, Clock, KeyRound, Check, CheckCircle2 } from 'lucide-react'
 import { useAgentNotifications } from '@/components/agent-notifications-provider'
 import { ResetPasswordDialog } from '@/components/reset-password-dialog'
+import { ResponsivePagination } from '@/components/responsive-pagination'
+
+const ITEMS_PER_PAGE = 10
 
 export default function AlertsPage() {
   const { notifications, unreadCount, loading, refresh, markRead, markAllRead } = useAgentNotifications()
   const [filter, setFilter] = React.useState<'all' | 'unread'>('all')
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [currentPage, setCurrentPage] = React.useState(1)
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
@@ -18,6 +22,15 @@ export default function AlertsPage() {
   }
 
   const filtered = filter === 'unread' ? notifications.filter(n => !n.is_read) : notifications
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1
+  const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+
+  // Marking items read (or the filter changing) can shrink the list enough
+  // that the page you were on no longer exists -- land somewhere valid
+  // instead of showing an empty page with working-looking pagination above it.
+  React.useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   return (
     <div className="space-y-4 max-w-3xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -69,7 +82,7 @@ export default function AlertsPage() {
       {/* Filter pills */}
       <div className="flex items-center space-x-1.5 border-b border-border/80 pb-1">
         <button
-          onClick={() => setFilter('all')}
+          onClick={() => { setFilter('all'); setCurrentPage(1) }}
           className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center space-x-2 ${
             filter === 'all'
               ? 'bg-primary text-primary-foreground shadow-xs'
@@ -82,7 +95,7 @@ export default function AlertsPage() {
           </span>
         </button>
         <button
-          onClick={() => setFilter('unread')}
+          onClick={() => { setFilter('unread'); setCurrentPage(1) }}
           className={`px-3.5 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center space-x-2 ${
             filter === 'unread'
               ? 'bg-primary text-primary-foreground shadow-xs'
@@ -116,7 +129,7 @@ export default function AlertsPage() {
             </p>
           </div>
         ) : (
-          filtered.map(n => (
+          paginated.map(n => (
             <Card
               key={n.id}
               className={`border-border/80 p-0 rounded-2xl shadow-2xs overflow-hidden flex ${
@@ -151,20 +164,29 @@ export default function AlertsPage() {
                 </div>
 
                 {/* Action row -- responsive: wraps naturally on narrow mobile
-                    instead of overflowing. */}
+                    instead of overflowing. player_still_locked is read live
+                    from profiles.auto_locked_at (see getAgentNotificationsAction),
+                    so a reset from EITHER this button or the Players page
+                    correctly flips this the same way -- nothing to keep in
+                    sync separately. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {n.player_id && (
+                  {n.player_id && n.player_still_locked && (
                     <ResetPasswordDialog
                       playerId={n.player_id}
                       playerName={n.player_full_name ?? n.player_username ?? 'this player'}
                       playerUsername={n.player_username ?? ''}
-                      onSuccess={() => !n.is_read && markRead(n.id)}
+                      onSuccess={() => { refresh(); if (!n.is_read) markRead(n.id) }}
                       trigger={
                         <button className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-[11px] font-bold">
                           <KeyRound className="h-3 w-3" /> Reset Password
                         </button>
                       }
                     />
+                  )}
+                  {n.player_id && !n.player_still_locked && (
+                    <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-emerald-400 text-[11px] font-bold">
+                      <CheckCircle2 className="h-3 w-3" /> Unlocked
+                    </span>
                   )}
                   {!n.is_read && (
                     <button
@@ -180,6 +202,16 @@ export default function AlertsPage() {
           ))
         )}
       </div>
+
+      {!loading && filtered.length > ITEMS_PER_PAGE && (
+        <ResponsivePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={filtered.length}
+          itemsPerPage={ITEMS_PER_PAGE}
+        />
+      )}
     </div>
   )
 }

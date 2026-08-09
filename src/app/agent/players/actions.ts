@@ -371,6 +371,13 @@ export interface AgentNotification {
   player_id: string | null
   player_username: string | null
   player_full_name: string | null
+  /** True while the player this alert is about is STILL auto-locked right
+   * now (profiles.auto_locked_at still set) -- read live from profiles, not
+   * a flag stored on the notification, so a reset from EITHER the Players
+   * page or this alert's own Reset Password button both correctly flip this
+   * to false. False also (not just "resolved") when there's no linked
+   * player at all. */
+  player_still_locked: boolean
 }
 
 /** Unread-first, newest-first. Superadmin sees every agent's alerts; an
@@ -387,7 +394,7 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
       .from('notifications')
       .select('id, message, read_at, created_at, player_id')
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(200)
 
     if (auth.user.role === 'agent') {
       query = query.eq('agent_id', auth.user.id)
@@ -397,11 +404,14 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
     if (error) throw new Error(error.message)
 
     // One batched lookup for every referenced player, not one query per row.
+    // auto_locked_at is read live here -- it's the single source of truth
+    // profiles itself uses, so a reset from the Players page updates the
+    // exact same column this reads, with nothing to keep in sync separately.
     const playerIds = [...new Set((data ?? []).map(n => n.player_id).filter((id): id is string => id !== null))]
-    const playersById = new Map<string, { username: string; full_name: string }>()
+    const playersById = new Map<string, { username: string; full_name: string; auto_locked_at: string | null }>()
     if (playerIds.length > 0) {
-      const { data: players } = await db.from('profiles').select('id, username, full_name').in('id', playerIds)
-      for (const p of players ?? []) playersById.set(p.id, { username: p.username, full_name: p.full_name || p.username })
+      const { data: players } = await db.from('profiles').select('id, username, full_name, auto_locked_at').in('id', playerIds)
+      for (const p of players ?? []) playersById.set(p.id, { username: p.username, full_name: p.full_name || p.username, auto_locked_at: p.auto_locked_at })
     }
 
     return {
@@ -416,6 +426,7 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
           player_id: player ? n.player_id : null,
           player_username: player?.username ?? null,
           player_full_name: player?.full_name ?? null,
+          player_still_locked: player?.auto_locked_at != null,
         }
       }),
       error: null,
