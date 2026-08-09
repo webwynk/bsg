@@ -187,13 +187,9 @@ export default function AgentDashboard() {
             <span>Available Coins</span>
             <Coins className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
-            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
-          ) : (
-            <div className="text-xs sm:text-lg font-black font-mono text-emerald-500 mt-0.5 truncate">
-              {formatCurrency(balance)}
-            </div>
-          )}
+          <div className={`text-xs sm:text-lg font-black font-mono text-emerald-500 mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
+            {formatCurrency(balance)}
+          </div>
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Coins available to allocate</p>
         </Card>
 
@@ -203,13 +199,9 @@ export default function AgentDashboard() {
             <span>My Players</span>
             <Users className="h-3.5 w-3.5 text-blue-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
-            <div className="h-5 w-10 bg-secondary/80 animate-pulse rounded my-1" />
-          ) : (
-            <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5">
-              {players.length}
-            </div>
-          )}
+          <div className={`text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
+            {players.length}
+          </div>
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Registered player network</p>
         </Card>
 
@@ -219,13 +211,9 @@ export default function AgentDashboard() {
             <span>Today&apos;s P/L</span>
             <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
-            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
-          ) : (
-            <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
-            </div>
-          )}
+          <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+            {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
+          </div>
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily 00:00 IST</p>
         </Card>
 
@@ -235,13 +223,9 @@ export default function AgentDashboard() {
             <span>Today Bets (In)</span>
             <ArrowUpRight className="h-3.5 w-3.5 text-blue-400 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
-            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
-          ) : (
-            <div className="text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate">
-              {formatCurrency(todaysBets)}
-            </div>
-          )}
+          <div className={`text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
+            {formatCurrency(todaysBets)}
+          </div>
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Wagered coins today</p>
         </Card>
 
@@ -251,13 +235,9 @@ export default function AgentDashboard() {
             <span>Today Wins (Out)</span>
             <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
           </div>
-          {isLoadingDashboard ? (
-            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
-          ) : (
-            <div className="text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate">
-              {formatCurrency(todaysWins)}
-            </div>
-          )}
+          <div className={`text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
+            {formatCurrency(todaysWins)}
+          </div>
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players today</p>
         </Card>
       </div>
