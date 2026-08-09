@@ -4,8 +4,19 @@ import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { NotificationBell } from '@/components/notification-bell'
-import { Wallet, Users, History, LogOut, ShieldCheck, TrendingUp } from 'lucide-react'
+import { AgentNotificationsProvider, useAgentNotifications } from '@/components/agent-notifications-provider'
+import { Wallet, Users, History, LogOut, ShieldCheck, TrendingUp, Bell } from 'lucide-react'
+
+/** Small red count pill, capped at "9+" -- same treatment on both the
+ * desktop sidebar link and the mobile bottom-nav icon. */
+function UnreadBadge({ count }: { count: number }) {
+  if (count === 0) return null
+  return (
+    <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white leading-none">
+      {count > 9 ? '9+' : count}
+    </span>
+  )
+}
 
 export default function AgentLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -15,8 +26,19 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
     return <div className="min-h-screen bg-background text-foreground">{children}</div>
   }
 
+  return (
+    <AgentNotificationsProvider>
+      <AgentLayoutShell pathname={pathname}>{children}</AgentLayoutShell>
+    </AgentNotificationsProvider>
+  )
+}
+
+function AgentLayoutShell({ pathname, children }: { pathname: string | null; children: ReactNode }) {
+  const { unreadCount } = useAgentNotifications()
+
   const isCashierActive = pathname === '/agent' || pathname === '/agent/'
   const isPlayersActive = !!pathname?.startsWith('/agent/players')
+  const isAlertsActive = !!pathname?.startsWith('/agent/alerts')
   const isProfitActive = !!pathname?.startsWith('/agent/profit')
   const isHistoryActive = !!pathname?.startsWith('/agent/history')
 
@@ -39,50 +61,61 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
               <p className="text-[10px] text-muted-foreground font-semibold">Agent Portal</p>
             </div>
           </div>
-          <div className="flex items-center space-x-1.5">
-            <NotificationBell />
-            <ThemeToggle />
-          </div>
+          <ThemeToggle />
         </div>
         <nav className="flex-1 p-2 space-y-1">
-          <Link 
-            href="/agent" 
+          <Link
+            href="/agent"
             className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
-              isCashierActive 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
+              isCashierActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
             }`}
           >
             <Wallet className="h-4 w-4 shrink-0" />
             <span>Cashier</span>
           </Link>
-          <Link 
-            href="/agent/players" 
+          <Link
+            href="/agent/players"
             className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
-              isPlayersActive 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
+              isPlayersActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
             }`}
           >
             <Users className="h-4 w-4 shrink-0" />
             <span>Players</span>
           </Link>
-          <Link 
-            href="/agent/profit" 
+          <Link
+            href="/agent/alerts"
+            className={`relative flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
+              isAlertsActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <span className="relative shrink-0">
+              <Bell className="h-4 w-4" />
+              <UnreadBadge count={unreadCount} />
+            </span>
+            <span>Alerts</span>
+          </Link>
+          <Link
+            href="/agent/profit"
             className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
-              isProfitActive 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
+              isProfitActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
             }`}
           >
             <TrendingUp className="h-4 w-4 shrink-0" />
             <span>P&L Report</span>
           </Link>
-          <Link 
-            href="/agent/history" 
+          <Link
+            href="/agent/history"
             className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
-              isHistoryActive 
-                ? 'bg-primary text-primary-foreground shadow-sm' 
+              isHistoryActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
             }`}
           >
@@ -91,8 +124,8 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
           </Link>
         </nav>
         <div className="p-3 border-t border-border/60">
-          <button 
-            onClick={handleSignOut} 
+          <button
+            onClick={handleSignOut}
             className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-red-500 hover:bg-red-500/10 rounded-xl transition-colors font-extrabold cursor-pointer text-left"
           >
             <LogOut className="h-4 w-4 shrink-0" />
@@ -115,7 +148,6 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <NotificationBell />
             <ThemeToggle />
             <button
               onClick={handleSignOut}
@@ -133,12 +165,12 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
         </main>
 
         {/* Mobile Bottom Navigation Bar (Modern Floating Glassmorphic Design) */}
-        <nav className="flex md:hidden fixed bottom-2.5 left-3 right-3 h-14 bg-card/90 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl z-30 items-center justify-around px-1.5">
-          <Link 
-            href="/agent" 
+        <nav className="flex md:hidden fixed bottom-2.5 left-3 right-3 h-14 bg-card/90 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl z-30 items-center justify-around px-1">
+          <Link
+            href="/agent"
             className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
-              isCashierActive 
-                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+              isCashierActive
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'
                 : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
@@ -151,11 +183,11 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
             </span>
           </Link>
 
-          <Link 
-            href="/agent/players" 
+          <Link
+            href="/agent/players"
             className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
-              isPlayersActive 
-                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+              isPlayersActive
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'
                 : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
@@ -168,11 +200,31 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
             </span>
           </Link>
 
-          <Link 
-            href="/agent/profit" 
+          <Link
+            href="/agent/alerts"
             className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
-              isProfitActive 
-                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+              isAlertsActive
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
+            }`}
+          >
+            {isAlertsActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <span className="relative">
+              <Bell className={`h-4 w-4 transition-transform duration-300 ${isAlertsActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+              <UnreadBadge count={unreadCount} />
+            </span>
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isAlertsActive ? 'font-black text-primary' : 'font-bold'}`}>
+              Alerts
+            </span>
+          </Link>
+
+          <Link
+            href="/agent/profit"
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isProfitActive
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'
                 : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
@@ -185,11 +237,11 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
             </span>
           </Link>
 
-          <Link 
-            href="/agent/history" 
+          <Link
+            href="/agent/history"
             className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
-              isHistoryActive 
-                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black' 
+              isHistoryActive
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'
                 : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
             }`}
           >
