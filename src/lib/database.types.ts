@@ -163,6 +163,7 @@ export type Database = {
           payout_multiplier_double: number
           payout_multiplier_triple: number
           settle_batch_size: number
+          staff_session_grace_sec: number
         }
         Insert: {
           id?: string
@@ -175,6 +176,7 @@ export type Database = {
           payout_multiplier_double?: number
           payout_multiplier_triple?: number
           settle_batch_size?: number
+          staff_session_grace_sec?: number
         }
         Update: {
           id?: string
@@ -187,6 +189,7 @@ export type Database = {
           payout_multiplier_double?: number
           payout_multiplier_triple?: number
           settle_batch_size?: number
+          staff_session_grace_sec?: number
         }
         Relationships: []
       }
@@ -438,6 +441,14 @@ export type Database = {
         Returns: Json
       }
       settle_round: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
+      staff_session_login: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
+      staff_session_touch: {
         Args: Record<string, unknown>
         Returns: Json
       }

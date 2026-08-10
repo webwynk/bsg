@@ -79,6 +79,16 @@ export type StaffLoginAttemptResult =
   | { success: false; reason: 'account_blocked'; locked?: true }
   | { success: false; reason: 'invalid_credentials'; attempts_remaining: number }
 
+/** Return shape of staff_session_login -- claims or refuses the single-device
+ * seat for an agent/superadmin login. */
+export type StaffSessionLoginResult =
+  | { allowed: true }
+  | { allowed: false; reason: 'account_blocked' | 'session_active_elsewhere' }
+
+/** Return shape of staff_session_touch -- called from requireAuth on every
+ * dashboard action to confirm this is still the claimed device. */
+export type StaffSessionTouchResult = { valid: boolean }
+
 export interface PlayLimits {
   single: { min: number; max: number }
   double: { min: number; max: number }

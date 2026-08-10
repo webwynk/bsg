@@ -1,9 +1,12 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { randomUUID } from 'crypto'
 import { createClient } from '@/lib/supabase'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { asRpc, type StaffLoginAttemptResult } from '@/lib/rpc'
+import { asRpc, type StaffLoginAttemptResult, type StaffSessionLoginResult } from '@/lib/rpc'
+import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS } from '@/lib/staff-session'
 
 /**
  * Agent back-office login.
@@ -104,6 +107,28 @@ export async function agentLogin(formData: FormData) {
     await supabase.auth.signOut()
     redirect('/agent/login?error=Unauthorized account role.')
   }
+
+  // Single-device enforcement -- refuses outright if another device's
+  // session is still within the 6h safety-net window (game_config's
+  // staff_session_grace_sec). No convenient auto-swap; the only intended
+  // way past this is an explicit logout on the first device. Checked last,
+  // after every other rejection reason above, so a claim is never made for
+  // a login that was going to be refused anyway for an unrelated reason.
+  const sessionToken = randomUUID()
+  const { data: sessionData } = await supabase.rpc('staff_session_login', {
+    p_session_token: sessionToken,
+  })
+  const sessionResult = sessionData ? asRpc<StaffSessionLoginResult>(sessionData) : null
+  if (!sessionResult?.allowed) {
+    await supabase.auth.signOut()
+    if (sessionResult?.reason === 'account_blocked') {
+      redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
+    }
+    redirect('/agent/login?error=Already logged in on another device. Please sign out there first.')
+  }
+
+  const cookieStore = await cookies()
+  cookieStore.set(STAFF_SESSION_COOKIE, sessionToken, STAFF_SESSION_COOKIE_OPTIONS)
 
   redirect('/agent')
 }

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { LayoutDashboard, Users, LogOut, ShieldAlert, Radio, Bell } from 'lucide-react'
 import { AgentNotificationsProvider, useAgentNotifications } from '@/components/agent-notifications-provider'
+import { SessionGuardProvider } from '@/components/session-guard-provider'
 
 /** Same treatment as the agent portal's identical badge -- kept as a
  * separate copy rather than a shared import since it's a 6-line component
@@ -29,9 +30,11 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   }
 
   return (
-    <AgentNotificationsProvider>
-      <SuperAdminLayoutShell pathname={pathname}>{children}</SuperAdminLayoutShell>
-    </AgentNotificationsProvider>
+    <SessionGuardProvider loginPath="/superadmin/login">
+      <AgentNotificationsProvider>
+        <SuperAdminLayoutShell pathname={pathname}>{children}</SuperAdminLayoutShell>
+      </AgentNotificationsProvider>
+    </SessionGuardProvider>
   )
 }
 

@@ -1,5 +1,8 @@
+import { cookies } from 'next/headers'
 import { createClient as createServerSupabase } from '@/lib/supabase'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { asRpc, type StaffSessionTouchResult } from '@/lib/rpc'
+import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
 
 /**
  * Server-side authorization guard. Every server action must begin with a call
@@ -76,6 +79,34 @@ export async function requireAuth(allowedRoles: AppRole[]): Promise<AuthGuardRes
 
     if (!allowedRoles.includes(profile.role as AppRole)) {
       return { error: 'Forbidden: insufficient privileges for this action.', user: null }
+    }
+
+    // Single-device enforcement for staff -- confirms this request is still
+    // coming from the device that most recently logged in, not a session
+    // that's since been superseded by a login elsewhere. Scoped to
+    // agent/superadmin only: players are untouched, they don't carry this
+    // cookie at all (bsg_app has its own, entirely separate session
+    // mechanism, never this cookie), and requireAuth is never actually
+    // called with 'player' in allowedRoles anywhere in the dashboard today
+    // -- but scoping explicitly by role here, rather than assuming that
+    // stays true forever, means it can't silently start doing the wrong
+    // thing if that ever changes.
+    if (profile.role === 'agent' || profile.role === 'superadmin') {
+      const cookieStore = await cookies()
+      const sessionToken = cookieStore.get(STAFF_SESSION_COOKIE)?.value
+
+      if (!sessionToken) {
+        return { error: 'Unauthorized: no active session found. Please sign in again.', user: null }
+      }
+
+      const { data: touchData } = await supabase.rpc('staff_session_touch', {
+        p_session_token: sessionToken,
+      })
+      const touchResult = touchData ? asRpc<StaffSessionTouchResult>(touchData) : null
+
+      if (!touchResult?.valid) {
+        return { error: 'Unauthorized: signed in from another device. Please sign in again.', user: null }
+      }
     }
 
     return {

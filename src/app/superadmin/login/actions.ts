@@ -1,9 +1,12 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { randomUUID } from 'crypto'
 import { createClient } from '@/lib/supabase'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { asRpc, type StaffLoginAttemptResult } from '@/lib/rpc'
+import { asRpc, type StaffLoginAttemptResult, type StaffSessionLoginResult } from '@/lib/rpc'
+import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS } from '@/lib/staff-session'
 
 /**
  * SuperAdmin portal login.
@@ -89,6 +92,25 @@ export async function superAdminLogin(formData: FormData) {
     await supabase.auth.signOut()
     redirect('/superadmin/login?error=Unauthorized. Only SuperAdmin accounts can sign in here.')
   }
+
+  // Single-device enforcement -- same rule as the agent portal (both roles
+  // share staff_session_login), checked last so a seat is never claimed for
+  // a login that was going to be refused anyway for an unrelated reason.
+  const sessionToken = randomUUID()
+  const { data: sessionData } = await supabase.rpc('staff_session_login', {
+    p_session_token: sessionToken,
+  })
+  const sessionResult = sessionData ? asRpc<StaffSessionLoginResult>(sessionData) : null
+  if (!sessionResult?.allowed) {
+    await supabase.auth.signOut()
+    if (sessionResult?.reason === 'account_blocked') {
+      redirect('/superadmin/login?error=This account is suspended.')
+    }
+    redirect('/superadmin/login?error=Already logged in on another device. Please sign out there first.')
+  }
+
+  const cookieStore = await cookies()
+  cookieStore.set(STAFF_SESSION_COOKIE, sessionToken, STAFF_SESSION_COOKIE_OPTIONS)
 
   redirect('/superadmin')
 }
