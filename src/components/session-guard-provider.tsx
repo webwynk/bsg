@@ -22,14 +22,23 @@ export function SessionGuardProvider({
 }) {
   React.useEffect(() => {
     let cancelled = false
+    // Requires TWO consecutive, independent 'superseded' results (30s apart)
+    // before actually acting -- added after two separate live false-positive
+    // incidents (a poller-collision case, then a Brave-Shields-on-a-missing-
+    // cookie case) even after each was individually patched. A real
+    // takeover stays superseded continuously, so this only costs one extra
+    // 30s cycle of delay on a genuine case; a one-off inconsistency of any
+    // kind, from any cause (including ones not yet seen), now has to happen
+    // twice in a row to actually sign anyone out.
+    let consecutiveSuperseded = 0
 
     const check = async () => {
       const res = await checkSessionAction()
-      // 'unknown' (a transient hiccup checking, e.g. two background pollers
-      // colliding on a token refresh) is deliberately ignored -- only a
-      // clean, confirmed 'superseded' result forces a sign-out. See
-      // checkSessionAction's comment for why this distinction is load-bearing.
-      if (!cancelled && res.status === 'superseded') {
+      if (cancelled) return
+
+      consecutiveSuperseded = res.status === 'superseded' ? consecutiveSuperseded + 1 : 0
+
+      if (consecutiveSuperseded >= 2) {
         await forceSignOutAction(
           `${loginPath}?error=Signed in from another device. Please sign in again.`
         )

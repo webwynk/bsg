@@ -50,10 +50,17 @@ export async function checkSessionAction(): Promise<{ status: SessionCheckStatus
     const cookieStore = await cookies()
     const sessionToken = cookieStore.get(STAFF_SESSION_COOKIE)?.value
     if (!sessionToken) {
-      // No device cookie at all, but a valid login -- unambiguous: this
-      // browser was never the one holding the seat (or was fully signed
-      // out of it), not a transient hiccup.
-      return { status: 'superseded' }
+      // Previously treated a missing cookie as unambiguous proof of being
+      // logged out elsewhere. Downgraded to 'unknown' after a live incident:
+      // Brave's own privacy protections (Shields) can behave differently on
+      // a background poll request than on a normal user-initiated one, and
+      // there's no way from here to tell "genuinely signed out" apart from
+      // "this one background request didn't carry the cookie for some
+      // browser-specific reason." A truly logged-out session doesn't need
+      // this poll to catch it anyway -- the next real click hits
+      // requireAuth(), which fails closed on a missing cookie the same way
+      // it always has.
+      return { status: 'unknown' }
     }
 
     const { data: touchData, error: touchError } = await supabase.rpc('staff_session_touch', {
