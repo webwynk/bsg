@@ -193,7 +193,7 @@ export type Database = {
       notifications: {
         Row: {
           id: string
-          agent_id: string
+          agent_id: string | null
           kind: string
           message: string
           read_at: string | null
@@ -202,7 +202,7 @@ export type Database = {
         }
         Insert: {
           id?: string
-          agent_id: string
+          agent_id?: string | null
           kind: string
           message: string
           read_at?: string | null
@@ -211,7 +211,7 @@ export type Database = {
         }
         Update: {
           id?: string
-          agent_id?: string
+          agent_id?: string | null
           kind?: string
           message?: string
           read_at?: string | null
@@ -374,6 +374,10 @@ export type Database = {
         Returns: Json
       }
       attempt_player_login: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
+      attempt_staff_login: {
         Args: Record<string, unknown>
         Returns: Json
       }

@@ -31,9 +31,10 @@ import {
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
+import { playerStatus } from '@/lib/player-status'
 
 export default function AgentsPage() {
-  const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; player_count: number }>>([])
+  const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; auto_locked_at: string | null; player_count: number }>>([])
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [countdown, setCountdown] = React.useState(60)
@@ -452,12 +453,8 @@ export default function AgentsPage() {
                       {formatCurrency(agent.coin_balance)}
                     </TableCell>
                     <TableCell className="text-center py-2">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        agent.is_active 
-                          ? 'bg-success-bg text-success-text border border-emerald-500/20' 
-                          : 'bg-danger-bg text-danger-text border border-red-500/20'
-                      }`}>
-                        {agent.is_active ? "Active" : "Blocked"}
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${playerStatus(agent).badgeClass}`}>
+                        {playerStatus(agent).label}
                       </span>
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap py-2">
@@ -521,12 +518,8 @@ export default function AgentsPage() {
                     <p className="text-muted-foreground font-mono text-[11px]">@{agent.username}</p>
                   </div>
                 </div>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
-                  agent.is_active 
-                    ? 'bg-success-bg text-success-text border border-emerald-500/20' 
-                    : 'bg-danger-bg text-danger-text border border-red-500/20'
-                }`}>
-                  {agent.is_active ? "Active" : "Blocked"}
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${playerStatus(agent).badgeClass}`}>
+                  {playerStatus(agent).label}
                 </span>
               </div>
 

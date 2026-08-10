@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { asRpc, type StaffLoginAttemptResult } from '@/lib/rpc'
 
 /**
  * Agent back-office login.
@@ -35,15 +36,32 @@ export async function agentLogin(formData: FormData) {
 
   const supabase = await createClient()
 
+  // Brute-force lockout, checked BEFORE the real sign-in attempt -- same
+  // pattern as attempt_player_login, adapted for staff. Catches both an
+  // already-locked/blocked account (no point even trying the password) and
+  // counts this attempt if it's wrong, auto-locking on the 5th. Called via
+  // the regular client (anon-key equivalent), not the admin client -- the
+  // RPC is specifically granted to anon/authenticated for this pre-auth use.
+  const { data: attemptData } = await supabase.rpc('attempt_staff_login', {
+    p_username: username,
+    p_password: password,
+  })
+  const attemptResult = attemptData ? asRpc<StaffLoginAttemptResult>(attemptData) : null
+  if (attemptResult && attemptResult.success === false) {
+    if (attemptResult.reason === 'account_blocked') {
+      redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
+    }
+    redirect('/agent/login?error=Invalid username or password.')
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error || !data.user) {
-    // A blocked agent's sign-in fails right here, not at the is_active check
-    // below -- setAgentActiveAction revokes the account's actual Supabase
-    // Auth session (ban_duration) the moment it's blocked, so the password
-    // is never even reached. Without this lookup, that showed the exact same
-    // generic "Invalid username or password" as an actual wrong password,
-    // leaving a blocked agent with no way to tell the two apart.
+    // Defensive backstop only -- attempt_staff_login above already catches a
+    // blocked account before this point in the normal case. Kept in case
+    // that check is ever skipped (e.g. the RPC call itself failing), same
+    // "backstop still applies" reasoning used elsewhere in this codebase
+    // (Issue #1's Layer A/B, agent_transfer_coins's RPC-level check).
     const { data: blockedProfile } = await supabaseAdmin
       .from('profiles')
       .select('is_active')

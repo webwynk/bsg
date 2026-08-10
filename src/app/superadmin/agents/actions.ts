@@ -48,6 +48,7 @@ export interface AgentRow {
   username: string
   coin_balance: number
   is_active: boolean
+  auto_locked_at: string | null
   player_count: number
 }
 
@@ -59,7 +60,7 @@ export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: st
     const db = createAdminClient()
     const [agentsRes, playersRes] = await Promise.all([
       db.from('profiles')
-        .select('id, username, full_name, coin_balance, is_active')
+        .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
         .eq('role', 'agent').order('username'),
       db.from('profiles').select('agent_id').eq('role', 'player').range(0, 999999),
     ])
@@ -78,6 +79,7 @@ export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: st
         username: a.username,
         coin_balance: Number(a.coin_balance ?? 0),
         is_active: a.is_active,
+        auto_locked_at: a.auto_locked_at,
         player_count: counts.get(a.id) ?? 0,
       })),
       error: null,
@@ -102,7 +104,7 @@ export async function getAgentDetailAction(agentIdentifier: string) {
     const db = createAdminClient()
     const [agentRes, playersRes, sessionsRes] = await Promise.all([
       db.from('profiles')
-        .select('id, username, full_name, coin_balance, is_active, created_at')
+        .select('id, username, full_name, coin_balance, is_active, auto_locked_at, created_at')
         .eq('id', agentId).single(),
       db.from('profiles')
         .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
@@ -123,6 +125,7 @@ export async function getAgentDetailAction(agentIdentifier: string) {
         username: a.username,
         coin_balance: Number(a.coin_balance ?? 0),
         is_active: a.is_active,
+        auto_locked_at: a.auto_locked_at,
         joined_date: new Date(a.created_at).toLocaleDateString('en-US', {
           timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric',
         }),
@@ -260,12 +263,32 @@ export async function setAgentActiveAction(agentIdentifier: string, isActive: bo
 
     const db = createAdminClient()
     const { data: agent, error: agentError } = await db
-      .from('profiles').select('username').eq('id', agentId).single()
+      .from('profiles').select('username, auto_locked_at').eq('id', agentId).single()
     if (agentError || !agent) return { error: 'Agent not found.' }
 
+    // Reactivating an auto-locked agent must go through Reset Password, not
+    // this direct toggle -- same reasoning and same enforcement point as
+    // setPlayerActiveAction's identical guard: deactivating is always
+    // allowed, and reactivating a MANUALLY blocked agent (auto_locked_at is
+    // null) is unaffected, exactly the toggle's normal job.
+    if (isActive && agent.auto_locked_at) {
+      return {
+        error: 'This agent is temporarily locked from 5 failed login attempts. Reset their password to unlock -- activating directly is disabled for this case.',
+      }
+    }
+
+    // Reactivating also clears failed_login_attempts/auto_locked_at, for the
+    // same reason as the player version: an agent manually unblocked for an
+    // unrelated reason shouldn't resume halfway toward the automatic 5-strike
+    // lockout from before they were blocked. Deactivating leaves those
+    // columns untouched.
     const { error: updError } = await db
       .from('profiles')
-      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .update(
+        isActive
+          ? { is_active: true, failed_login_attempts: 0, auto_locked_at: null, updated_at: new Date().toISOString() }
+          : { is_active: false, updated_at: new Date().toISOString() }
+      )
       .eq('id', agentId)
     if (updError) return { error: updError.message }
 
@@ -348,6 +371,17 @@ export async function updateAgentPasswordAction(agentIdentifier: string, newPass
 
     const { error } = await db.auth.admin.updateUserById(agentId, { password: newPassword.trim() })
     if (error) return { error: error.message }
+
+    // Unlock ONLY if this agent was auto-locked by the failed-login counter
+    // (auto_locked_at IS NOT NULL) -- never unconditionally set is_active:true
+    // here, for the same reason as the player version: an agent deliberately
+    // blocked for an unrelated reason (auto_locked_at stays NULL) must not be
+    // silently reactivated just because someone reset their password.
+    await db
+      .from('profiles')
+      .update({ is_active: true, failed_login_attempts: 0, auto_locked_at: null })
+      .eq('id', agentId)
+      .not('auto_locked_at', 'is', null)
 
     await logAuditEventAction('security', `Reset password for agent @${agent?.username ?? agentId}`)
     revalidatePath('/superadmin/agents')

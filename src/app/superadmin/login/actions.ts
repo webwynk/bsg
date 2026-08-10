@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { asRpc, type StaffLoginAttemptResult } from '@/lib/rpc'
 
 /**
  * SuperAdmin portal login.
@@ -34,6 +35,21 @@ export async function superAdminLogin(formData: FormData) {
     : `${username.toLowerCase()}@bestsmartgame.com`
 
   const supabase = await createClient()
+
+  // Same brute-force lockout as the agent portal (attempt_staff_login covers
+  // both roles) -- the superadmin account is, if anything, the higher-value
+  // target to protect, not a lower one.
+  const { data: attemptData } = await supabase.rpc('attempt_staff_login', {
+    p_username: username,
+    p_password: password,
+  })
+  const attemptResult = attemptData ? asRpc<StaffLoginAttemptResult>(attemptData) : null
+  if (attemptResult && attemptResult.success === false) {
+    if (attemptResult.reason === 'account_blocked') {
+      redirect('/superadmin/login?error=This account is suspended.')
+    }
+    redirect('/superadmin/login?error=Invalid username or password.')
+  }
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 

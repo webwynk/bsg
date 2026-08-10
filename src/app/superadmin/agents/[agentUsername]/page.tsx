@@ -49,6 +49,7 @@ export default function AgentDetailPage({ params }: Props) {
     username: string
     coin_balance: number
     is_active: boolean
+    auto_locked_at: string | null
     joined_date: string
   } | null>(null)
   const [players, setPlayers] = React.useState<Array<{
@@ -98,6 +99,7 @@ export default function AgentDetailPage({ params }: Props) {
 
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
+  const [toggleStatusError, setToggleStatusError] = React.useState<string | null>(null)
 
   // Password reset modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false)
@@ -301,12 +303,18 @@ export default function AgentDetailPage({ params }: Props) {
   const handleToggleAgentStatus = async () => {
     if (!agentInfo) return
     setIsTogglingStatus(true)
+    setToggleStatusError(null)
     // B-1 pattern: pass the DESIRED end state, never a derived "next status".
     const res = await setAgentActiveAction(resolvedAgentIdRef.current, !agentInfo.is_active)
     setIsTogglingStatus(false)
     if (res.success) {
-      setAgentInfo({ ...agentInfo, is_active: !agentInfo.is_active })
+      setAgentInfo({ ...agentInfo, is_active: !agentInfo.is_active, auto_locked_at: null })
       loadAgentDetails({ showIndicator: false, reloadHistory: false })
+    } else if (res.error) {
+      // Surfaces the auto-lock guard's "reset password instead" message --
+      // previously this action could never fail, so there was nowhere for an
+      // error to be shown.
+      setToggleStatusError(res.error)
     }
   }
 
@@ -374,11 +382,11 @@ export default function AgentDetailPage({ params }: Props) {
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
                 {agentInfo ? agentInfo.full_name : 'Agent Details'}
               </h1>
-              <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black ${
-                agentInfo?.is_active ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
-              }`}>
-                {agentInfo?.is_active ? 'Active' : 'Blocked'}
-              </span>
+              {agentInfo && (
+                <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[10px] font-black ${playerStatus(agentInfo).badgeClass}`}>
+                  {playerStatus(agentInfo).label}
+                </span>
+              )}
             </div>
             <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs flex items-center space-x-2 font-mono">
               <span>@{agentInfo ? agentInfo.username : '...'}</span>
@@ -624,6 +632,12 @@ export default function AgentDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {toggleStatusError && (
+        <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
+          {toggleStatusError}
+        </div>
+      )}
+
       {/* Stats Metric Strip (Compact Modern 3-Column Grid) */}
       <div className="grid gap-2 sm:gap-3 grid-cols-3">
         <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-emerald-500/30 transition-all flex flex-col justify-between">
@@ -678,11 +692,11 @@ export default function AgentDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="flex items-center justify-between mt-1">
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-              agentInfo?.is_active ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
-            }`}>
-              {agentInfo?.is_active ? 'Active' : 'Blocked'}
-            </span>
+            {agentInfo && (
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${playerStatus(agentInfo).badgeClass}`}>
+                {playerStatus(agentInfo).label}
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Operational status</span>
           </div>
         </Card>

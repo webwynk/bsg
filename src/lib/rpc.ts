@@ -72,6 +72,13 @@ export interface AdminIssueResult {
   agent_coin_balance: number
 }
 
+/** Return shape of attempt_staff_login -- mirrors attempt_player_login's
+ * contract, adapted for agent/superadmin accounts. */
+export type StaffLoginAttemptResult =
+  | { success: true }
+  | { success: false; reason: 'account_blocked'; locked?: true }
+  | { success: false; reason: 'invalid_credentials'; attempts_remaining: number }
+
 export interface PlayLimits {
   single: { min: number; max: number }
   double: { min: number; max: number }
