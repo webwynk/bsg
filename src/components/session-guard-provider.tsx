@@ -25,7 +25,11 @@ export function SessionGuardProvider({
 
     const check = async () => {
       const res = await checkSessionAction()
-      if (!cancelled && !res.valid) {
+      // 'unknown' (a transient hiccup checking, e.g. two background pollers
+      // colliding on a token refresh) is deliberately ignored -- only a
+      // clean, confirmed 'superseded' result forces a sign-out. See
+      // checkSessionAction's comment for why this distinction is load-bearing.
+      if (!cancelled && res.status === 'superseded') {
         await forceSignOutAction(
           `${loginPath}?error=Signed in from another device. Please sign in again.`
         )

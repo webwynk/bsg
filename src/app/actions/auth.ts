@@ -3,20 +3,73 @@
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth-guard'
+import { asRpc, type StaffSessionTouchResult } from '@/lib/rpc'
 import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
+
+export type SessionCheckStatus = 'valid' | 'superseded' | 'unknown'
 
 /**
  * Polled every 30s by SessionGuardProvider (mounted once per portal layout)
  * so a device that's lost its seat -- superseded by a login elsewhere, or
  * suspended while it was sitting idle -- finds out within 30s instead of
- * only on its next real button click. Reuses requireAuth as the single
- * source of truth for "is this session still good" rather than
- * re-implementing the check here.
+ * only on its next real button click.
+ *
+ * Deliberately does NOT reuse requireAuth() here. requireAuth does THREE
+ * separate network calls (getUser, an admin-client profile fetch,
+ * staff_session_touch) -- more surface area for an unrelated transient
+ * failure to occur, and every one of its failure reasons collapses into a
+ * single generic error, indistinguishable from a genuine "another device
+ * took your seat."
+ *
+ * That distinction matters a lot here: this app runs two independent
+ * background pollers in the same portal (AgentNotificationsProvider @15s,
+ * this one @30s). Supabase refresh tokens are single-use; if two pollers'
+ * requests land close together right as the access token is due for a
+ * silent refresh, one of them can get a genuine "refresh token already
+ * used" rejection from Supabase -- a real, reproducible collision between
+ * this app's own polling loops, nothing to do with connection quality.
+ * Treating that the same as a real supersession was a real bug (confirmed
+ * live: the active_sessions row never changed, yet the UI still forced a
+ * sign-out blaming "another device"). So: only a clean, successful RPC
+ * response that explicitly says `valid: false` counts as 'superseded'.
+ * Anything else that goes wrong along the way is 'unknown' -- the caller
+ * ignores it and just tries again next cycle, since the real security gate
+ * is still enforced by every actual action's own requireAuth() call
+ * regardless of what this background poll concludes.
  */
-export async function checkSessionAction(): Promise<{ valid: boolean }> {
-  const result = await requireAuth(['agent', 'superadmin'])
-  return { valid: !result.error }
+export async function checkSessionAction(): Promise<{ status: SessionCheckStatus }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      // Could be a genuine sign-out, or just this specific call colliding
+      // with another poller's token refresh -- not proof of supersession.
+      return { status: 'unknown' }
+    }
+
+    const cookieStore = await cookies()
+    const sessionToken = cookieStore.get(STAFF_SESSION_COOKIE)?.value
+    if (!sessionToken) {
+      // No device cookie at all, but a valid login -- unambiguous: this
+      // browser was never the one holding the seat (or was fully signed
+      // out of it), not a transient hiccup.
+      return { status: 'superseded' }
+    }
+
+    const { data: touchData, error: touchError } = await supabase.rpc('staff_session_touch', {
+      p_session_token: sessionToken,
+    })
+    if (touchError) {
+      // The RPC call itself failed to complete -- not the same as it
+      // completing and reporting invalid. Don't act on a dropped request.
+      return { status: 'unknown' }
+    }
+
+    const result = touchData ? asRpc<StaffSessionTouchResult>(touchData) : null
+    return { status: result?.valid ? 'valid' : 'superseded' }
+  } catch {
+    return { status: 'unknown' }
+  }
 }
 
 export async function signOutAction(redirectTo: string = '/agent/login') {
