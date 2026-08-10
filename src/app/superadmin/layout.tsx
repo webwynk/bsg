@@ -41,11 +41,14 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
   const isDashboardActive = pathname === '/superadmin' || pathname === '/superadmin/'
   const isLiveGameActive = !!pathname?.startsWith('/superadmin/live-game')
   const isAgentsActive = !!pathname?.startsWith('/superadmin/agents')
-  // /agent/alerts is deliberately reused rather than duplicated -- it's
-  // already role-aware (getAgentNotificationsAction omits its agent_id
-  // filter for a superadmin caller), so a superadmin sees every staff-lockout
-  // and player-lockout notification system-wide, not just their own.
-  const isAlertsActive = !!pathname?.startsWith('/agent/alerts')
+  // /superadmin/alerts, NOT /agent/alerts -- middleware.ts strictly redirects
+  // any superadmin session away from /agent/*, so linking to /agent/alerts
+  // never actually worked. Both routes share the same content component
+  // (components/alerts-content.tsx) over the same already-role-aware data
+  // (getAgentNotificationsAction omits its agent_id filter for a superadmin
+  // caller), so a superadmin sees every staff-lockout and player-lockout
+  // notification system-wide here, not just their own.
+  const isAlertsActive = !!pathname?.startsWith('/superadmin/alerts')
 
   const handleSignOut = async () => {
     const { signOutAction } = await import('@/app/actions/auth')
@@ -109,7 +112,7 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
           </Link>
 
           <Link
-            href="/agent/alerts"
+            href="/superadmin/alerts"
             className={`relative flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
               isAlertsActive
                 ? 'bg-primary text-primary-foreground shadow-sm'
@@ -218,7 +221,7 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
           </Link>
 
           <Link
-            href="/agent/alerts"
+            href="/superadmin/alerts"
             className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
               isAlertsActive
                 ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'

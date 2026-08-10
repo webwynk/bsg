@@ -40,7 +40,7 @@ export default function AgentsPage() {
   const [countdown, setCountdown] = React.useState(60)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
-  const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Blocked'>('all')
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Temporary Block' | 'Blocked'>('all')
   
   // Create Agent modal state
   const [isOpen, setIsOpen] = React.useState(false)
@@ -117,8 +117,10 @@ export default function AgentsPage() {
   const filteredAgents = agents.filter(agent => {
     const matchesSearch = agent.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       agent.username.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === 'all'
-      || (statusFilter === 'Active' ? agent.is_active : !agent.is_active)
+    // Driven by the same playerStatus() the badge itself renders from -- not
+    // a second, independent is_active check -- so the filter and the badge
+    // can never silently disagree the way they did before this fix.
+    const matchesStatus = statusFilter === 'all' || playerStatus(agent).label === statusFilter
     return matchesSearch && matchesStatus
   })
 
@@ -383,13 +385,14 @@ export default function AgentsPage() {
             <select
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as any)
+                setStatusFilter(e.target.value as 'all' | 'Active' | 'Temporary Block' | 'Blocked')
                 setCurrentPage(1)
               }}
               className="h-8 px-2.5 rounded-lg border border-border bg-background text-foreground text-xs font-semibold focus:outline-none cursor-pointer"
             >
               <option value="all">All Statuses</option>
               <option value="Active">Active Only</option>
+              <option value="Temporary Block">Temporary Block Only</option>
               <option value="Blocked">Blocked Only</option>
             </select>
           </div>
