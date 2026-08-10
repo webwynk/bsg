@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
+import { asRpc, type StaffSessionTouchResult } from '@/lib/rpc'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -90,6 +92,44 @@ export async function middleware(request: NextRequest) {
     // Strict RBAC: If logged-in user is a Player, redirect to agent login
     if (userRole === 'player') {
       return NextResponse.redirect(new URL('/agent/login', request.url))
+    }
+  }
+
+  // Single-device enforcement for staff (agent/superadmin) portals. Runs
+  // once, here, as part of the SAME request already checking login/role
+  // above -- deliberately NOT a separate client-side timer.
+  //
+  // History: single-device was first enforced via a client-side poll
+  // (SessionGuardProvider, since removed) running independently every 30s.
+  // That created two uncoordinated systems both checking "is this session
+  // still valid" -- this middleware's existing getUser() check, and the
+  // separate poll -- which raced against each other and against normal page
+  // data-fetches, producing repeated, confirmed-live false "signed in from
+  // another device" kicks on a perfectly valid session. Moved into the one
+  // gate that was already proven reliable (this file's existing checks)
+  // instead of running a second, independent one alongside it.
+  if (
+    (pathname.startsWith('/superadmin') || pathname.startsWith('/agent')) &&
+    (userRole === 'agent' || userRole === 'superadmin')
+  ) {
+    const loginPath = userRole === 'superadmin' ? '/superadmin/login' : '/agent/login'
+    const sessionToken = request.cookies.get(STAFF_SESSION_COOKIE)?.value
+
+    let sessionValid = false
+    if (sessionToken) {
+      const { data: touchData } = await supabase.rpc('staff_session_touch', {
+        p_session_token: sessionToken,
+      })
+      const touchResult = touchData ? asRpc<StaffSessionTouchResult>(touchData) : null
+      sessionValid = touchResult?.valid === true
+    }
+
+    if (!sessionValid) {
+      const redirectResponse = NextResponse.redirect(
+        new URL(`${loginPath}?error=Signed in from another device. Please sign in again.`, request.url)
+      )
+      redirectResponse.cookies.delete(STAFF_SESSION_COOKIE)
+      return redirectResponse
     }
   }
 
