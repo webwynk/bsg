@@ -84,27 +84,27 @@ export async function agentLogin(formData: FormData) {
     .single()
 
   if (profileError || !profile) {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/agent/login?error=Account could not be verified.')
   }
 
   if (!profile.is_active) {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
   }
 
   if (profile.role === 'superadmin') {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/agent/login?error=SuperAdmin accounts must sign in at /superadmin/login.')
   }
 
   if (profile.role === 'player') {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/agent/login?error=Player accounts must sign in through the game app.')
   }
 
   if (profile.role !== 'agent') {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/agent/login?error=Unauthorized account role.')
   }
 
@@ -120,7 +120,16 @@ export async function agentLogin(formData: FormData) {
   })
   const sessionResult = sessionData ? asRpc<StaffSessionLoginResult>(sessionData) : null
   if (!sessionResult?.allowed) {
-    await supabase.auth.signOut()
+    // scope: 'local' is load-bearing here, not stylistic. supabase-js
+    // defaults signOut() to 'global' -- confirmed live via Supabase's own
+    // auth logs as the actual cause of a real incident: an unscoped
+    // signOut() here, cleaning up THIS refused device's just-created
+    // session, was silently revoking the OTHER device's legitimate session
+    // too (same account, global scope kills every session for it). That
+    // produced exactly the symptom being refused here ("already logged in
+    // elsewhere") while simultaneously destroying the elsewhere it was
+    // referring to.
+    await supabase.auth.signOut({ scope: 'local' })
     if (sessionResult?.reason === 'account_blocked') {
       redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
     }

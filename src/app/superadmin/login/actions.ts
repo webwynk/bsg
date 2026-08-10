@@ -63,7 +63,7 @@ export async function superAdminLogin(formData: FormData) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!serviceRoleKey || !supabaseUrl) {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/superadmin/login?error=Server configuration error.')
   }
 
@@ -79,17 +79,17 @@ export async function superAdminLogin(formData: FormData) {
 
   // Fail closed: no profile, no entry. No metadata fallback.
   if (profileError || !profile) {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/superadmin/login?error=Account could not be verified.')
   }
 
   if (!profile.is_active) {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/superadmin/login?error=This account is suspended.')
   }
 
   if (profile.role !== 'superadmin') {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     redirect('/superadmin/login?error=Unauthorized. Only SuperAdmin accounts can sign in here.')
   }
 
@@ -102,7 +102,12 @@ export async function superAdminLogin(formData: FormData) {
   })
   const sessionResult = sessionData ? asRpc<StaffSessionLoginResult>(sessionData) : null
   if (!sessionResult?.allowed) {
-    await supabase.auth.signOut()
+    // scope: 'local' is load-bearing -- see the identical note in
+    // ../../agent/login/actions.ts. supabase-js's signOut() defaults to
+    // 'global' (every device for this account), which was confirmed live,
+    // via Supabase's own auth logs, to be silently killing the OTHER,
+    // legitimate device's session whenever a second device got refused here.
+    await supabase.auth.signOut({ scope: 'local' })
     if (sessionResult?.reason === 'account_blocked') {
       redirect('/superadmin/login?error=This account is suspended.')
     }

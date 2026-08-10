@@ -21,7 +21,14 @@ export async function signOutAction(redirectTo: string = '/agent/login') {
     // must never be the reason a sign-out itself fails.
   }
 
-  await supabase.auth.signOut()
+  // scope: 'local' -- supabase-js defaults signOut() to 'global', which signs
+  // out EVERY device logged into this account, not just this one. Confirmed
+  // live via Supabase's own auth logs as the actual root cause of repeated
+  // "signed in from another device" false reports this session: a refused
+  // login's cleanup elsewhere in this codebase was (before this fix) using
+  // the same unscoped signOut(), silently killing the OTHER, legitimate
+  // device's session too.
+  await supabase.auth.signOut({ scope: 'local' })
 
   const cookieStore = await cookies()
   cookieStore.delete(STAFF_SESSION_COOKIE)
