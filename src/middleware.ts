@@ -115,16 +115,29 @@ export async function middleware(request: NextRequest) {
     const loginPath = userRole === 'superadmin' ? '/superadmin/login' : '/agent/login'
     const sessionToken = request.cookies.get(STAFF_SESSION_COOKIE)?.value
 
-    let sessionValid = false
+    // Missing cookie is unambiguous (nothing to be superseded from) and
+    // redirects immediately below. A present cookie needs a genuine,
+    // completed answer from the RPC before concluding "superseded" --
+    // if the call itself errors (network/transient), that's inconclusive,
+    // NOT confirmation of a takeover. Blocking on an inconclusive result
+    // here was the exact same false-positive class already fixed twice for
+    // the old client-side poll; requireAuth() remains the real, unaffected
+    // backstop on every actual action regardless of what this navigation
+    // guard concludes, so failing open on a genuine RPC error costs nothing
+    // security-wise -- it only means this one navigation isn't the moment
+    // a real supersession gets caught, not that it never will be.
+    let sessionValid = !sessionToken ? false : null
     if (sessionToken) {
-      const { data: touchData } = await supabase.rpc('staff_session_touch', {
+      const { data: touchData, error: touchError } = await supabase.rpc('staff_session_touch', {
         p_session_token: sessionToken,
       })
-      const touchResult = touchData ? asRpc<StaffSessionTouchResult>(touchData) : null
-      sessionValid = touchResult?.valid === true
+      if (!touchError) {
+        const touchResult = touchData ? asRpc<StaffSessionTouchResult>(touchData) : null
+        sessionValid = touchResult?.valid === true
+      }
     }
 
-    if (!sessionValid) {
+    if (sessionValid === false) {
       const redirectResponse = NextResponse.redirect(
         new URL(`${loginPath}?error=Signed in from another device. Please sign in again.`, request.url)
       )
