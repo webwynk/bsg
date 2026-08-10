@@ -4,7 +4,13 @@ import type { NextRequest } from 'next/server'
 import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
 import { asRpc, type StaffSessionTouchResult } from '@/lib/rpc'
 
-export async function middleware(request: NextRequest) {
+// Renamed from middleware.ts (Next.js 16 deprecated the `middleware` file
+// convention in favor of `proxy` -- same behavior, same config.matcher
+// syntax, just a different file name and exported function name). Runs on
+// the Node.js runtime now instead of Edge (proxy doesn't support Edge);
+// nothing here used any Edge-only API, so this is a straight rename with no
+// behavior change.
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -102,7 +108,7 @@ export async function middleware(request: NextRequest) {
   // History: single-device was first enforced via a client-side poll
   // (SessionGuardProvider, since removed) running independently every 30s.
   // That created two uncoordinated systems both checking "is this session
-  // still valid" -- this middleware's existing getUser() check, and the
+  // still valid" -- this file's existing getUser() check, and the
   // separate poll -- which raced against each other and against normal page
   // data-fetches, producing repeated, confirmed-live false "signed in from
   // another device" kicks on a perfectly valid session. Moved into the one

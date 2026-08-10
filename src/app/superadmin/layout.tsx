@@ -41,8 +41,8 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
   const isDashboardActive = pathname === '/superadmin' || pathname === '/superadmin/'
   const isLiveGameActive = !!pathname?.startsWith('/superadmin/live-game')
   const isAgentsActive = !!pathname?.startsWith('/superadmin/agents')
-  // /superadmin/alerts, NOT /agent/alerts -- middleware.ts strictly redirects
-  // any superadmin session away from /agent/*, so linking to /agent/alerts
+  // /superadmin/alerts, NOT /agent/alerts -- proxy.ts (formerly middleware.ts)
+  // strictly redirects any superadmin session away from /agent/*, so linking to /agent/alerts
   // never actually worked. Both routes share the same content component
   // (components/alerts-content.tsx) over the same role-aware data
   // (getAgentNotificationsAction scopes a superadmin caller to agent_id IS

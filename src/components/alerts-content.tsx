@@ -19,7 +19,7 @@ const ITEMS_PER_PAGE = 10
  * stays with that player's own agent to handle.
  *
  * Pulled out of agent/alerts/page.tsx rather than duplicated, after
- * discovering the middleware strictly separates the two portals -- a
+ * discovering proxy.ts (formerly middleware.ts) strictly separates the two portals -- a
  * superadmin can never actually reach a route under /agent/*, so
  * /superadmin/alerts had to be a real, separate route, not just a link to
  * this one.
