@@ -24,24 +24,37 @@ export async function agentLogin(formData: FormData) {
     ? username.toLowerCase()
     : `${username.toLowerCase()}@bestsmartgame.com`
 
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!serviceRoleKey || !supabaseUrl) {
+    redirect('/agent/login?error=Server configuration error.')
+  }
+  const supabaseAdmin = createSupabaseClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error || !data.user) {
+    // A blocked agent's sign-in fails right here, not at the is_active check
+    // below -- setAgentActiveAction revokes the account's actual Supabase
+    // Auth session (ban_duration) the moment it's blocked, so the password
+    // is never even reached. Without this lookup, that showed the exact same
+    // generic "Invalid username or password" as an actual wrong password,
+    // leaving a blocked agent with no way to tell the two apart.
+    const { data: blockedProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('is_active')
+      .eq('email', email)
+      .eq('role', 'agent')
+      .maybeSingle()
+    if (blockedProfile && !blockedProfile.is_active) {
+      redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
+    }
     redirect('/agent/login?error=Invalid username or password.')
   }
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!serviceRoleKey || !supabaseUrl) {
-    await supabase.auth.signOut()
-    redirect('/agent/login?error=Server configuration error.')
-  }
-
-  const supabaseAdmin = createSupabaseClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
@@ -56,7 +69,7 @@ export async function agentLogin(formData: FormData) {
 
   if (!profile.is_active) {
     await supabase.auth.signOut()
-    redirect('/agent/login?error=This account is suspended.')
+    redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
   }
 
   if (profile.role === 'superadmin') {
