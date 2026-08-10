@@ -44,10 +44,10 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
   // /superadmin/alerts, NOT /agent/alerts -- middleware.ts strictly redirects
   // any superadmin session away from /agent/*, so linking to /agent/alerts
   // never actually worked. Both routes share the same content component
-  // (components/alerts-content.tsx) over the same already-role-aware data
-  // (getAgentNotificationsAction omits its agent_id filter for a superadmin
-  // caller), so a superadmin sees every staff-lockout and player-lockout
-  // notification system-wide here, not just their own.
+  // (components/alerts-content.tsx) over the same role-aware data
+  // (getAgentNotificationsAction scopes a superadmin caller to agent_id IS
+  // NULL rows only -- staff-lockout broadcasts -- deliberately excluding
+  // individual player lockouts, which stay with that player's own agent).
   const isAlertsActive = !!pathname?.startsWith('/superadmin/alerts')
 
   const handleSignOut = async () => {

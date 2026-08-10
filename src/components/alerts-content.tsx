@@ -11,10 +11,12 @@ import { ResponsivePagination } from '@/components/responsive-pagination'
 const ITEMS_PER_PAGE = 10
 
 /**
- * Shared by both /agent/alerts and /superadmin/alerts -- same underlying
- * data (getAgentNotificationsAction is already role-aware: an agent only
- * ever sees their own players' alerts, a superadmin sees every alert
- * system-wide, including staff-lockout broadcasts), same UI either way.
+ * Shared by both /agent/alerts and /superadmin/alerts -- same UI, but each
+ * sees a deliberately different slice of the same data
+ * (getAgentNotificationsAction): an agent sees only their own players'
+ * lockout alerts, a superadmin sees only staff-lockout alerts (about an
+ * agent/superadmin account itself) -- never an individual player's, which
+ * stays with that player's own agent to handle.
  *
  * Pulled out of agent/alerts/page.tsx rather than duplicated, after
  * discovering the middleware strictly separates the two portals -- a

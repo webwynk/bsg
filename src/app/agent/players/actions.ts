@@ -397,7 +397,16 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
       .limit(200)
 
     if (auth.user.role === 'agent') {
+      // An agent sees only alerts about their own players.
       query = query.eq('agent_id', auth.user.id)
+    } else {
+      // User-requested scope: a superadmin sees only alerts ABOUT AN AGENT
+      // (the staff-lockout broadcasts from Issue #60, agent_id IS NULL) --
+      // never an individual player's lockout, even though that player
+      // technically belongs to one of their agents. Player-level problems
+      // stay with that player's own agent to handle; the superadmin only
+      // needs to know when an agent account itself is in trouble.
+      query = query.is('agent_id', null)
     }
 
     const { data, error } = await query

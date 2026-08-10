@@ -15,10 +15,14 @@ interface AgentNotificationsContextValue {
 const AgentNotificationsContext = React.createContext<AgentNotificationsContextValue | null>(null)
 
 /**
- * Single source of truth for agent security alerts, polled once here rather
- * than separately by the nav badge and the /agent/alerts page -- both read
- * this same context, so there is exactly one 15s poll running regardless of
- * how many places display the data.
+ * Single source of truth for security alerts, polled once here rather than
+ * separately by the nav badge and the alerts page -- both read this same
+ * context, so there is exactly one 15s poll running per mounted portal,
+ * regardless of how many places within it display the data. Mounted twice
+ * in the app overall -- once in agent/layout.tsx, once in
+ * superadmin/layout.tsx -- since the two portals are separate layouts, never
+ * both on screen at once for a given session, so this still means exactly
+ * one live poll per active user at any moment, not two.
  */
 export function AgentNotificationsProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = React.useState<AgentNotification[]>([])
