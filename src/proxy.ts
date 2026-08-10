@@ -19,11 +19,6 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Redirect root to agent login
-  if (pathname === '/') {
-    return NextResponse.redirect(new URL('/agent/login', request.url))
-  }
-
   // Exclude login pages, _next internal routes, api routes, and static asset extensions
   const isStaticFile = /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2|ttf|eot|map|json)$/i.test(pathname)
   if (pathname.includes('/login') || pathname.startsWith('/_next') || pathname.startsWith('/api') || isStaticFile) {
@@ -72,13 +67,44 @@ export async function proxy(request: NextRequest) {
   // through requireAuth(), which reads public.profiles directly.
   const userRole = user?.app_metadata?.role
 
+  // Redirect root to whoever's actual portal, not unconditionally to agent
+  // login. Previously this ran BEFORE user/role were even known (the very
+  // first check in the file), so an already-logged-in agent or superadmin
+  // opening a new tab and visiting the bare root got bounced to a login
+  // screen while their real session sat untouched -- confusing, and on the
+  // staff portals specifically could make someone think they'd been signed
+  // out and try logging in again, only to be refused "already logged in
+  // elsewhere" by their own first tab. Moved here, after user/role are
+  // resolved, so it can send each role to where it actually belongs. Every
+  // branch still redirects somewhere (never falls through to render
+  // anything) -- src/app/page.tsx (the unmodified create-next-app starter
+  // page, already documented in MASTER_AUDIT_AND_REMEDIATION_PLAN.md as
+  // provably unreachable because of this exact redirect) stays unreachable.
+  if (pathname === '/') {
+    if (userRole === 'superadmin') {
+      return NextResponse.redirect(new URL('/superadmin', request.url))
+    }
+    if (userRole === 'agent') {
+      return NextResponse.redirect(new URL('/agent', request.url))
+    }
+    return NextResponse.redirect(new URL('/agent/login', request.url))
+  }
+
   // Protect /superadmin routes
   if (pathname.startsWith('/superadmin')) {
     if (!user) {
       return NextResponse.redirect(new URL('/superadmin/login', request.url))
     }
-    // Strict RBAC: If logged-in user is NOT a SuperAdmin
-    if (userRole && userRole !== 'superadmin') {
+    // Strict RBAC, explicit allow-list -- fails closed on a missing/falsy
+    // role too. MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #17: the
+    // previous `userRole && userRole !== 'superadmin'` skipped this whole
+    // check when userRole was falsy (e.g. app_metadata not yet synced),
+    // default-ALLOWING an unverified role through to the page shell instead
+    // of failing closed. requireAuth() was always the real backstop for
+    // actual data/actions, so this was defense-in-depth, not a live
+    // exploit -- but a page shell with no confirmed role shouldn't have
+    // been reachable at all.
+    if (userRole !== 'superadmin') {
       if (userRole === 'agent') {
         return NextResponse.redirect(new URL('/agent', request.url))
       }
@@ -95,8 +121,11 @@ export async function proxy(request: NextRequest) {
     if (userRole === 'superadmin') {
       return NextResponse.redirect(new URL('/superadmin', request.url))
     }
-    // Strict RBAC: If logged-in user is a Player, redirect to agent login
-    if (userRole === 'player') {
+    // Explicit allow-list from here on (Issue #17): previously an explicit
+    // deny-list of just 'superadmin'/'player', default-ALLOWING any other
+    // falsy/unrecognized role through. Now anything that isn't 'agent'
+    // (player, missing role, anything else) fails closed.
+    if (userRole !== 'agent') {
       return NextResponse.redirect(new URL('/agent/login', request.url))
     }
   }
