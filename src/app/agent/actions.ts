@@ -194,32 +194,49 @@ export async function getAgentTransactionHistoryAction(): Promise<AgentTransferH
     if (playersRes.error) throw new Error(playersRes.error.message)
 
     const players = playersRes.data ?? []
-    const playerIds = players.map(p => p.id)
     const nameById = new Map(players.map(p => [p.id, p]))
 
+    // Scoped to MY OWN user_id only -- not [me, ...playerIds]. A player transfer
+    // writes two rows (the player's own agent_credit/agent_debit, and my own
+    // mirrored agent_ledger_credit/agent_ledger_debit); including both sides
+    // here showed every transfer twice. The player's own row already has its
+    // correct home -- the player-detail ledger in players/actions.ts, scoped
+    // the same way to that player's own user_id -- so it doesn't belong here
+    // too. My own row alone is a complete, single-entry-per-event history of
+    // every coin movement that actually touched MY balance.
     const ledgerRes = await db
       .from('coin_ledger')
       .select('id, user_id, counterparty_id, kind, amount, balance_after, created_at')
       .in('kind', CASHIER_KINDS as unknown as string[])
-      .in('user_id', [me.id, ...playerIds])
+      .eq('user_id', me.id)
       .order('created_at', { ascending: false })
       .limit(200)
     if (ledgerRes.error) throw new Error(ledgerRes.error.message)
 
     const transfers = (ledgerRes.data ?? []).map(row => {
-      const isMine = row.user_id === me.id
-      const target = nameById.get(row.user_id)
+      // Issue #6 fix: this used to guess "a movement on my own balance came
+      // from the SuperAdmin" -- true only back when admin_credit/admin_debit
+      // were exclusively superadmin issuance. Since agent_transfer_coins now
+      // writes the distinct agent_ledger_credit/agent_ledger_debit tag for
+      // the agent's own side of a player transfer, checking the tag directly
+      // replaces the guess -- and stops every player transfer from also
+      // showing up a second time here mislabeled "SuperAdmin".
+      const isSuperadmin = row.kind === 'admin_credit' || row.kind === 'admin_debit'
+      // My own agent_ledger_credit/agent_ledger_debit row is keyed by MY user_id
+      // (it's my own balance moving), so the player it belongs to is only
+      // findable via counterparty_id, not user_id -- unlike a player's own
+      // agent_credit/agent_debit row, where user_id already IS the player.
+      const isMyOwnMirrorRow = row.kind === 'agent_ledger_credit' || row.kind === 'agent_ledger_debit'
+      const target = nameById.get(isMyOwnMirrorRow ? (row.counterparty_id ?? '') : row.user_id)
       return {
         id: row.id,
-        // Movements on my own balance came from the SuperAdmin; movements on a
-        // player's balance are mine.
-        category: (isMine ? 'superadmin' : 'player') as 'superadmin' | 'player',
+        category: (isSuperadmin ? 'superadmin' : 'player') as 'superadmin' | 'player',
         direction: (isCredit(Number(row.amount)) ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
         kind: row.kind as LedgerKind,
         amount: Math.abs(Number(row.amount)),
         balance_after: Number(row.balance_after),
-        target_name: isMine ? 'SuperAdmin' : (target?.full_name || target?.username || 'Player'),
-        target_username: isMine ? 'SuperAdmin' : `@${target?.username ?? 'player'}`,
+        target_name: isSuperadmin ? 'SuperAdmin' : (target?.full_name || target?.username || 'Player'),
+        target_username: isSuperadmin ? 'SuperAdmin' : `@${target?.username ?? 'player'}`,
         created_at: istDateTime(row.created_at),
         created_at_iso: row.created_at,
       }
