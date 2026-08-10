@@ -16,9 +16,11 @@ import { asRpc, type CurrentRound } from '@/lib/rpc'
  * Fixes carried in this rewrite:
  *   B-2  "Active Network" counted every profile regardless of is_active, so
  *        blocked accounts were reported as active.
- *   B-3  "Today Issued" only counted positive admin_adjustment rows, so
- *        withdrawals never reduced it and the label overstated issuance. It now
- *        nets admin_credit against admin_debit and is labelled as net issuance.
+ *   B-3  "Today Issued" originally only counted positive admin_adjustment rows,
+ *        so withdrawals never reduced it. Later netted credits against debits
+ *        into one number. User later asked for two separate, non-netted
+ *        numbers instead (today_deposited / today_withdrawn) -- see the
+ *        2026-08-10 note in getSystemOverviewMetricsAction.
  *   M-7  The game_history fallback is gone; that table never existed.
  *
  * Errors are surfaced rather than swallowed — `catch (_) {}` around a query is
@@ -101,7 +103,12 @@ export async function getAuditLogsAction(): Promise<{
 // ─────────────────────────────────────────────────────────────────────────────
 export interface SystemMetrics {
   total_coins: number
-  net_issued_today: number
+  // User-requested split: two honest, non-netted numbers instead of one
+  // number that quietly nets credits against debits. today_deposited only
+  // ever counts real superadmin -> agent credits; today_withdrawn only ever
+  // counts real superadmin -> agent debits, always <= 0.
+  today_deposited: number
+  today_withdrawn: number
   active_agents: number
   active_players: number
   lifetime_bets: number
@@ -116,7 +123,7 @@ export interface SystemMetrics {
 }
 
 const EMPTY_METRICS: SystemMetrics = {
-  total_coins: 0, net_issued_today: 0, active_agents: 0, active_players: 0,
+  total_coins: 0, today_deposited: 0, today_withdrawn: 0, active_agents: 0, active_players: 0,
   lifetime_bets: 0, lifetime_stake: 0, lifetime_payout: 0, lifetime_house: 0,
   today_bets: 0, today_stake: 0, today_payout: 0, today_house: 0, error: null,
 }
@@ -153,9 +160,16 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
       if (p.role === 'player') active_players++
     }
 
-    // B-3: net issuance — credits minus withdrawals, not credits alone.
-    const net_issued_today = (issuedRes.data ?? [])
-      .reduce((sum, r) => sum + Number(r.amount ?? 0), 0)
+    // User-requested split (previously B-3's single netted number): two
+    // separate, honest totals. admin_credit rows are always stored positive,
+    // admin_debit rows always negative (enforced by ledger_sign_matches_kind),
+    // so summing each kind separately needs no extra sign logic.
+    let today_deposited = 0, today_withdrawn = 0
+    for (const r of issuedRes.data ?? []) {
+      const amount = Number(r.amount ?? 0)
+      if (amount > 0) today_deposited += amount
+      else today_withdrawn += amount
+    }
 
     const sum = (rows: Array<{ total_stake: unknown; total_payout: unknown }>) => ({
       count: rows.length,
@@ -167,7 +181,8 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
 
     return {
       total_coins,
-      net_issued_today,
+      today_deposited,
+      today_withdrawn,
       active_agents,
       active_players,
       lifetime_bets: lifetime.count,

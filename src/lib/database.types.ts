@@ -125,6 +125,7 @@ export type Database = {
           balance_after: number
           round_id: string | null
           created_at: string
+          note: string | null
         }
         Insert: {
           id?: string
@@ -135,6 +136,7 @@ export type Database = {
           balance_after: number
           round_id?: string | null
           created_at?: string
+          note?: string | null
         }
         Update: {
           id?: string
@@ -145,6 +147,7 @@ export type Database = {
           balance_after?: number
           round_id?: string | null
           created_at?: string
+          note?: string | null
         }
         Relationships: []
       }

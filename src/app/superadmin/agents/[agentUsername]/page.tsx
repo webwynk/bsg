@@ -91,6 +91,7 @@ export default function AgentDetailPage({ params }: Props) {
   // Point transfer modal state
   const [activeTransferModal, setActiveTransferModal] = React.useState<'deposit' | 'withdraw' | null>(null)
   const [transferAmount, setTransferAmount] = React.useState('')
+  const [transferReason, setTransferReason] = React.useState('')
   const [isTransferring, setIsTransferring] = React.useState(false)
   const [transferError, setTransferError] = React.useState<string | null>(null)
   const [transferSuccess, setTransferSuccess] = React.useState<string | null>(null)
@@ -340,7 +341,7 @@ export default function AgentDetailPage({ params }: Props) {
     setIsTransferring(true)
     setTransferError(null)
 
-    const res = await issueAgentCoinsAction(resolvedAgentIdRef.current, amountNum, type === 'deposit' ? 'credit' : 'debit')
+    const res = await issueAgentCoinsAction(resolvedAgentIdRef.current, amountNum, type === 'deposit' ? 'credit' : 'debit', transferReason.trim() || undefined)
 
     setIsTransferring(false)
     if (res.error) {
@@ -351,6 +352,7 @@ export default function AgentDetailPage({ params }: Props) {
       setTimeout(() => {
         setActiveTransferModal(null)
         setTransferAmount('')
+        setTransferReason('')
         setTransferSuccess(null)
       }, 1200)
     }
@@ -401,6 +403,7 @@ export default function AgentDetailPage({ params }: Props) {
             onOpenChange={(open) => {
               setActiveTransferModal(open ? 'deposit' : null)
               setTransferAmount('')
+              setTransferReason('')
               setTransferError(null)
               setTransferSuccess(null)
             }}
@@ -433,7 +436,7 @@ export default function AgentDetailPage({ params }: Props) {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="agent-deposit-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
-                  <Input 
+                  <Input
                     id="agent-deposit-amount"
                     type="number"
                     step="1"
@@ -441,13 +444,25 @@ export default function AgentDetailPage({ params }: Props) {
                     placeholder="e.g. 1000"
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
-                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent-deposit-reason" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Reason (Optional)</Label>
+                  <Input
+                    id="agent-deposit-reason"
+                    type="text"
+                    maxLength={500}
+                    placeholder="e.g. Weekly float top-up"
+                    value={transferReason}
+                    onChange={(e) => setTransferReason(e.target.value)}
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                   />
                 </div>
               </div>
               <DialogFooter className="pt-2">
-                <Button 
-                  onClick={() => handleTransferPoints('deposit')} 
+                <Button
+                  onClick={() => handleTransferPoints('deposit')}
                   disabled={isTransferring || !!transferSuccess}
                   className="w-full h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold cursor-pointer rounded-lg text-xs"
                 >
@@ -464,6 +479,7 @@ export default function AgentDetailPage({ params }: Props) {
             onOpenChange={(open) => {
               setActiveTransferModal(open ? 'withdraw' : null)
               setTransferAmount('')
+              setTransferReason('')
               setTransferError(null)
               setTransferSuccess(null)
             }}
@@ -496,7 +512,7 @@ export default function AgentDetailPage({ params }: Props) {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="agent-withdraw-amount" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (Coins)</Label>
-                  <Input 
+                  <Input
                     id="agent-withdraw-amount"
                     type="number"
                     step="1"
@@ -504,13 +520,25 @@ export default function AgentDetailPage({ params }: Props) {
                     placeholder="e.g. 500"
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
-                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg" 
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="agent-withdraw-reason" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Reason (Optional)</Label>
+                  <Input
+                    id="agent-withdraw-reason"
+                    type="text"
+                    maxLength={500}
+                    placeholder="e.g. Correcting a duplicate deposit"
+                    value={transferReason}
+                    onChange={(e) => setTransferReason(e.target.value)}
+                    className="h-10 bg-background/60 border-border text-foreground text-xs rounded-lg"
                   />
                 </div>
               </div>
               <DialogFooter className="pt-2">
-                <Button 
-                  onClick={() => handleTransferPoints('withdraw')} 
+                <Button
+                  onClick={() => handleTransferPoints('withdraw')}
                   disabled={isTransferring || !!transferSuccess}
                   variant="destructive"
                   className="w-full h-10 font-extrabold cursor-pointer rounded-lg text-xs"

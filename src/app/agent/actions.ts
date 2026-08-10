@@ -116,25 +116,35 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
       }
     }
 
-    // Recent cashier movements involving me or my players.
+    // Recent cashier movements -- MY OWN user_id only. Same Issue #6 fix
+    // pattern as getAgentTransactionHistoryAction: a player transfer writes
+    // two rows (the player's own agent_credit/agent_debit, and my own
+    // mirrored agent_ledger_credit/agent_ledger_debit). Fetching both sides
+    // showed every transfer twice here, and mislabeled my own row
+    // "SuperAdmin" (this widget was never touched when that bug was first
+    // fixed elsewhere -- found during the 2026-08-10 dashboard audit).
     const ledgerRes = await db
       .from('coin_ledger')
       .select('id, user_id, counterparty_id, kind, amount, created_at')
       .in('kind', CASHIER_KINDS as unknown as string[])
-      .in('user_id', [me.id, ...playerIds])
+      .eq('user_id', me.id)
       .order('created_at', { ascending: false })
       .limit(50)
     if (ledgerRes.error) throw new Error(`ledger: ${ledgerRes.error.message}`)
 
     const nameById = new Map(players.map(p => [p.id, p]))
     const recent_transfers = (ledgerRes.data ?? []).map(row => {
-      const target = nameById.get(row.user_id)
+      const isSuperadmin = row.kind === 'admin_credit' || row.kind === 'admin_debit'
+      // My own agent_ledger_credit/agent_ledger_debit row is keyed by MY
+      // user_id, so the player it belongs to is only findable via
+      // counterparty_id -- same reasoning as getAgentTransactionHistoryAction.
+      const target = isSuperadmin ? undefined : nameById.get(row.counterparty_id ?? '')
       return {
         id: row.id,
         direction: (isCredit(Number(row.amount)) ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
         amount: Math.abs(Number(row.amount)),
-        target_name: target ? target.full_name : 'SuperAdmin',
-        target_username: target ? `@${target.username}` : 'SuperAdmin',
+        target_name: isSuperadmin ? 'SuperAdmin' : (target?.full_name || target?.username || 'Player'),
+        target_username: isSuperadmin ? 'SuperAdmin' : `@${target?.username ?? 'player'}`,
         created_at: istDateTime(row.created_at),
       }
     })

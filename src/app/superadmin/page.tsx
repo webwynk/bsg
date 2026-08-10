@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, RefreshCw, Check, Loader2, ArrowUpRight, Search, Gamepad2, Sparkles, Clock, Radio, Dices, Trophy } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Sparkles, Clock, Radio, Dices, Trophy } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,8 @@ export default function SuperAdminDashboard() {
   const [doubleMult, setDoubleMult] = React.useState(90)
   const [tripleMult, setTripleMult] = React.useState(900)
   const [totalCoins, setTotalCoins] = React.useState(0)
-  const [todaysCoins, setTodaysCoins] = React.useState(0)
+  const [todayDeposited, setTodayDeposited] = React.useState(0)
+  const [todayWithdrawn, setTodayWithdrawn] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [activePlayers, setActivePlayers] = React.useState(0)
 
@@ -103,7 +104,8 @@ export default function SuperAdminDashboard() {
       setIsLoadingMetrics(false)
       if (resMetrics) {
         setTotalCoins(resMetrics.total_coins || 0)
-        setTodaysCoins(resMetrics.net_issued_today || 0)
+        setTodayDeposited(resMetrics.today_deposited || 0)
+        setTodayWithdrawn(resMetrics.today_withdrawn || 0)
         setActiveAgents(resMetrics.active_agents || 0)
         setActivePlayers(resMetrics.active_players || 0)
         setTotalBetsCount(resMetrics.lifetime_bets || 0)
@@ -258,14 +260,14 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* Top 3 Overview Micro Cards (3-Column Micro Strip Grid on Mobile) */}
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-        {/* Card 1: Today's Coins Issued (Asia/Kolkata IST 00:00 reset) */}
+      {/* Top Overview Micro Cards (2-Column on Mobile, 4-Column on Larger) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3">
+        {/* Card 1: Today Deposited -- coins actually SENT to agents today (never netted against withdrawals) */}
         <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
           <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
             <div className="flex items-center justify-between">
               <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
-                Today Issued
+                Today Deposited
               </span>
               <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors shrink-0 hidden sm:block">
                 <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -276,7 +278,7 @@ export default function SuperAdminDashboard() {
                 <div className="h-5 sm:h-6 w-14 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
               ) : (
                 <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-emerald-500 flex items-center justify-between">
-                  <span className="truncate">{formatCurrency(todaysCoins)}</span>
+                  <span className="truncate">+{formatCurrency(todayDeposited)}</span>
                   <ArrowUpRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0 hidden sm:block" />
                 </div>
               )}
@@ -288,7 +290,35 @@ export default function SuperAdminDashboard() {
           </Card>
         </Link>
 
-        {/* Card 2: Active Network */}
+        {/* Card 2: Today Withdrawn -- coins actually TAKEN BACK from agents today */}
+        <Link href="/superadmin/agents/issued" className="block cursor-pointer group">
+          <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 group-hover:border-primary/50 group-hover:shadow-md transition-all duration-200 h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors truncate">
+                Today Withdrawn
+              </span>
+              <div className="p-1 sm:p-1.5 rounded-lg bg-amber-500/10 text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-colors shrink-0 hidden sm:block">
+                <Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </div>
+            </div>
+            <div className="mt-0.5 sm:mt-1.5">
+              {isLoadingMetrics ? (
+                <div className="h-5 sm:h-6 w-14 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
+              ) : (
+                <div className="text-xs sm:text-2xl font-black font-mono tracking-tight text-amber-500 flex items-center justify-between">
+                  <span className="truncate">{formatCurrency(todayWithdrawn)}</span>
+                  <ArrowDownRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:translate-y-0.5 transition-all shrink-0 hidden sm:block" />
+                </div>
+              )}
+              <div className="flex items-center space-x-1 mt-0.5 text-[8px] sm:text-[10px]">
+                <TrendingDown className="h-2.5 w-2.5 text-amber-500 shrink-0 hidden sm:block" />
+                <span className="text-amber-500 font-extrabold truncate">Resets 00:00 IST</span>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        {/* Card 3: Active Network */}
         <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Network</span>
@@ -313,7 +343,7 @@ export default function SuperAdminDashboard() {
           </div>
         </Card>
 
-        {/* Card 3: Global RTP Target */}
+        {/* Card 4: Global RTP Target */}
         <Card className="bg-card border-border/80 shadow-2xs rounded-xl p-2 sm:p-3 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">Global RTP</span>

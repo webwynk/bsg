@@ -15,10 +15,10 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
-import { Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, ShieldCheck, Search } from "lucide-react"
+import { Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, ShieldCheck, Search, Users, Download } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { getAgentsAction, getAgentCoinLedgerAction } from '../actions'
+import { getAgentsAction, getAgentCoinLedgerAction, getAgentCoinLedgerBreakdownAction, exportAgentCoinLedgerAction } from '../actions'
 
 export default function CoinsIssuedPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string }>>([])
@@ -30,11 +30,22 @@ export default function CoinsIssuedPage() {
     direction: 'credit' | 'debit'
     amount: number
     balance_after: number
+    note: string | null
     created_at: string
     created_at_iso: string
   }>>([])
 
   const [summary, setSummary] = React.useState({ credited: 0, debited: 0, net: 0 })
+  const [breakdown, setBreakdown] = React.useState<Array<{
+    agent_id: string
+    agent_name: string
+    agent_username: string
+    credited: number
+    debited: number
+    net: number
+  }>>([])
+  const [showBreakdown, setShowBreakdown] = React.useState(false)
+  const [isExporting, setIsExporting] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalItems, setTotalItems] = React.useState(0)
@@ -69,9 +80,9 @@ export default function CoinsIssuedPage() {
     })
   }, [])
 
-  const loadData = React.useCallback((isInitial: boolean = false) => {
-    if (isInitial) setIsLoading(true)
-
+  // Shared by loadData, the breakdown fetch, and CSV export -- all three must
+  // agree on exactly the same date range as whatever the user has filtered to.
+  const computeDateRange = React.useCallback((): { startDate?: string; endDate?: string } => {
     let startDate: string | undefined = undefined
     let endDate: string | undefined = undefined
     const fp = filterDateRef.current
@@ -100,6 +111,12 @@ export default function CoinsIssuedPage() {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       startDate = thirtyDaysAgo.toISOString()
     }
+    return { startDate, endDate }
+  }, [])
+
+  const loadData = React.useCallback((isInitial: boolean = false) => {
+    if (isInitial) setIsLoading(true)
+    const { startDate, endDate } = computeDateRange()
 
     getAgentCoinLedgerAction({
       agentId: selectedAgentIdRef.current,
@@ -118,7 +135,56 @@ export default function CoinsIssuedPage() {
         setSummary(res.summary)
       }
     }).catch(() => setIsLoading(false))
-  }, []) // stable — reads all filters from refs
+  }, [computeDateRange])
+
+  // Per-agent breakdown -- same filters as the table (minus the single-agent
+  // filter, and minus pagination), fetched only while the panel is open so a
+  // superadmin who never opens it never pays for the extra query.
+  const loadBreakdown = React.useCallback(() => {
+    const { startDate, endDate } = computeDateRange()
+    getAgentCoinLedgerBreakdownAction({
+      startDate, endDate, search: searchRef.current,
+    }).then((res) => {
+      if (res) setBreakdown(res.rows)
+    })
+  }, [computeDateRange])
+
+  React.useEffect(() => {
+    if (showBreakdown) loadBreakdown()
+  }, [showBreakdown, selectedAgentId, selectedType, filterDate, datePreset, searchTxQuery, loadBreakdown])
+
+  const handleExportCsv = () => {
+    setIsExporting(true)
+    const { startDate, endDate } = computeDateRange()
+    exportAgentCoinLedgerAction({
+      agentId: selectedAgentIdRef.current,
+      direction: selectedTypeRef.current,
+      startDate, endDate, search: searchRef.current,
+    }).then((res) => {
+      setIsExporting(false)
+      if (!res?.rows?.length) return
+      const header = ['Agent', 'Direction', 'Amount', 'Balance After', 'Reason', 'Date & Time']
+      const escapeCsv = (v: string) => `"${v.replace(/"/g, '""')}"`
+      const lines = [header.join(',')]
+      for (const r of res.rows) {
+        lines.push([
+          escapeCsv(`@${r.agent_username}`),
+          r.direction === 'credit' ? 'Deposit' : 'Withdrawal',
+          String(r.amount),
+          String(r.balance_after),
+          escapeCsv(r.note),
+          escapeCsv(r.created_at),
+        ].join(','))
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `coins-issued-ledger-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }).catch(() => setIsExporting(false))
+  }
 
   // Sync refs + re-fetch on any filter/page change
   React.useEffect(() => {
@@ -194,6 +260,23 @@ export default function CoinsIssuedPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Auto-Sync ({countdown}s)
           </span>
+          <Button
+            onClick={() => setShowBreakdown(v => !v)}
+            variant="outline"
+            size="sm"
+            className={`w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border ${showBreakdown ? 'bg-primary/10 text-primary border-primary/40' : ''}`}
+          >
+            <Users className="mr-1.5 h-3.5 w-3.5" /> By Agent
+          </Button>
+          <Button
+            onClick={handleExportCsv}
+            disabled={isExporting}
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border"
+          >
+            <Download className={`mr-1.5 h-3.5 w-3.5 ${isExporting ? 'animate-pulse' : ''}`} /> {isExporting ? 'Exporting...' : 'Export CSV'}
+          </Button>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
@@ -262,6 +345,47 @@ export default function CoinsIssuedPage() {
           )}
         </Card>
       </div>
+
+      {/* Per-Agent Breakdown -- toggled via the "By Agent" button. A single
+          net total across every agent hides which one it actually came from. */}
+      {showBreakdown && (
+        <Card className="bg-card border-border/80 p-3 rounded-xl shadow-xs">
+          <h2 className="text-xs font-black text-foreground mb-2">Breakdown by Agent (current filters)</h2>
+          {breakdown.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-3 text-center">No agent activity for the selected filters.</p>
+          ) : (
+            <div className="overflow-x-auto table-scroll">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider">Agent</TableHead>
+                    <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider">Deposited</TableHead>
+                    <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider">Withdrawn</TableHead>
+                    <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider">Net</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {breakdown.map((row) => (
+                    <TableRow key={row.agent_id} className="border-border hover:bg-secondary/30">
+                      <TableCell className="text-xs py-2">
+                        <Link href={`/superadmin/agents/${row.agent_username.replace('@', '')}`} className="font-bold hover:underline text-primary">
+                          {row.agent_name}
+                        </Link>
+                        <span className="text-muted-foreground block text-[10px]">{row.agent_username}</span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-emerald-500 py-2">+{formatCurrency(row.credited)}</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-red-500 py-2">-{formatCurrency(row.debited)}</TableCell>
+                      <TableCell className={`text-right font-mono font-black text-xs py-2 ${row.net >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {row.net >= 0 ? '+' : ''}{formatCurrency(row.net)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Comprehensive Filter Bar */}
       <Card className="bg-card border-border/80 p-2.5 rounded-xl shadow-xs space-y-2">
@@ -385,6 +509,7 @@ export default function CoinsIssuedPage() {
                 <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Agent</TableHead>
                 <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Type</TableHead>
                 <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Amount</TableHead>
+                <TableHead className="text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Reason</TableHead>
                 <TableHead className="text-right text-muted-foreground text-[11px] uppercase tracking-wider py-2.5">Date & Time</TableHead>
               </TableRow>
             </TableHeader>
@@ -396,6 +521,7 @@ export default function CoinsIssuedPage() {
                     <TableCell className="py-2.5"><div className="h-4 bg-secondary/60 rounded animate-pulse w-28" /></TableCell>
                     <TableCell className="py-2.5"><div className="h-4 bg-secondary/70 rounded animate-pulse w-20" /></TableCell>
                     <TableCell className="text-right py-2.5"><div className="h-4 bg-secondary/80 rounded animate-pulse w-16 ml-auto" /></TableCell>
+                    <TableCell className="py-2.5"><div className="h-4 bg-secondary/60 rounded animate-pulse w-24" /></TableCell>
                     <TableCell className="text-right py-2.5"><div className="h-4 bg-secondary/60 rounded animate-pulse w-24 ml-auto" /></TableCell>
                   </TableRow>
                 ))
@@ -426,6 +552,9 @@ export default function CoinsIssuedPage() {
                     }`}>
                       {tx.direction === 'credit' ? '+' : '-'}{formatCurrency(tx.amount)}
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground py-2 max-w-[220px] truncate" title={tx.note ?? ''}>
+                      {tx.note || <span className="text-muted-foreground/50">—</span>}
+                    </TableCell>
                     <TableCell className="text-right text-[11px] text-muted-foreground font-mono py-2">
                       {tx.created_at}
                     </TableCell>
@@ -433,7 +562,7 @@ export default function CoinsIssuedPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-28 text-center text-muted-foreground text-xs font-medium">
+                  <TableCell colSpan={6} className="h-28 text-center text-muted-foreground text-xs font-medium">
                     No coin transactions recorded for the selected filter parameters.
                   </TableCell>
                 </TableRow>

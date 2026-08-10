@@ -196,7 +196,8 @@ export async function createAgentAction(formData: FormData) {
 export async function issueAgentCoinsAction(
   agentIdentifier: string,
   amount: number,
-  direction: TransferDirection
+  direction: TransferDirection,
+  reason?: string
 ) {
   const auth = await requireAuth(['superadmin'])
   if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
@@ -204,6 +205,10 @@ export async function issueAgentCoinsAction(
   const whole = toWholeCoins(amount)
   if (whole === null) return { error: 'Please enter a whole number of coins greater than zero.' }
   if (direction !== 'credit' && direction !== 'debit') return { error: 'Invalid direction.' }
+  const trimmedReason = reason?.trim() || null
+  if (trimmedReason !== null && trimmedReason.length > 500) {
+    return { error: 'Reason must be 500 characters or fewer.' }
+  }
 
   try {
     const agentId = await resolveAgentId(agentIdentifier)
@@ -216,6 +221,7 @@ export async function issueAgentCoinsAction(
       p_agent_id: agentId,
       p_amount: whole,
       p_direction: direction,
+      p_reason: trimmedReason,
     })
 
     if (error) {
@@ -384,7 +390,7 @@ export async function getAgentCoinLedgerAction(params?: {
     // embed — embeds silently drop rows when a relationship cannot be resolved
     // and they defeat the generated column types.
     let base = db.from('coin_ledger')
-      .select('id, user_id, amount, balance_after, kind, created_at', { count: 'exact' })
+      .select('id, user_id, amount, balance_after, kind, note, created_at', { count: 'exact' })
       .in('kind', ['admin_credit', 'admin_debit'])
 
     if (params?.agentId && params.agentId !== 'all') {
@@ -469,6 +475,7 @@ export async function getAgentCoinLedgerAction(params?: {
           direction: (isCredit(Number(row.amount)) ? 'credit' : 'debit') as 'credit' | 'debit',
           amount: Math.abs(Number(row.amount)),
           balance_after: Number(row.balance_after),
+          note: row.note as string | null,
           created_at: istDateTime(row.created_at),
           created_at_iso: row.created_at,
         }
@@ -483,5 +490,147 @@ export async function getAgentCoinLedgerAction(params?: {
     return { rows: [], total_items: 0, total_pages: 1,
              summary: { credited: 0, debited: 0, net: 0 },
              error: `Could not load ledger: ${message}` }
+  }
+}
+
+/**
+ * Per-agent breakdown for the same date range as getAgentCoinLedgerAction --
+ * a single overall net figure hides which agent it actually came from. Same
+ * filters (date range, search) minus the single-agent filter, since the
+ * whole point here is to compare across agents.
+ */
+export async function getAgentCoinLedgerBreakdownAction(params?: {
+  startDate?: string
+  endDate?: string
+  search?: string
+}) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { rows: [], error: auth.error }
+
+  try {
+    const db = createAdminClient()
+    let query = db.from('coin_ledger').select('user_id, amount')
+      .in('kind', ['admin_credit', 'admin_debit']).range(0, 999999)
+
+    if (params?.search?.trim()) {
+      const term = `%${params.search.trim()}%`
+      const { data: matches } = await db
+        .from('profiles').select('id').eq('role', 'agent')
+        .or(`username.ilike.${term},full_name.ilike.${term}`)
+      const searchIds = (matches ?? []).map(m => m.id)
+      if (searchIds.length === 0) return { rows: [], error: null }
+      query = query.in('user_id', searchIds)
+    }
+    if (params?.startDate) query = query.gte('created_at', new Date(params.startDate).toISOString())
+    if (params?.endDate) {
+      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
+      query = query.lte('created_at', end.toISOString())
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    const byAgent = new Map<string, { credited: number; debited: number }>()
+    for (const r of data ?? []) {
+      const amt = Number(r.amount ?? 0)
+      const entry = byAgent.get(r.user_id) ?? { credited: 0, debited: 0 }
+      if (amt > 0) entry.credited += amt; else entry.debited += Math.abs(amt)
+      byAgent.set(r.user_id, entry)
+    }
+
+    const agentIds = [...byAgent.keys()]
+    const agentById = new Map<string, { username: string; full_name: string | null }>()
+    if (agentIds.length > 0) {
+      const { data: agents } = await db.from('profiles').select('id, username, full_name').in('id', agentIds)
+      for (const a of agents ?? []) agentById.set(a.id, { username: a.username, full_name: a.full_name })
+    }
+
+    const rows = agentIds.map(id => {
+      const p = agentById.get(id)
+      const { credited, debited } = byAgent.get(id)!
+      return {
+        agent_id: id,
+        agent_name: p?.full_name || p?.username || 'Agent',
+        agent_username: `@${p?.username ?? 'agent'}`,
+        credited, debited, net: credited - debited,
+      }
+    }).sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
+
+    return { rows, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { rows: [], error: `Could not load breakdown: ${message}` }
+  }
+}
+
+/**
+ * Full, unpaginated export for CSV download -- same filters as
+ * getAgentCoinLedgerAction, capped at 50,000 rows (a sane ceiling; a real
+ * export beyond that belongs in a background job, not a browser download).
+ */
+export async function exportAgentCoinLedgerAction(params?: {
+  agentId?: string
+  startDate?: string
+  endDate?: string
+  direction?: 'credit' | 'debit' | 'all'
+  search?: string
+}) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { rows: [], error: auth.error }
+
+  try {
+    const db = createAdminClient()
+    let base = db.from('coin_ledger')
+      .select('user_id, amount, balance_after, note, created_at')
+      .in('kind', ['admin_credit', 'admin_debit'])
+
+    if (params?.agentId && params.agentId !== 'all') {
+      const id = await resolveAgentId(params.agentId)
+      if (id) base = base.eq('user_id', id)
+    }
+    if (params?.search?.trim()) {
+      const term = `%${params.search.trim()}%`
+      const { data: matches } = await db
+        .from('profiles').select('id').eq('role', 'agent')
+        .or(`username.ilike.${term},full_name.ilike.${term}`)
+      const searchIds = (matches ?? []).map(m => m.id)
+      if (searchIds.length === 0) return { rows: [], error: null }
+      base = base.in('user_id', searchIds)
+    }
+    if (params?.direction === 'credit') base = base.gt('amount', 0)
+    if (params?.direction === 'debit')  base = base.lt('amount', 0)
+    if (params?.startDate) base = base.gte('created_at', new Date(params.startDate).toISOString())
+    if (params?.endDate) {
+      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
+      base = base.lte('created_at', end.toISOString())
+    }
+
+    const { data, error } = await base.order('created_at', { ascending: false }).range(0, 49999)
+    if (error) throw new Error(error.message)
+
+    const agentIds = [...new Set((data ?? []).map(r => r.user_id))]
+    const agentById = new Map<string, { username: string; full_name: string | null }>()
+    if (agentIds.length > 0) {
+      const { data: agents } = await db.from('profiles').select('id, username, full_name').in('id', agentIds)
+      for (const a of agents ?? []) agentById.set(a.id, { username: a.username, full_name: a.full_name })
+    }
+
+    return {
+      rows: (data ?? []).map(row => {
+        const p = agentById.get(row.user_id)
+        return {
+          agent_username: p?.username ?? 'agent',
+          direction: (isCredit(Number(row.amount)) ? 'credit' : 'debit') as 'credit' | 'debit',
+          amount: Math.abs(Number(row.amount)),
+          balance_after: Number(row.balance_after),
+          note: (row.note as string | null) ?? '',
+          created_at: istDateTime(row.created_at),
+        }
+      }),
+      error: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { rows: [], error: `Could not export ledger: ${message}` }
   }
 }
