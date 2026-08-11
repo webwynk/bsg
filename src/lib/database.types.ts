@@ -440,6 +440,10 @@ export type Database = {
         Args: Record<string, unknown>
         Returns: Json
       }
+      set_agent_active: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
       settle_round: {
         Args: Record<string, unknown>
         Returns: Json

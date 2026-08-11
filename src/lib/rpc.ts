@@ -72,6 +72,13 @@ export interface AdminIssueResult {
   agent_coin_balance: number
 }
 
+export interface SetAgentActiveResult {
+  success: true
+  is_active: boolean
+  username: string
+  cascaded_player_ids: string[]
+}
+
 /** Return shape of attempt_staff_login -- mirrors attempt_player_login's
  * contract, adapted for agent/superadmin accounts. */
 export type StaffLoginAttemptResult =

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createUserClient, createAdminClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-guard'
-import { asRpc, type AdminIssueResult } from '@/lib/rpc'
+import { asRpc, type AdminIssueResult, type SetAgentActiveResult } from '@/lib/rpc'
 import { logAuditEventAction } from '../actions'
 import { isCredit, toWholeCoins, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
@@ -262,55 +262,31 @@ export async function setAgentActiveAction(agentIdentifier: string, isActive: bo
     const agentId = await resolveAgentId(agentIdentifier)
     if (!agentId) return { error: 'Agent not found.' }
 
-    const db = createAdminClient()
-    const { data: agent, error: agentError } = await db
-      .from('profiles').select('username, auto_locked_at').eq('id', agentId).single()
-    if (agentError || !agent) return { error: 'Agent not found.' }
+    // The agent's own flip, the player cascade, active_sessions cleanup, and
+    // the audit log entry all happen atomically inside set_agent_active --
+    // Postgres's own transaction guarantees make a partial cascade (agent
+    // blocked but only some players) structurally impossible, unlike the
+    // previous sequence of independent .from(...) calls. Called with the
+    // caller's own session (not createAdminClient()) so the RPC can identify
+    // and authorize the caller itself, same pattern as agent_transfer_coins.
+    const supabase = await createUserClient()
+    const { data, error } = await supabase.rpc('set_agent_active', {
+      p_agent_id: agentId,
+      p_active: isActive,
+    })
 
-    // Reactivating an auto-locked agent must go through Reset Password, not
-    // this direct toggle -- same reasoning and same enforcement point as
-    // setPlayerActiveAction's identical guard: deactivating is always
-    // allowed, and reactivating a MANUALLY blocked agent (auto_locked_at is
-    // null) is unaffected, exactly the toggle's normal job.
-    if (isActive && agent.auto_locked_at) {
-      return {
-        error: 'This agent is temporarily locked from 5 failed login attempts. Reset their password to unlock -- activating directly is disabled for this case.',
+    if (error) {
+      if (error.message.includes('AGENT_AUTO_LOCKED_RESET_PASSWORD_REQUIRED')) {
+        return {
+          error: 'This agent is temporarily locked from 5 failed login attempts. Reset their password to unlock -- activating directly is disabled for this case.',
+        }
       }
+      if (error.message.includes('Agent not found')) return { error: 'Agent not found.' }
+      return { error: error.message }
     }
 
-    // Reactivating also clears failed_login_attempts/auto_locked_at, for the
-    // same reason as the player version: an agent manually unblocked for an
-    // unrelated reason shouldn't resume halfway toward the automatic 5-strike
-    // lockout from before they were blocked. Deactivating leaves those
-    // columns untouched.
-    const { error: updError } = await db
-      .from('profiles')
-      .update(
-        isActive
-          ? { is_active: true, failed_login_attempts: 0, auto_locked_at: null, updated_at: new Date().toISOString() }
-          : { is_active: false, updated_at: new Date().toISOString() }
-      )
-      .eq('id', agentId)
-    if (updError) return { error: updError.message }
-
-    // Cascade to the agent's players, in both directions.
-    const { data: players, error: playersError } = await db
-      .from('profiles').select('id').eq('agent_id', agentId)
-    if (playersError) return { error: playersError.message }
-
-    const playerIds = (players ?? []).map(p => p.id)
-    if (playerIds.length > 0) {
-      const { error: cascadeError } = await db
-        .from('profiles')
-        .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .in('id', playerIds)
-      if (cascadeError) return { error: cascadeError.message }
-    }
-
-    // End live sessions for everyone just blocked, so nobody keeps playing.
-    if (!isActive) {
-      await db.from('active_sessions').delete().in('user_id', [agentId, ...playerIds])
-    }
+    const result = asRpc<SetAgentActiveResult>(data)
+    const playerIds = result.cascaded_player_ids
 
     // Revoke (or restore) the actual Supabase Auth session for the agent and
     // every cascaded player. profiles.is_active alone does not invalidate an
@@ -318,7 +294,14 @@ export async function setAgentActiveAction(agentIdentifier: string, isActive: bo
     // keeps working (including direct calls to agent_transfer_coins /
     // admin_issue_coins) until that token naturally expires on its own.
     // ban_duration is enforced by Supabase Auth on every request, independent
-    // of token TTL, so this closes that window immediately.
+    // of token TTL, so this closes that window immediately. This step is
+    // necessarily separate from the RPC above -- it calls Supabase's Auth
+    // admin API, a different system from Postgres, so it cannot join that
+    // transaction. A failure here does not roll back the RPC's already-
+    // committed state: agent_transfer_coins/admin_issue_coins's own
+    // is_active check (Issue #1) is the backstop that still applies even if
+    // a ban call is skipped or fails for some accounts.
+    const db = createAdminClient()
     const banTargets = [agentId, ...playerIds]
     const banFailures: string[] = []
     for (const userId of banTargets) {
@@ -327,22 +310,11 @@ export async function setAgentActiveAction(agentIdentifier: string, isActive: bo
       })
       if (banError) banFailures.push(userId)
     }
-    // A ban failure does not roll back the is_active state above. The
-    // database-level authorization fix in agent_transfer_coins /
-    // admin_issue_coins (P0132 / P0135) is the backstop that still applies
-    // even if this call is ever skipped or fails for some accounts.
     if (banFailures.length > 0) {
       console.error(
         `setAgentActiveAction: failed to ${isActive ? 'unban' : 'ban'} Auth session(s) for: ${banFailures.join(', ')}`
       )
     }
-
-    await logAuditEventAction(
-      'security',
-      isActive
-        ? `Unblocked agent @${agent.username} and ${playerIds.length} player account(s)`
-        : `Blocked agent @${agent.username} and ${playerIds.length} player account(s)`
-    )
 
     revalidatePath('/superadmin/agents')
     return { success: true, is_active: isActive, cascaded: playerIds.length }
