@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type AgentTransferResult } from '@/lib/rpc'
 import { isCredit, ledgerKindLabel, toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
+import { resolveAgentId } from '@/app/superadmin/agents/actions'
 
 /**
  * Player management for the agent back office.
@@ -85,7 +86,15 @@ export async function getPlayersAction(
   if (auth.error || !auth.user) return { players: [], error: auth.error }
 
   // Cross-tenant guard: only a superadmin may look at someone else's roster.
-  const agentId = auth.user.role === 'superadmin' && targetAgentId ? targetAgentId : auth.user.id
+  // targetAgentId may arrive as a username or an already-resolved UUID --
+  // resolveAgentId (Issue #64, mirrors Issue #8's fix) handles both, so this
+  // action stays correct for any future caller, not just today's zero-arg one.
+  let agentId = auth.user.id
+  if (auth.user.role === 'superadmin' && targetAgentId) {
+    const resolved = await resolveAgentId(targetAgentId)
+    if (!resolved) return { players: [], error: 'Agent not found.' }
+    agentId = resolved
+  }
 
   try {
     const db = createAdminClient()
