@@ -15,7 +15,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ResponsivePagination } from "@/components/responsive-pagination"
-import { getPlayersAction } from './players/actions'
 import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
 
