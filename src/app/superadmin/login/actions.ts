@@ -51,7 +51,13 @@ export async function superAdminLogin(formData: FormData) {
     if (attemptResult.reason === 'account_blocked') {
       redirect('/superadmin/login?error=This account is suspended.')
     }
-    redirect('/superadmin/login?error=Invalid username or password.')
+    // Mirrors bsg_app's ApiService.login wording for the same underlying
+    // attempt_staff_login/attempt_player_login attempts_remaining contract.
+    const remaining = attemptResult.attempts_remaining
+    const message = remaining != null
+      ? `Invalid username or password. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before this account is temporarily locked.`
+      : 'Invalid username or password.'
+    redirect(`/superadmin/login?error=${message}`)
   }
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
