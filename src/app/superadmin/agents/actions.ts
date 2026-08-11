@@ -30,7 +30,7 @@ function istDateTime(value: string): string {
   })
 }
 
-async function resolveAgentId(identifier: string): Promise<string | null> {
+export async function resolveAgentId(identifier: string): Promise<string | null> {
   if (!identifier || identifier === 'all') return null
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
   if (isUuid) return identifier

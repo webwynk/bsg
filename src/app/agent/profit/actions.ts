@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase'
 
 import { requireAuth } from '@/lib/auth-guard'
+import { resolveAgentId } from '@/app/superadmin/agents/actions'
 
 /**
  * Agent profit & loss report — v2.
@@ -95,10 +96,16 @@ export async function getAgentProfitReportAction(
   const auth = await requireAuth(['agent', 'superadmin'])
   if (auth.error || !auth.user) return { ...EMPTY, error: auth.error }
 
-  // A-8: an agent may only ever report on their own book.
-  const agentId = auth.user.role === 'superadmin' && params.targetAgentId
-    ? params.targetAgentId
-    : auth.user.id
+  // A-8: an agent may only ever report on their own book. For a superadmin,
+  // targetAgentId may arrive as a username (first load, before the caller has
+  // resolved it) or an already-resolved UUID -- resolveAgentId handles both,
+  // so this action is correct regardless of what the caller passes.
+  let agentId = auth.user.id
+  if (auth.user.role === 'superadmin' && params.targetAgentId) {
+    const resolved = await resolveAgentId(params.targetAgentId)
+    if (!resolved) return { ...EMPTY, error: 'Agent not found.' }
+    agentId = resolved
+  }
 
   try {
     const db = createAdminClient()
