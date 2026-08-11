@@ -379,6 +379,15 @@ export interface AgentNotification {
    * to false. False also (not just "resolved") when there's no linked
    * player at all. */
   player_still_locked: boolean
+  /** Issue #67: same idea as player_id/player_still_locked, but for a
+   * staff (agent/superadmin) lockout alert -- lets the superadmin alerts
+   * page offer a direct Reset Password action too, instead of only
+   * informing. Null for a notification predating locked_staff_id, or a
+   * non-lockout notification kind. */
+  staff_id: string | null
+  staff_username: string | null
+  staff_full_name: string | null
+  staff_still_locked: boolean
 }
 
 /** Unread-first, newest-first. Superadmin sees every agent's alerts; an
@@ -393,7 +402,7 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
     const db = createAdminClient()
     let query = db
       .from('notifications')
-      .select('id, message, read_at, created_at, player_id')
+      .select('id, message, read_at, created_at, player_id, locked_staff_id')
       .order('created_at', { ascending: false })
       .limit(200)
 
@@ -413,20 +422,25 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
     const { data, error } = await query
     if (error) throw new Error(error.message)
 
-    // One batched lookup for every referenced player, not one query per row.
-    // auto_locked_at is read live here -- it's the single source of truth
-    // profiles itself uses, so a reset from the Players page updates the
-    // exact same column this reads, with nothing to keep in sync separately.
+    // One batched lookup covering every referenced player AND staff account,
+    // not one query per row -- both are just profiles rows, so a single
+    // combined .in() covers both id sets. auto_locked_at is read live here --
+    // it's the single source of truth profiles itself uses, so a reset from
+    // the Players/Agents page or this alert's own button all correctly flip
+    // this to false, with nothing to keep in sync separately.
     const playerIds = [...new Set((data ?? []).map(n => n.player_id).filter((id): id is string => id !== null))]
-    const playersById = new Map<string, { username: string; full_name: string; auto_locked_at: string | null }>()
-    if (playerIds.length > 0) {
-      const { data: players } = await db.from('profiles').select('id, username, full_name, auto_locked_at').in('id', playerIds)
-      for (const p of players ?? []) playersById.set(p.id, { username: p.username, full_name: p.full_name || p.username, auto_locked_at: p.auto_locked_at })
+    const staffIds = [...new Set((data ?? []).map(n => n.locked_staff_id).filter((id): id is string => id !== null))]
+    const profilesById = new Map<string, { username: string; full_name: string; auto_locked_at: string | null }>()
+    const allIds = [...new Set([...playerIds, ...staffIds])]
+    if (allIds.length > 0) {
+      const { data: profiles } = await db.from('profiles').select('id, username, full_name, auto_locked_at').in('id', allIds)
+      for (const p of profiles ?? []) profilesById.set(p.id, { username: p.username, full_name: p.full_name || p.username, auto_locked_at: p.auto_locked_at })
     }
 
     return {
       notifications: (data ?? []).map(n => {
-        const player = n.player_id ? playersById.get(n.player_id) : undefined
+        const player = n.player_id ? profilesById.get(n.player_id) : undefined
+        const staff = n.locked_staff_id ? profilesById.get(n.locked_staff_id) : undefined
         return {
           id: n.id,
           message: n.message,
@@ -437,6 +451,10 @@ export async function getAgentNotificationsAction(): Promise<{ notifications: Ag
           player_username: player?.username ?? null,
           player_full_name: player?.full_name ?? null,
           player_still_locked: player?.auto_locked_at != null,
+          staff_id: staff ? n.locked_staff_id : null,
+          staff_username: staff?.username ?? null,
+          staff_full_name: staff?.full_name ?? null,
+          staff_still_locked: staff?.auto_locked_at != null,
         }
       }),
       error: null,

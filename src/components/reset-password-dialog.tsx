@@ -22,6 +22,12 @@ import { resetPlayerPasswordAction } from "@/app/agent/players/actions"
  * Players page so the Alerts page (Issue #52) can offer the exact same
  * "Reset Password" action directly from a security notification, without a
  * second copy of this form drifting out of sync with the original.
+ *
+ * `action` (Issue #67) makes this generic across account types -- defaults
+ * to resetPlayerPasswordAction so every existing call site is unaffected;
+ * the superadmin alerts page passes updateAgentPasswordAction instead, to
+ * reset a locked agent/superadmin's password through this same dialog
+ * rather than a second near-duplicate form.
  */
 export function ResetPasswordDialog({
   playerId,
@@ -29,6 +35,7 @@ export function ResetPasswordDialog({
   playerUsername,
   trigger,
   onSuccess,
+  action = resetPlayerPasswordAction,
 }: {
   playerId: string
   playerName: string
@@ -37,6 +44,7 @@ export function ResetPasswordDialog({
    * be a single ReactElement (e.g. a <button>), not arbitrary ReactNode. */
   trigger: React.ReactElement
   onSuccess?: () => void
+  action?: (identifier: string, newPassword: string) => Promise<{ success?: boolean; error?: string }>
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [newPassword, setNewPassword] = React.useState('')
@@ -70,7 +78,7 @@ export function ResetPasswordDialog({
     setIsResetting(true)
     setError(null)
 
-    const res = await resetPlayerPasswordAction(playerId, newPassword)
+    const res = await action(playerId, newPassword)
 
     setIsResetting(false)
     if (res.error) {
@@ -96,9 +104,9 @@ export function ResetPasswordDialog({
       <DialogTrigger render={trigger} />
       <DialogContent className="sm:max-w-[380px] bg-card border-border text-foreground rounded-2xl p-5">
         <DialogHeader>
-          <DialogTitle className="font-black text-lg">Reset Player Password</DialogTitle>
+          <DialogTitle className="font-black text-lg">Reset Password</DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Set a new password for this player.
+            Set a new password for this account.
           </DialogDescription>
         </DialogHeader>
 

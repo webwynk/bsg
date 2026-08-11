@@ -7,6 +7,7 @@ import { Bell, ShieldAlert, CheckCheck, RefreshCw, Clock, KeyRound, Check, Check
 import { useAgentNotifications } from '@/components/agent-notifications-provider'
 import { ResetPasswordDialog } from '@/components/reset-password-dialog'
 import { ResponsivePagination } from '@/components/responsive-pagination'
+import { updateAgentPasswordAction } from '@/app/superadmin/agents/actions'
 
 const ITEMS_PER_PAGE = 10
 
@@ -138,6 +139,15 @@ export function AlertsContent() {
         ) : (
           paginated.map(n => {
             const isUnread = !n.is_read
+            // Issue #67: show the real name alongside the username on the
+            // card itself -- previously only visible after opening the
+            // Reset Password dialog. Whichever identity this alert is about
+            // (player or staff), never both.
+            const identity = n.player_id
+              ? { name: n.player_full_name, username: n.player_username }
+              : n.staff_id
+                ? { name: n.staff_full_name, username: n.staff_username }
+                : null
 
             return (
               <Card
@@ -186,6 +196,15 @@ export function AlertsContent() {
                           {n.message}
                         </p>
 
+                        {identity && (identity.name || identity.username) && (
+                          <p className="text-[11px] text-slate-400 font-semibold truncate">
+                            {identity.name}
+                            {identity.username && (
+                              <span className="text-slate-500 font-mono font-normal"> (@{identity.username})</span>
+                            )}
+                          </p>
+                        )}
+
                         <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 font-mono">
                           <Clock className="h-3 w-3 text-slate-500 shrink-0" />
                           <span>{n.created_at_display}</span>
@@ -229,6 +248,32 @@ export function AlertsContent() {
                       )}
 
                       {n.player_id && !n.player_still_locked && (
+                        <span className="inline-flex items-center justify-center gap-1.5 h-7 px-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-extrabold w-full sm:w-auto">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Unlocked & Active
+                        </span>
+                      )}
+
+                      {/* Issue #67: same Reset Password action, for a locked
+                          staff (agent/superadmin) account instead of a player. */}
+                      {n.staff_id && n.staff_still_locked && (
+                        <ResetPasswordDialog
+                          playerId={n.staff_id}
+                          playerName={n.staff_full_name ?? n.staff_username ?? 'this account'}
+                          playerUsername={n.staff_username ?? ''}
+                          action={updateAgentPasswordAction}
+                          onSuccess={async () => {
+                            if (!n.is_read) await markRead(n.id)
+                            await refresh()
+                          }}
+                          trigger={
+                            <button className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer text-xs font-black shadow-xs transition-all w-full sm:w-auto">
+                              <KeyRound className="h-3.5 w-3.5" /> Reset Password
+                            </button>
+                          }
+                        />
+                      )}
+
+                      {n.staff_id && !n.staff_still_locked && (
                         <span className="inline-flex items-center justify-center gap-1.5 h-7 px-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-extrabold w-full sm:w-auto">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Unlocked & Active
                         </span>
