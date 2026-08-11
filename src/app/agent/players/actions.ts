@@ -5,6 +5,7 @@ import { createClient as createUserClient, createAdminClient } from '@/lib/supab
 import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type AgentTransferResult } from '@/lib/rpc'
 import { isCredit, ledgerKindLabel, toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
+import { USERNAME_PATTERN } from '@/lib/validation'
 
 /**
  * Player management for the agent back office.
@@ -133,8 +134,8 @@ export async function createPlayerAction(formData: FormData) {
     return { error: 'Please provide a name, username and password.' }
   }
   // Matches the database CHECK on profiles.username.
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
-    return { error: 'Username must be 3-20 characters, letters, numbers or underscore only.' }
+  if (!USERNAME_PATTERN.test(username)) {
+    return { error: 'Username must be 3-20 characters, letters and numbers only.' }
   }
   if (password.length < 6) {
     return { error: 'Password must be at least 6 characters.' }

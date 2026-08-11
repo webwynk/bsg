@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type AdminIssueResult } from '@/lib/rpc'
 import { logAuditEventAction } from '../actions'
 import { isCredit, toWholeCoins, type TransferDirection } from '@/lib/ledger'
+import { USERNAME_PATTERN } from '@/lib/validation'
 
 /**
  * Agent administration — v2.
@@ -161,8 +162,8 @@ export async function createAgentAction(formData: FormData) {
   if (!full_name || !username || !password) {
     return { error: 'Please provide a name, username and password.' }
   }
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
-    return { error: 'Username must be 3-20 characters, letters, numbers or underscore only.' }
+  if (!USERNAME_PATTERN.test(username)) {
+    return { error: 'Username must be 3-20 characters, letters and numbers only.' }
   }
   if (password.length < 6) {
     return { error: 'Password must be at least 6 characters.' }

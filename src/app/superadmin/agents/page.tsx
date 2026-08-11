@@ -29,6 +29,7 @@ import {
   Filter, ArrowRight
 } from 'lucide-react'
 import { formatCurrency } from "@/lib/utils"
+import { USERNAME_PATTERN } from "@/lib/validation"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { createAgentAction, getAgentsAction } from './actions'
 import { playerStatus } from '@/lib/player-status'
@@ -51,7 +52,7 @@ export default function AgentsPage() {
   
   const [usernameInput, setUsernameInput] = React.useState('')
   const isUsernameTouched = usernameInput.length > 0
-  const isUsernameValid = React.useMemo(() => /^[a-zA-Z0-9]{3,20}$/.test(usernameInput), [usernameInput])
+  const isUsernameValid = React.useMemo(() => USERNAME_PATTERN.test(usernameInput), [usernameInput])
 
   const itemsPerPage = 10
 
@@ -256,7 +257,7 @@ export default function AgentsPage() {
                 {isUsernameTouched && !isUsernameValid && (
                   <p className="text-[10px] font-bold text-red-500 flex items-center mt-1">
                     <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
-                    No symbols allowed. Use 3-20 letters/numbers only (e.g. agent01, agent03)
+                    3-20 letters and numbers only (e.g. agent01, agent03)
                   </p>
                 )}
                 {isUsernameTouched && isUsernameValid && (
