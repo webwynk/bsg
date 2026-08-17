@@ -290,17 +290,30 @@ export async function setAgentActiveAction(agentIdentifier: string, isActive: bo
 
     // Revoke (or restore) the actual Supabase Auth session for the agent and
     // every cascaded player. profiles.is_active alone does not invalidate an
-    // already-issued JWT -- without this, a blocked account's existing login
-    // keeps working (including direct calls to agent_transfer_coins /
-    // admin_issue_coins) until that token naturally expires on its own.
-    // ban_duration is enforced by Supabase Auth on every request, independent
-    // of token TTL, so this closes that window immediately. This step is
-    // necessarily separate from the RPC above -- it calls Supabase's Auth
-    // admin API, a different system from Postgres, so it cannot join that
-    // transaction. A failure here does not roll back the RPC's already-
-    // committed state: agent_transfer_coins/admin_issue_coins's own
-    // is_active check (Issue #1) is the backstop that still applies even if
-    // a ban call is skipped or fails for some accounts.
+    // already-issued JWT.
+    //
+    // Correction (2026-08-17 re-verification): this comment previously
+    // claimed ban_duration is "enforced by Supabase Auth on every request,
+    // independent of token TTL" and closes the window "immediately" -- that
+    // was empirically disproven by this session's Issue #57 investigation
+    // (tested live against a disposable account: an already-issued,
+    // unexpired JWT keeps working normally after ban_duration is set; it
+    // only blocks the *next token refresh*, surfacing later as a forced
+    // local sign-out on the client). So this call does NOT immediately stop
+    // a blocked account's still-valid JWT from being used.
+    //
+    // That's fine, because it was never the real backstop for coin movement:
+    // agent_transfer_coins/admin_issue_coins re-check profiles.is_active
+    // fresh from the database on every call (Issue #1), and that flag is
+    // already false by the time this code runs -- so direct calls to those
+    // RPCs are rejected regardless of JWT validity. This ban_duration call's
+    // actual purpose is narrower: it stops the session from being *renewed*
+    // going forward, which is what eventually forces a real, visible
+    // sign-out on whatever client (dashboard or app) is still using it. This
+    // step is necessarily separate from the RPC above -- it calls Supabase's
+    // Auth admin API, a different system from Postgres, so it cannot join
+    // that transaction. A failure here does not roll back the RPC's
+    // already-committed state.
     const db = createAdminClient()
     const banTargets = [agentId, ...playerIds]
     const banFailures: string[] = []

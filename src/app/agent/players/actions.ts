@@ -245,10 +245,21 @@ export async function setPlayerActiveAction(playerIdentifier: string, isActive: 
     }
 
     // Revoke (or restore) the player's actual Supabase Auth session.
-    // profiles.is_active alone does not invalidate an already-issued JWT --
-    // without this, a blocked player's existing login keeps working until
-    // that token naturally expires. ban_duration is enforced by Supabase Auth
-    // on every request, independent of token TTL.
+    // profiles.is_active alone does not invalidate an already-issued JWT.
+    //
+    // Correction (2026-08-17 re-verification): this comment previously
+    // claimed ban_duration is "enforced by Supabase Auth on every request,
+    // independent of token TTL" -- disproven live during this session's
+    // Issue #57 investigation: an already-issued, unexpired JWT keeps
+    // working normally after ban_duration is set; it only blocks the next
+    // token *refresh*, which the app's own AuthProvider now listens for
+    // directly (onForcedSignOut) rather than assuming this call ends things
+    // immediately. The real backstop for a still-valid JWT is elsewhere:
+    // session_heartbeat and place_bet each re-check profiles.is_active fresh
+    // on every call, and that flag is already false by the time this code
+    // runs -- so betting and the heartbeat's graceful reply both correctly
+    // reject the account regardless of whether this ban call has taken
+    // effect yet.
     const { error: banError } = await createAdminClient().auth.admin.updateUserById(playerId, {
       ban_duration: isActive ? 'none' : '876000h',
     })
