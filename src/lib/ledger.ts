@@ -37,9 +37,6 @@ export const LEDGER_KINDS = [
 
 export type LedgerKind = (typeof LEDGER_KINDS)[number]
 
-/** Movements produced by gameplay rather than by a cashier. */
-export const GAMEPLAY_KINDS: readonly LedgerKind[] = ['stake', 'stake_refund', 'payout']
-
 /** Movements a cashier (agent or superadmin) initiates. */
 export const CASHIER_KINDS: readonly LedgerKind[] = [
   'agent_credit',

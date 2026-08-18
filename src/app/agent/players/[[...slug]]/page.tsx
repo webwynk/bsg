@@ -75,10 +75,6 @@ export default function PlayersPage() {
   const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
   const [filterOutcome, setFilterOutcome] = React.useState<'all' | 'WON' | 'LOST'>('all')
   const [filterMode, setFilterMode] = React.useState<'all' | 'SINGLE' | 'DOUBLE' | 'TRIPLE'>('all')
-  // Coins History category — defaults to gameplay so agent transfers don't
-  // clutter the default view; the only way to see this player's cashier
-  // transfers is to switch this to 'cashier'.
-  const [pointsCategory, setPointsCategory] = React.useState<'gameplay' | 'cashier'>('gameplay')
 
   // Pagination states
   const [gamesPage, setGamesPage] = React.useState(1)
@@ -89,7 +85,7 @@ export default function PlayersPage() {
   React.useEffect(() => {
     setGamesPage(1)
     setPointsPage(1)
-  }, [filterDate, filterOutcome, filterMode, pointsCategory])
+  }, [filterDate, filterOutcome, filterMode])
 
   // Compute performance metrics
   const performanceStats = React.useMemo(() => {
@@ -141,7 +137,6 @@ export default function PlayersPage() {
   // Filtered points history list — uses ISO date comparison for accuracy across midnight boundaries
   const filteredPoints = React.useMemo(() => {
     return pointsHistory.filter(tx => {
-      if (tx.category !== pointsCategory) return false
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
         const txDateStr = tx.created_at_iso
@@ -151,7 +146,7 @@ export default function PlayersPage() {
       }
       return true
     })
-  }, [pointsHistory, filterDate, pointsCategory])
+  }, [pointsHistory, filterDate])
 
   const paginatedGames = React.useMemo(() => {
     const start = (gamesPage - 1) * itemsPerPage
@@ -975,7 +970,7 @@ export default function PlayersPage() {
                       }`}
                     >
                       <Coins className="h-3.5 w-3.5 text-amber-400" />
-                      <span>Coins History</span>
+                      <span>Cashier Transfers</span>
                       <span className="text-[10px] text-muted-foreground">({filteredPoints.length})</span>
                     </button>
                   </div>
@@ -1062,23 +1057,6 @@ export default function PlayersPage() {
                             }`}
                           >
                             {m}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Coins History Category Pills — Gameplay (Win/Loss/Refund) vs Cashier (Agent Deposit/Withdrawal) */}
-                    {activeTab === 'points' && (
-                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {(['gameplay', 'cashier'] as const).map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => setPointsCategory(c)}
-                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
-                              pointsCategory === c ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                          >
-                            {c === 'gameplay' ? 'Gameplay' : 'Cashier Transfers'}
                           </button>
                         ))}
                       </div>
@@ -1509,9 +1487,7 @@ export default function PlayersPage() {
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
-                        {pointsCategory === 'gameplay'
-                          ? 'No gameplay coin transactions recorded for the selected filter.'
-                          : 'No cashier transfers recorded for the selected filter.'}
+                        No cashier transfers recorded for the selected filter.
                       </div>
                     )
                   )}

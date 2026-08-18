@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createUserClient, createAdminClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type AgentTransferResult } from '@/lib/rpc'
-import { GAMEPLAY_KINDS, isCredit, ledgerKindLabel, toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
+import { CASHIER_KINDS, isCredit, ledgerKindLabel, toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
 import { resolveAgentId } from '@/app/superadmin/agents/actions'
 
@@ -540,8 +540,6 @@ export interface PlayerCoinMovement {
   id: string
   kind: LedgerKind
   label: string
-  /** 'gameplay' for stake/stake_refund/payout, 'cashier' for agent_credit/agent_debit. */
-  category: 'gameplay' | 'cashier'
   direction: 'deposit' | 'withdraw'
   amount: number
   balance_after: number
@@ -578,9 +576,15 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string): Pr
         .eq('user_id', playerId)
         .order('created_at', { ascending: false })
         .limit(100),
+      // Cashier kinds only -- gameplay (stake/stake_refund/payout) is already
+      // covered above by the bets query, one row per round with the actual
+      // WON/LOST outcome, which is strictly more useful than the raw
+      // stake/payout ledger split. This "Coins History" list exists to show
+      // agent<->player cashier transfers specifically.
       db.from('coin_ledger')
         .select('id, kind, amount, balance_after, created_at')
         .eq('user_id', playerId)
+        .in('kind', CASHIER_KINDS as unknown as string[])
         .order('created_at', { ascending: false })
         .limit(200),
     ])
@@ -633,7 +637,6 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string): Pr
       id: row.id,
       kind: row.kind as LedgerKind,
       label: ledgerKindLabel(row.kind),
-      category: GAMEPLAY_KINDS.includes(row.kind as LedgerKind) ? 'gameplay' : 'cashier',
       direction: isCredit(Number(row.amount)) ? 'deposit' : 'withdraw',
       amount: Math.abs(Number(row.amount)),
       balance_after: Number(row.balance_after),

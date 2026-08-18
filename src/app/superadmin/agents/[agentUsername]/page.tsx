@@ -112,16 +112,12 @@ export default function AgentDetailPage({ params }: Props) {
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 5
-  // Coins History category — defaults to gameplay so agent transfers don't
-  // clutter the default view; the only way to see this player's cashier
-  // transfers is to switch this to 'cashier'.
-  const [pointsCategory, setPointsCategory] = React.useState<'gameplay' | 'cashier'>('gameplay')
 
   // Reset pagination when filters change
   React.useEffect(() => {
     setGamesPage(1)
     setPointsPage(1)
-  }, [filterDate, filterOutcome, filterMode, pointsCategory])
+  }, [filterDate, filterOutcome, filterMode])
 
   // Compute performance metrics
   const performanceStats = React.useMemo(() => {
@@ -176,7 +172,6 @@ export default function AgentDetailPage({ params }: Props) {
   // Filtered points history list
   const filteredPoints = React.useMemo(() => {
     return pointsHistory.filter(tx => {
-      if (tx.category !== pointsCategory) return false
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
         const txDateStr = tx.created_at_iso
@@ -186,7 +181,7 @@ export default function AgentDetailPage({ params }: Props) {
       }
       return true
     })
-  }, [pointsHistory, filterDate, pointsCategory])
+  }, [pointsHistory, filterDate])
 
   const paginatedGames = React.useMemo(() => {
     const start = (gamesPage - 1) * itemsPerPage
@@ -998,23 +993,6 @@ export default function AgentDetailPage({ params }: Props) {
                         ))}
                       </div>
                     )}
-
-                    {/* Coins History Category Pills — Gameplay (Win/Loss/Refund) vs Cashier (Agent Deposit/Withdrawal) */}
-                    {activeTab === 'points' && (
-                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {(['gameplay', 'cashier'] as const).map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => setPointsCategory(c)}
-                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
-                              pointsCategory === c ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                          >
-                            {c === 'gameplay' ? 'Gameplay' : 'Cashier Transfers'}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1041,7 +1019,7 @@ export default function AgentDetailPage({ params }: Props) {
                   }`}
                 >
                   <Coins className="h-3.5 w-3.5 text-amber-400" />
-                  <span>Coins History</span>
+                  <span>Cashier Transfers</span>
                   {isLoadingHistory ? (
                     <span className="inline-block h-3 w-4 rounded bg-secondary/80 animate-pulse" />
                   ) : (
@@ -1488,9 +1466,7 @@ export default function AgentDetailPage({ params }: Props) {
                       </>
                     ) : (
                       <div className="p-10 text-center text-xs text-muted-foreground font-medium">
-                        {pointsCategory === 'gameplay'
-                          ? 'No gameplay coin transactions recorded for this player.'
-                          : 'No cashier transfers recorded for this player.'}
+                        No cashier transfers recorded for this player.
                       </div>
                     )
                   ) : (
