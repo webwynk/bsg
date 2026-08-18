@@ -59,6 +59,32 @@ export function isCredit(amount: number): boolean {
   return amount > 0
 }
 
+/**
+ * Deposit/withdraw label for a cashier ledger row, correct for the account
+ * the row is actually *about* -- not just whichever `user_id` it's stored
+ * under.
+ *
+ * `agent_ledger_credit`/`agent_ledger_debit` are the agent's own mirrored
+ * side-effect row of a player transfer (see `LEDGER_KINDS` above); their sign
+ * is always the *opposite* of what happened to the player, so those two kinds
+ * are flipped here. Every other cashier kind -- `agent_credit`/`agent_debit`
+ * on the player's own row, `admin_credit`/`admin_debit` on the agent's own
+ * row versus the superadmin -- already has the correct sign for the account
+ * it's about, so `isCredit` is used as-is.
+ *
+ * Issue #78 fix: `getAgentTransactionHistoryAction` and
+ * `getAgentDashboardDataAction` used to call `isCredit` directly on the
+ * agent's own mirrored row and show that sign as the *player's* Deposit/
+ * Withdraw label -- inverted, since the mirrored row's sign is deliberately
+ * the opposite of the player's own. This is the single place that mapping is
+ * now made, so both call sites can't silently diverge from it again.
+ */
+export function playerFacingDirection(kind: LedgerKind, amount: number): 'deposit' | 'withdraw' {
+  const credit = isCredit(amount)
+  const isAgentsOwnMirrorRow = kind === 'agent_ledger_credit' || kind === 'agent_ledger_debit'
+  return (isAgentsOwnMirrorRow ? !credit : credit) ? 'deposit' : 'withdraw'
+}
+
 /** Human-readable label for a ledger kind. */
 export function ledgerKindLabel(kind: string): string {
   switch (kind) {

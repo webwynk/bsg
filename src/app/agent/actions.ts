@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase'
 
 import { requireAuth } from '@/lib/auth-guard'
-import { CASHIER_KINDS, isCredit, type LedgerKind } from '@/lib/ledger'
+import { CASHIER_KINDS, playerFacingDirection, type LedgerKind } from '@/lib/ledger'
 
 /**
  * Agent cashier dashboard data.
@@ -141,7 +141,7 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
       const target = isSuperadmin ? undefined : nameById.get(row.counterparty_id ?? '')
       return {
         id: row.id,
-        direction: (isCredit(Number(row.amount)) ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+        direction: playerFacingDirection(row.kind as LedgerKind, Number(row.amount)),
         amount: Math.abs(Number(row.amount)),
         target_name: isSuperadmin ? 'SuperAdmin' : (target?.full_name || target?.username || 'Player'),
         target_username: isSuperadmin ? 'SuperAdmin' : `@${target?.username ?? 'player'}`,
@@ -241,7 +241,7 @@ export async function getAgentTransactionHistoryAction(): Promise<AgentTransferH
       return {
         id: row.id,
         category: (isSuperadmin ? 'superadmin' : 'player') as 'superadmin' | 'player',
-        direction: (isCredit(Number(row.amount)) ? 'deposit' : 'withdraw') as 'deposit' | 'withdraw',
+        direction: playerFacingDirection(row.kind as LedgerKind, Number(row.amount)),
         kind: row.kind as LedgerKind,
         amount: Math.abs(Number(row.amount)),
         balance_after: Number(row.balance_after),
