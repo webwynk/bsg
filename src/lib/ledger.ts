@@ -72,7 +72,7 @@ export function isCredit(amount: number): boolean {
  * row versus the superadmin -- already has the correct sign for the account
  * it's about, so `isCredit` is used as-is.
  *
- * Issue #78 fix: `getAgentTransactionHistoryAction` and
+ * Issue #86 fix: `getAgentTransactionHistoryAction` and
  * `getAgentDashboardDataAction` used to call `isCredit` directly on the
  * agent's own mirrored row and show that sign as the *player's* Deposit/
  * Withdraw label -- inverted, since the mirrored row's sign is deliberately
