@@ -159,9 +159,6 @@ export type Database = {
           session_grace_sec: number
           updated_at: string
           bet_cutoff_second: number
-          payout_multiplier_single: number
-          payout_multiplier_double: number
-          payout_multiplier_triple: number
           settle_batch_size: number
           staff_session_grace_sec: number
         }
@@ -172,9 +169,6 @@ export type Database = {
           session_grace_sec?: number
           updated_at?: string
           bet_cutoff_second?: number
-          payout_multiplier_single?: number
-          payout_multiplier_double?: number
-          payout_multiplier_triple?: number
           settle_batch_size?: number
           staff_session_grace_sec?: number
         }
@@ -185,9 +179,6 @@ export type Database = {
           session_grace_sec?: number
           updated_at?: string
           bet_cutoff_second?: number
-          payout_multiplier_single?: number
-          payout_multiplier_double?: number
-          payout_multiplier_triple?: number
           settle_batch_size?: number
           staff_session_grace_sec?: number
         }
@@ -321,9 +312,6 @@ export type Database = {
           drawn_at: string | null
           settled_at: string | null
           created_at: string
-          payout_multiplier_single: number
-          payout_multiplier_double: number
-          payout_multiplier_triple: number
           rtp_percentage: number
         }
         Insert: {
@@ -339,9 +327,6 @@ export type Database = {
           drawn_at?: string | null
           settled_at?: string | null
           created_at?: string
-          payout_multiplier_single?: number
-          payout_multiplier_double?: number
-          payout_multiplier_triple?: number
           rtp_percentage?: number
         }
         Update: {
@@ -357,9 +342,6 @@ export type Database = {
           drawn_at?: string | null
           settled_at?: string | null
           created_at?: string
-          payout_multiplier_single?: number
-          payout_multiplier_double?: number
-          payout_multiplier_triple?: number
           rtp_percentage?: number
         }
         Relationships: []
