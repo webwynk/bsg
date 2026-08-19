@@ -3,19 +3,16 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Sparkles, Clock, Radio, Dices, Trophy } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Sparkles, Clock, Radio, Trophy } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
-import { getRtpAction, updateRtpAction, getPayoutMultipliersAction, updatePayoutMultipliersAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
+import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
-  const [singleMult, setSingleMult] = React.useState(9)
-  const [doubleMult, setDoubleMult] = React.useState(90)
-  const [tripleMult, setTripleMult] = React.useState(900)
   const [totalCoins, setTotalCoins] = React.useState(0)
   const [todayDeposited, setTodayDeposited] = React.useState(0)
   const [todayWithdrawn, setTodayWithdrawn] = React.useState(0)
@@ -55,23 +52,21 @@ export default function SuperAdminDashboard() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
-  const [isSavingMultipliers, setIsSavingMultipliers] = React.useState(false)
-  const [multiplierSuccess, setMultiplierSuccess] = React.useState<string | null>(null)
-  const [multiplierError, setMultiplierError] = React.useState<string | null>(null)
-  // Locks the RTP Configuration and Payout Multipliers widgets (both --
-  // Issue #43) in a round's closing seconds. Uses the SAME 0-90 countdown
-  // players actually see in the app (derived from seconds_into, mirroring
-  // bsg_app's own _cycleToCountdown), not the raw server seconds_remaining
-  // (which counts down over the full 103-second cycle -- a different,
-  // later-ending clock). Unlocks the instant a new round starts, since this
-  // countdown jumps back up to ~90 at that point. See getActiveRoundTimingAction.
+  // Locks the RTP Configuration widget (Issue #43) in a round's closing
+  // seconds. Uses the SAME 0-90 countdown players actually see in the app
+  // (derived from seconds_into, mirroring bsg_app's own _cycleToCountdown),
+  // not the raw server seconds_remaining (which counts down over the full
+  // 103-second cycle -- a different, later-ending clock). Unlocks the
+  // instant a new round starts, since this countdown jumps back up to ~90
+  // at that point. See getActiveRoundTimingAction.
   //
   // This is a UX/discipline courtesy only, not a correctness requirement --
-  // both RTP and the payout multiplier are pinned onto each round at
-  // creation (draw_round/settle_round read the round's own value, never live
-  // game_config), so a change is safe to submit at any second regardless of
-  // this lock. It just avoids the admin submitting a change in a moment that
-  // might feel confusing about which round it's about to affect.
+  // RTP is pinned onto each round at creation (draw_round reads the round's
+  // own value, never live game_config), so a change is safe to submit at
+  // any second regardless of this lock. It just avoids the admin submitting
+  // a change in a moment that might feel confusing about which round it's
+  // about to affect. (The payout multiplier used to share this lock too,
+  // before it became permanent and its widget was removed entirely.)
   const [roundSecondsInto, setRoundSecondsInto] = React.useState<number | null>(null)
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
@@ -98,9 +93,8 @@ export default function SuperAdminDashboard() {
     Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
-      getPayoutMultipliersAction(),
       getAuditLogsAction()
-    ]).then(([resMetrics, resRtp, resMultipliers, resLogs]) => {
+    ]).then(([resMetrics, resRtp, resLogs]) => {
       setIsLoadingMetrics(false)
       if (resMetrics) {
         setTotalCoins(resMetrics.total_coins || 0)
@@ -119,11 +113,6 @@ export default function SuperAdminDashboard() {
       }
       if (resRtp?.rtp) {
         setRtpValue(resRtp.rtp)
-      }
-      if (resMultipliers?.multipliers) {
-        setSingleMult(resMultipliers.multipliers.single)
-        setDoubleMult(resMultipliers.multipliers.double)
-        setTripleMult(resMultipliers.multipliers.triple)
       }
       if (resLogs?.logs) {
         setSystemLogs(resLogs.logs)
@@ -151,21 +140,6 @@ export default function SuperAdminDashboard() {
     }
   }
 
-  const handleApplyMultipliers = async () => {
-    setIsSavingMultipliers(true)
-    setMultiplierSuccess(null)
-    setMultiplierError(null)
-    const res = await updatePayoutMultipliersAction({ single: singleMult, double: doubleMult, triple: tripleMult })
-    setIsSavingMultipliers(false)
-    if (res.success) {
-      setMultiplierSuccess(`Payout multipliers updated to x${singleMult} / x${doubleMult} / x${tripleMult}`)
-      fetchMetrics(false)
-      setTimeout(() => setMultiplierSuccess(null), 2500)
-    } else {
-      setMultiplierError(res.error ?? 'Could not update payout multipliers.')
-    }
-  }
-
   React.useEffect(() => {
     fetchMetrics(true)
 
@@ -184,8 +158,8 @@ export default function SuperAdminDashboard() {
     }
   }, [])
 
-  // Separate, faster poll dedicated to the multiplier-lock countdown -- 60s
-  // (the metrics poll above) is far too coarse to reliably catch an 11-second
+  // Separate, faster poll dedicated to the RTP-lock countdown -- 60s (the
+  // metrics poll above) is far too coarse to reliably catch an 11-second
   // window. Deliberately lightweight (getActiveRoundTimingAction only calls
   // get_current_round(), not the heavier draws/bets query fetchMetrics uses).
   React.useEffect(() => {
@@ -476,7 +450,7 @@ export default function SuperAdminDashboard() {
 
       {/* Main Widgets: RTP Configuration & Recent System Logs */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* RTP Configuration + Payout Multipliers (md:col-span-5) */}
+        {/* RTP Configuration (md:col-span-5) */}
         <div className="md:col-span-5 space-y-4">
         <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
           <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
@@ -629,101 +603,6 @@ export default function SuperAdminDashboard() {
               >
                 {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                 {isSavingRtp ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Configuration'}
-              </Button>
-            </div>
-          )}
-        </Card>
-
-        {/* Payout Multiplier Configuration Card — Issue #5: was hardcoded
-            x9/x90/x900 in draw_round, settle_round, and the mobile app.
-            This is now the single place the multiplier is ever set;
-            draw_round/settle_round read it live and the app fetches it via
-            get_play_limits(), so all copies stay in sync automatically. */}
-        <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-            <div className="flex items-center space-x-2">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                <Dices className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-foreground leading-tight">Payout Multipliers</h3>
-                <p className="text-[10px] text-muted-foreground">Win rate per board — controls the game and app together.</p>
-              </div>
-            </div>
-          </div>
-
-          {isLoadingMetrics ? (
-            <div className="space-y-3 p-2 animate-pulse">
-              <div className="h-4 bg-secondary/80 rounded w-full" />
-              <div className="h-8 bg-secondary/60 rounded w-full" />
-            </div>
-          ) : (
-            <div className="space-y-3.5">
-              {multiplierSuccess && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
-                  <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
-                  <span>{multiplierSuccess}</span>
-                </div>
-              )}
-              {multiplierError && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
-                  {multiplierError}
-                </div>
-              )}
-
-              {roundConfigLocked && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
-                  <Clock className="h-3.5 w-3.5 shrink-0" />
-                  <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Singles (x)</span>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step={0.5}
-                    value={singleMult}
-                    onChange={(e) => setSingleMult(Number(e.target.value))}
-                    disabled={roundConfigLocked}
-                    className="h-8 text-xs font-mono font-black disabled:opacity-50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Doubles (x)</span>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step={0.5}
-                    value={doubleMult}
-                    onChange={(e) => setDoubleMult(Number(e.target.value))}
-                    disabled={roundConfigLocked}
-                    className="h-8 text-xs font-mono font-black disabled:opacity-50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Triples (x)</span>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step={0.5}
-                    value={tripleMult}
-                    onChange={(e) => setTripleMult(Number(e.target.value))}
-                    disabled={roundConfigLocked}
-                    className="h-8 text-xs font-mono font-black disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              <Button
-                onClick={handleApplyMultipliers}
-                disabled={isSavingMultipliers || roundConfigLocked}
-                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSavingMultipliers ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {isSavingMultipliers ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Multipliers'}
               </Button>
             </div>
           )}
