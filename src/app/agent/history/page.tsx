@@ -52,8 +52,10 @@ export default function HistoryPage() {
     getAgentTransactionHistoryAction().then((res) => {
       setIsLoading(false)
       setLoadError(res.error)
-      setTransactions(res.transfers)
-      setAgentBalance(res.coin_balance)
+      if (!res.error) {
+        setTransactions(res.transfers)
+        setAgentBalance(res.coin_balance)
+      }
     }).catch((e) => {
       setIsLoading(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load history.')

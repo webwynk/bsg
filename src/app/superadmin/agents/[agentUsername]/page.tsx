@@ -234,7 +234,7 @@ export default function AgentDetailPage({ params }: Props) {
       // Store the resolved UUID so other actions (transfer, toggle, password) can use it
       if (res.agent?.id) resolvedAgentIdRef.current = res.agent?.id
       else if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
-      if (res.players) {
+      if (!res.error && res.players) {
         setPlayers(res.players)
         const targetId = selectedPlayerIdRef.current
         if (targetId) {
@@ -250,7 +250,7 @@ export default function AgentDetailPage({ params }: Props) {
           loadPlayerHistory(res.players[0].id)
         }
       }
-      if (resProf) {
+      if (!resProf.error) {
         setProfitSummary(resProf.summary)
         setProfitPlayers(resProf.players)
       }

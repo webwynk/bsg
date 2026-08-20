@@ -172,7 +172,8 @@ export default function CoinsIssuedPage() {
       startDate, endDate, search: searchRef.current,
     }).then((res) => {
       setIsExporting(false)
-      if (!res?.rows?.length) return
+      setLoadError(res.error)
+      if (res.error || !res?.rows?.length) return
       const header = ['Agent', 'Direction', 'Amount', 'Balance After', 'Reason', 'Date & Time']
       const escapeCsv = (v: string) => `"${v.replace(/"/g, '""')}"`
       const lines = [header.join(',')]
@@ -193,7 +194,10 @@ export default function CoinsIssuedPage() {
       a.download = `coins-issued-ledger-${new Date().toISOString().slice(0, 10)}.csv`
       a.click()
       URL.revokeObjectURL(url)
-    }).catch(() => setIsExporting(false))
+    }).catch((e) => {
+      setIsExporting(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not export ledger.')
+    })
   }
 
   // Sync refs + re-fetch on any filter/page change
