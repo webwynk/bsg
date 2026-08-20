@@ -28,8 +28,19 @@ export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+  // Issue #18 FIX: this used to `return response` here -- passing every
+  // request through with no auth/role check at all -- whenever Supabase env
+  // vars were missing, while requireAuth() (the guard on every actual
+  // mutating action) correctly fails closed on the identical condition. A
+  // misconfigured deploy would render the admin/agent page shell to anyone
+  // while the data underneath stayed protected -- internally inconsistent.
+  // Now mirrors the same per-section redirect every other guard below
+  // already uses for "no user determined": superadmin paths go to the
+  // superadmin login, everything else defaults to agent login (matching the
+  // root-path handler's own fallback at line ~90).
   if (!supabaseUrl || !supabaseKey) {
-    return response
+    const loginPath = pathname.startsWith('/superadmin') ? '/superadmin/login' : '/agent/login'
+    return NextResponse.redirect(new URL(loginPath, request.url))
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
