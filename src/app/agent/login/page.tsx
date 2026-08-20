@@ -17,6 +17,15 @@ function LoginForm() {
     setIsPending(true)
   }
 
+  // Issue #20 FIX: a failed login redirects back to this exact same route
+  // with only `?error=...` changed, so this component instance is never
+  // remounted -- isPending survived the round trip and stayed stuck true
+  // forever, since nothing ever reset it. Resets it the moment a fresh
+  // error arrives from that redirect.
+  React.useEffect(() => {
+    if (searchParams.get('error')) setIsPending(false)
+  }, [searchParams])
+
   return (
     <div className="min-h-dvh flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-950/40 via-slate-950 to-slate-950 p-4">
       <div className="w-full max-w-[340px]">
