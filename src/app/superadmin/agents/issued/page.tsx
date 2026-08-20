@@ -95,8 +95,14 @@ export default function CoinsIssuedPage() {
     const dp = datePresetRef.current
 
     if (fp) {
-      startDate = fp.toISOString()
-      endDate = fp.toISOString()
+      // Issue #19 FIX: this used to send the exact same instant as both
+      // bounds (a zero-width window). Now builds proper IST day boundaries,
+      // matching the 'yesterday' preset's already-correct pattern below.
+      const istFpString = fp.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      const istFpStart = new Date(`${istFpString}T00:00:00+05:30`)
+      const istFpEnd = new Date(`${istFpString}T23:59:59.999+05:30`)
+      startDate = istFpStart.toISOString()
+      endDate = istFpEnd.toISOString()
     } else if (dp === 'today') {
       const now = new Date()
       const istTodayString = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })

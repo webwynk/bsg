@@ -437,11 +437,14 @@ export async function getAgentCoinLedgerAction(params?: {
 
     if (params?.direction === 'credit') base = base.gt('amount', 0)
     if (params?.direction === 'debit')  base = base.lt('amount', 0)
+    // Issue #19 FIX: endDate now arrives from the caller as an already-exact
+    // IST end-of-day instant -- passed through unchanged, same as startDate,
+    // instead of being re-widened here with a server-local-time setHours()
+    // call (which silently corrupted the boundary by however many hours off
+    // UTC the deployment server's own clock happened to be, even when the
+    // caller had already sent a correct value).
     if (params?.startDate) base = base.gte('created_at', new Date(params.startDate).toISOString())
-    if (params?.endDate) {
-      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
-      base = base.lte('created_at', end.toISOString())
-    }
+    if (params?.endDate) base = base.lte('created_at', new Date(params.endDate).toISOString())
 
     const { data, count, error } = await base
       .order('created_at', { ascending: false })
@@ -461,10 +464,7 @@ export async function getAgentCoinLedgerAction(params?: {
     if (params?.direction === 'credit') summaryQuery = summaryQuery.gt('amount', 0)
     if (params?.direction === 'debit') summaryQuery = summaryQuery.lt('amount', 0)
     if (params?.startDate) summaryQuery = summaryQuery.gte('created_at', new Date(params.startDate).toISOString())
-    if (params?.endDate) {
-      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
-      summaryQuery = summaryQuery.lte('created_at', end.toISOString())
-    }
+    if (params?.endDate) summaryQuery = summaryQuery.lte('created_at', new Date(params.endDate).toISOString())
     const { data: summaryData, error: summaryError } = await summaryQuery
     if (summaryError) throw new Error(summaryError.message)
 
@@ -542,10 +542,7 @@ export async function getAgentCoinLedgerBreakdownAction(params?: {
       query = query.in('user_id', searchIds)
     }
     if (params?.startDate) query = query.gte('created_at', new Date(params.startDate).toISOString())
-    if (params?.endDate) {
-      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
-      query = query.lte('created_at', end.toISOString())
-    }
+    if (params?.endDate) query = query.lte('created_at', new Date(params.endDate).toISOString())
 
     const { data, error } = await query
     if (error) throw new Error(error.message)
@@ -620,10 +617,7 @@ export async function exportAgentCoinLedgerAction(params?: {
     if (params?.direction === 'credit') base = base.gt('amount', 0)
     if (params?.direction === 'debit')  base = base.lt('amount', 0)
     if (params?.startDate) base = base.gte('created_at', new Date(params.startDate).toISOString())
-    if (params?.endDate) {
-      const end = new Date(params.endDate); end.setHours(23, 59, 59, 999)
-      base = base.lte('created_at', end.toISOString())
-    }
+    if (params?.endDate) base = base.lte('created_at', new Date(params.endDate).toISOString())
 
     const { data, error } = await base.order('created_at', { ascending: false }).range(0, 49999)
     if (error) throw new Error(error.message)
