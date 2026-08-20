@@ -3,8 +3,7 @@
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { randomUUID } from 'crypto'
-import { createClient } from '@/lib/supabase'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createClient, createAdminClient } from '@/lib/supabase'
 import { asRpc, type StaffLoginAttemptResult, type StaffSessionLoginResult } from '@/lib/rpc'
 import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS } from '@/lib/staff-session'
 
@@ -73,9 +72,7 @@ export async function superAdminLogin(formData: FormData) {
     redirect('/superadmin/login?error=Server configuration error.')
   }
 
-  const supabaseAdmin = createSupabaseClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
+  const supabaseAdmin = createAdminClient()
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')

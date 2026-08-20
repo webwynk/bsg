@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers'
-import { createClient as createServerSupabase } from '@/lib/supabase'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createClient as createServerSupabase, createAdminClient } from '@/lib/supabase'
 import { asRpc, type StaffSessionTouchResult } from '@/lib/rpc'
 import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
 
@@ -55,9 +54,7 @@ export async function requireAuth(allowedRoles: AppRole[]): Promise<AuthGuardRes
       return { error: 'Server configuration error: Supabase credentials missing.', user: null }
     }
 
-    const supabaseAdmin = createSupabaseClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
+    const supabaseAdmin = createAdminClient()
 
     // Only real columns are selected. The previous version selected `status`,
     // which does not exist, so this query always errored and every caller fell
