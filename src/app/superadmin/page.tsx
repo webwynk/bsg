@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
+import { ErrorBanner } from '@/components/error-banner'
 import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
@@ -48,6 +49,12 @@ export default function SuperAdminDashboard() {
   const [nowTime, setNowTime] = React.useState(Date.now())
 
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; kind: string; detail: string; time: string; actor: string }>>([])
+  // Issue #15: surfaces a real backend failure instead of silently leaving
+  // this page showing all-zero KPIs indistinguishable from genuinely-empty
+  // data. Combines all 3 of fetchMetrics' actions -- any of them failing
+  // still shows an error, while whichever ones succeeded still update state
+  // normally (partial degradation, not an all-or-nothing wipeout).
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
@@ -96,7 +103,9 @@ export default function SuperAdminDashboard() {
       getAuditLogsAction()
     ]).then(([resMetrics, resRtp, resLogs]) => {
       setIsLoadingMetrics(false)
-      if (resMetrics) {
+      const errors = [resMetrics.error, resRtp.error, resLogs.error].filter(Boolean)
+      setLoadError(errors.length > 0 ? errors.join(' — ') : null)
+      if (resMetrics && !resMetrics.error) {
         setTotalCoins(resMetrics.total_coins || 0)
         setTodayDeposited(resMetrics.today_deposited || 0)
         setTodayWithdrawn(resMetrics.today_withdrawn || 0)
@@ -111,13 +120,19 @@ export default function SuperAdminDashboard() {
         setTodayWinCoins(resMetrics.today_payout || 0)
         setTodayLostCoins(resMetrics.today_house || 0)
       }
-      if (resRtp?.rtp) {
+      // resRtp.rtp is a truthy 96 even on error (its own hardcoded fallback),
+      // so this must check .error explicitly -- a bare truthy check on rtp
+      // would silently apply that fallback as if it were the real value.
+      if (resRtp && !resRtp.error && resRtp.rtp) {
         setRtpValue(resRtp.rtp)
       }
-      if (resLogs?.logs) {
+      if (resLogs && !resLogs.error) {
         setSystemLogs(resLogs.logs)
       }
-    }).catch(() => setIsLoadingMetrics(false))
+    }).catch((e) => {
+      setIsLoadingMetrics(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load dashboard data.')
+    })
   }
 
   const handleManualRefresh = async () => {
@@ -203,6 +218,8 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
+
       {/* Page Title Header (Mobile First Inline Header) */}
       <div className="flex items-center justify-between gap-2">
         <div>

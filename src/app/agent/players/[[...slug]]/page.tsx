@@ -27,6 +27,7 @@ import { formatCurrency } from "@/lib/utils"
 import { USERNAME_PATTERN } from "@/lib/validation"
 import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
 import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
@@ -176,6 +177,10 @@ export default function PlayersPage() {
   const [toggleStatusError, setToggleStatusError] = React.useState<string | null>(null)
 
   const [showCreatePassword, setShowCreatePassword] = React.useState(false)
+  // Issue #15: for the page's own data load (loadPlayers/loadPlayerHistory)
+  // -- distinct from errorMessage/transferError/toggleStatusError above,
+  // which are each scoped to their own specific mutation.
+  const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     setIsLoadingHistory(true)
@@ -183,11 +188,15 @@ export default function PlayersPage() {
     setPointsPage(1)
     getPlayerDetailHistoryAction(playerId).then((res) => {
       setIsLoadingHistory(false)
-      if (res) {
+      setLoadError(res.error)
+      if (!res.error) {
         setGamePlays(res.game_plays)
         setPointsHistory(res.coin_movements)
       }
-    }).catch(() => setIsLoadingHistory(false))
+    }).catch((e) => {
+      setIsLoadingHistory(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load player history.')
+    })
   }, [])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -202,7 +211,8 @@ export default function PlayersPage() {
     getPlayersAction().then((res) => {
       if (!silent) setIsRefreshing(false)
       setIsLoadingPlayers(false)
-      if (res.players) {
+      setLoadError(res.error)
+      if (!res.error) {
         setPlayers(res.players)
         // If URL has a username slug (e.g. /agent/players/player01), select that player
         if (urlSlug) {
@@ -227,9 +237,10 @@ export default function PlayersPage() {
           loadPlayerHistory(res.players[0].id)
         }
       }
-    }).catch(() => {
+    }).catch((e) => {
       if (!silent) setIsRefreshing(false)
       setIsLoadingPlayers(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load players.')
     })
   }, [loadPlayerHistory, urlSlug]) // Stable — no selectedPlayer?.id dep, no interval leak
 
@@ -361,6 +372,7 @@ export default function PlayersPage() {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>

@@ -18,10 +18,16 @@ import { Input } from "@/components/ui/input"
 import { Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, ShieldCheck, Search, Users, Download } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import { getAgentsAction, getAgentCoinLedgerAction, getAgentCoinLedgerBreakdownAction, exportAgentCoinLedgerAction } from '../actions'
 
 export default function CoinsIssuedPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string }>>([])
+  // Issue #15: for the main ledger table (loadData) specifically -- the
+  // dropdown-filler and breakdown-panel fetches below are secondary/
+  // supplementary, guarded against corrupting state on failure but not
+  // worth a full-page banner of their own for a filter dropdown.
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [transactions, setTransactions] = React.useState<Array<{
     id: string
     agent_id: string
@@ -74,7 +80,7 @@ export default function CoinsIssuedPage() {
   // Load list of agents for dropdown filter
   React.useEffect(() => {
     getAgentsAction().then((res) => {
-      if (res.agents) {
+      if (!res.error) {
         setAgents(res.agents.map(a => ({ id: a.id, full_name: a.full_name, username: a.username })))
       }
     })
@@ -128,13 +134,17 @@ export default function CoinsIssuedPage() {
       limit: itemsPerPage
     }).then((res) => {
       setIsLoading(false)
-      if (res) {
+      setLoadError(res.error)
+      if (!res.error) {
         setTransactions(res.rows)
         setTotalPages(res.total_pages)
         setTotalItems(res.total_items)
         setSummary(res.summary)
       }
-    }).catch(() => setIsLoading(false))
+    }).catch((e) => {
+      setIsLoading(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load ledger.')
+    })
   }, [computeDateRange])
 
   // Per-agent breakdown -- same filters as the table (minus the single-agent
@@ -145,7 +155,7 @@ export default function CoinsIssuedPage() {
     getAgentCoinLedgerBreakdownAction({
       startDate, endDate, search: searchRef.current,
     }).then((res) => {
-      if (res) setBreakdown(res.rows)
+      if (!res.error) setBreakdown(res.rows)
     })
   }, [computeDateRange])
 
@@ -241,6 +251,8 @@ export default function CoinsIssuedPage() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
+
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card border border-border/80 rounded-2xl shadow-xs">
         <div className="flex items-center space-x-2.5">

@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { formatCurrency } from "@/lib/utils"
 import { ArrowDownRight, ArrowUpRight, Check, History, RefreshCw, Search, Filter, Wallet, Users, ShieldCheck } from "lucide-react"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import { getAgentTransactionHistoryAction } from '../actions'
 
 export default function HistoryPage() {
@@ -141,6 +142,8 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
+
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card border border-border/80 rounded-2xl shadow-xs">
         <div className="flex items-center space-x-2.5">

@@ -31,11 +31,15 @@ import {
 import { formatCurrency } from "@/lib/utils"
 import { USERNAME_PATTERN } from "@/lib/validation"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import { createAgentAction, getAgentsAction } from './actions'
 import { playerStatus } from '@/lib/player-status'
 
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; auto_locked_at: string | null; player_count: number }>>([])
+  // Issue #15: distinct from errorMessage below, which is scoped to the
+  // Create Agent modal -- this one is for the page's own data load.
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [countdown, setCountdown] = React.useState(60)
@@ -60,10 +64,14 @@ export default function AgentsPage() {
     if (isInitial) setIsLoadingAgents(true)
     getAgentsAction().then((res) => {
       setIsLoadingAgents(false)
-      if (res.agents) {
+      setLoadError(res.error)
+      if (!res.error) {
         setAgents(res.agents)
       }
-    }).catch(() => setIsLoadingAgents(false))
+    }).catch((e) => {
+      setIsLoadingAgents(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load agents.')
+    })
   }, [])
 
   React.useEffect(() => {
@@ -133,6 +141,8 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
+
       {/* Top Title & Action Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card border border-border/80 rounded-2xl shadow-xs">
         <div className="flex items-center space-x-2.5">

@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import { TrendingUp, Coins, Calendar as CalendarIcon, RefreshCw, Search, X, Activity, ArrowUpRight, ArrowDownRight, Award, Percent } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { getAgentProfitReportAction } from './actions'
@@ -58,6 +59,9 @@ export default function AgentProfitPage() {
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalItems, setTotalItems] = React.useState(0)
   const itemsPerPage = 10
+  // Issue #15: page-load error surfaced to the user instead of silently
+  // leaving summary/players/pagination stale on a backend failure.
+  const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const loadProfitReport = React.useCallback((isInitial = false) => {
     if (isInitial) setIsLoading(true) // skeleton only on first load
@@ -69,13 +73,17 @@ export default function AgentProfitPage() {
       limit: itemsPerPage
     }).then((res) => {
       setIsLoading(false)
-      if (res) {
+      setLoadError(res.error)
+      if (!res.error) {
         setSummary(res.summary)
         setPlayers(res.players)
         setTotalPages(res.total_pages)
         setTotalItems(res.total_items)
       }
-    }).catch(() => setIsLoading(false))
+    }).catch((e) => {
+      setIsLoading(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load profit report.')
+    })
   }, []) // stable — reads filters from refs, not state
 
   // Sync refs + re-fetch on filter/page change
@@ -125,6 +133,7 @@ export default function AgentProfitPage() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
       {/* Top Page Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card border border-border/80 rounded-2xl shadow-xs">
         <div className="flex items-center space-x-2.5">

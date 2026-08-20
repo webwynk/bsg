@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
 
@@ -43,12 +44,16 @@ export default function AgentDashboard() {
   const itemsPerPage = 5
 
   const [countdown, setCountdown] = React.useState(60)
+  // Issue #15: page-load error surfaced to the user instead of silently
+  // leaving balance/KPIs/players stale on a backend failure.
+  const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const fetchDashboardData = React.useCallback((isInitial = false) => {
     if (isInitial) setIsLoadingDashboard(true) // skeleton only on first load
     getAgentDashboardDataAction().then((resDash) => {
       setIsLoadingDashboard(false)
-      if (resDash) {
+      setLoadError(resDash.error)
+      if (!resDash.error) {
         setBalance(resDash.coin_balance || 0)
         setTodaysBets(resDash.todays_stake || 0)
         setTodaysWins(resDash.todays_payout || 0)
@@ -67,7 +72,10 @@ export default function AgentDashboard() {
           setPlayers(resDash.players)
         }
       }
-    }).catch(() => setIsLoadingDashboard(false))
+    }).catch((e) => {
+      setIsLoadingDashboard(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load dashboard data.')
+    })
   }, [])
 
   React.useEffect(() => {
@@ -144,6 +152,7 @@ export default function AgentDashboard() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
       {/* Top Page Header Bar (Agent Profile Badge) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-card border border-border/80 rounded-2xl shadow-xs">
         <div className="flex items-center space-x-3">

@@ -29,6 +29,7 @@ import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDow
 import { formatCurrency } from "@/lib/utils"
 import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
+import { ErrorBanner } from "@/components/error-banner"
 import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { getAgentDetailAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
@@ -62,6 +63,10 @@ export default function AgentDetailPage({ params }: Props) {
     auto_locked_at: string | null
   }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
+  // Issue #15: for the page's own data load (loadAgentDetails/loadPlayerHistory)
+  // -- distinct from transferError/toggleStatusError/passwordError above,
+  // which are each scoped to their own specific mutation.
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [countdown, setCountdown] = React.useState(90)
@@ -199,10 +204,14 @@ export default function AgentDetailPage({ params }: Props) {
     setPointsPage(1)
     getPlayerDetailHistoryAction(playerId).then((res) => {
       setIsLoadingHistory(false)
-      if (res) {
+      setLoadError(res.error)
+      if (!res.error) {
         setGamePlays(res.game_plays)
         setPointsHistory(res.coin_movements)
       }
+    }).catch((e) => {
+      setIsLoadingHistory(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load player history.')
     })
   }, [])
 
@@ -219,6 +228,8 @@ export default function AgentDetailPage({ params }: Props) {
       })
     ]).then(([res, resProf]) => {
       if (showIndicator) setIsRefreshing(false)
+      const errors = [res.error, resProf.error].filter(Boolean)
+      setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (res.agent) setAgentInfo(res.agent)
       // Store the resolved UUID so other actions (transfer, toggle, password) can use it
       if (res.agent?.id) resolvedAgentIdRef.current = res.agent?.id
@@ -243,7 +254,10 @@ export default function AgentDetailPage({ params }: Props) {
         setProfitSummary(resProf.summary)
         setProfitPlayers(resProf.players)
       }
-    }).catch(() => { if (showIndicator) setIsRefreshing(false) })
+    }).catch((e) => {
+      if (showIndicator) setIsRefreshing(false)
+      setLoadError(e instanceof Error ? e.message : 'Could not load agent details.')
+    })
   }, [agentUsername, loadPlayerHistory]) // Stable — agentUsername from params, loadPlayerHistory has [] deps
 
   // Keep filter refs in sync so stable loadAgentDetails always reads latest values
@@ -368,6 +382,7 @@ export default function AgentDetailPage({ params }: Props) {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
+      <ErrorBanner error={loadError} />
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center space-x-3">

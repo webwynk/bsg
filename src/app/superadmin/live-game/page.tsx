@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction } from '../actions'
+import { ErrorBanner } from '@/components/error-banner'
 import { 
   Radio, 
   RefreshCw, 
@@ -60,7 +61,10 @@ export default function SuperAdminLiveGamePage() {
   const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
   const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'game2' | 'game3'>('triple_chance')
   const [nowTime, setNowTime] = useState(Date.now())
-  
+  // Issue #15: page-load error surfaced to the user instead of silently
+  // leaving latestDraws/activeRound stale on a backend failure.
+  const [loadError, setLoadError] = useState<string | null>(null)
+
   // Table search & filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'WON' | 'LOST'>('ALL')
@@ -78,12 +82,14 @@ export default function SuperAdminLiveGamePage() {
     if (showIndicator) setIsRefreshing(true)
     try {
       const res = await getLatestGameDrawsAction()
-      if (res) {
-        if (res.draws) setLatestDraws(res.draws)
-        if (res.active_round) setActiveRound(res.active_round)
+      setLoadError(res.error)
+      if (!res.error) {
+        setLatestDraws(res.draws)
+        setActiveRound(res.active_round)
       }
     } catch (e) {
       console.error('Error loading game draws:', e)
+      setLoadError(e instanceof Error ? e.message : 'Could not load game draws.')
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
@@ -124,6 +130,7 @@ export default function SuperAdminLiveGamePage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
+      <ErrorBanner error={loadError} />
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-card p-4 sm:p-5 rounded-2xl border border-border shadow-xs">
         <div className="flex items-center space-x-3">
