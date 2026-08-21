@@ -354,6 +354,23 @@ export default function AgentsPage() {
           )}
         </Card>
 
+        {/* Housekeeping #32 fix: this card was missing -- the grid was
+            already laid out for 3 cards (grid-cols-3, and the section
+            comment above already said "3 Compact Cards"), but only 2 ever
+            existed. activeCount was already being computed for exactly
+            this purpose and sitting unused. */}
+        <Card className="bg-card border-border/80 shadow-2xs p-2 sm:p-3 rounded-xl">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground font-bold">
+            <span>Active Agents</span>
+            <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
+          </div>
+          {isLoadingAgents || isRefreshing ? (
+            <div className="h-5 w-16 bg-secondary/80 animate-pulse rounded my-1" />
+          ) : (
+            <div className="text-xs sm:text-lg font-black font-mono text-emerald-500 mt-0.5">{activeCount}</div>
+          )}
+        </Card>
+
         <Card className="bg-card border-border/80 shadow-2xs p-2 sm:p-3 rounded-xl">
           <div className="flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground font-bold">
             <span>Active Network</span>
