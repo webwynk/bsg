@@ -18,6 +18,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { TrendingUp, Coins, Calendar as CalendarIcon, RefreshCw, Search, X, Activity, ArrowUpRight, ArrowDownRight, Award, Percent } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { pickedDayKey } from '@/lib/date-range'
 import { getAgentProfitReportAction } from './actions'
 
 export default function AgentProfitPage() {
@@ -67,7 +68,10 @@ export default function AgentProfitPage() {
     if (isInitial) setIsLoading(true) // skeleton only on first load
     getAgentProfitReportAction({
       datePreset: datePresetRef.current,
-      filterDate: filterDateRef.current ? filterDateRef.current.toISOString() : undefined,
+      // Issue #90 fix: send the exact day the user clicked (read back from the
+      // picker's own local y/m/d, no timezone conversion) instead of an ISO
+      // instant that the server would have had to re-derive an IST day from.
+      filterDate: filterDateRef.current ? pickedDayKey(filterDateRef.current) : undefined,
       searchQuery: searchQueryRef.current,
       page: currentPageRef.current,
       limit: itemsPerPage

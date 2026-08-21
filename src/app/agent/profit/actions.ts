@@ -25,6 +25,9 @@ import { resolveAgentId } from '@/app/superadmin/agents/actions'
 export interface ProfitReportParams {
   targetAgentId?: string
   datePreset?: 'today' | '7days' | '30days' | 'lifetime'
+  /** Issue #90 fix: a plain `YYYY-MM-DD` day the caller already resolved
+   * (via `pickedDayKey`), NOT an ISO instant -- re-deriving "which IST day"
+   * from a client-constructed instant is exactly the bug this replaced. */
   filterDate?: string
   searchQuery?: string
   page?: number
@@ -74,9 +77,15 @@ function istRange(preset?: string, filterDate?: string) {
   let end: string | undefined
 
   if (filterDate) {
-    const d = new Date(filterDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    start = new Date(`${d}T00:00:00+05:30`).toISOString()
-    end   = new Date(`${d}T23:59:59.999+05:30`).toISOString()
+    // Issue #90 fix: filterDate is already the exact day the caller resolved
+    // (pickedDayKey, read from the picker's own local y/m/d) -- no instant to
+    // re-derive an IST day from anymore, so no re-conversion here. The old
+    // `new Date(filterDate).toLocaleDateString(...)` round-trip re-interpreted
+    // whatever instant the client happened to send, which is exactly what let
+    // a non-IST browser's local-midnight construction silently resolve to the
+    // wrong day.
+    start = new Date(`${filterDate}T00:00:00+05:30`).toISOString()
+    end   = new Date(`${filterDate}T23:59:59.999+05:30`).toISOString()
   } else if (preset === 'today') {
     start = dayStart.toISOString()
     end   = new Date(`${today}T23:59:59.999+05:30`).toISOString()

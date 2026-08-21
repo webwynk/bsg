@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, ChevronRight, Gamepad2, X, RefreshCw, TrendingUp, Percent, Award, CheckCircle2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { pickedDayKey } from "@/lib/date-range"
 import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
@@ -72,7 +73,9 @@ export default function AgentDetailPage({ params }: Props) {
   const [countdown, setCountdown] = React.useState(90)
   // Stable refs — avoid interval leaks caused by state deps in useCallback
   const selectedPlayerIdRef = React.useRef<string | null>(null)
-  const filterDateRef = React.useRef<Date | undefined>(undefined)
+  // Issue #90 fix: stores the resolved IST day key (e.g. "2026-08-15"), not a
+  // Date -- see filterDate below for why.
+  const filterDateRef = React.useRef<string | undefined>(undefined)
   const statsScopeRef = React.useRef<'today' | 'lifetime'>('today')
   const isInitialMountRef = React.useRef(true)
 
@@ -90,7 +93,15 @@ export default function AgentDetailPage({ params }: Props) {
   
   // Filter & Scope States
   const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
-  const [filterDate, setFilterDate] = React.useState<Date | undefined>(undefined)
+  // Issue #90 fix: filterDate is a plain IST day key ("2026-08-15"), not a
+  // Date object. Both places that can set it -- the Calendar picker (via
+  // pickedDayKey, a local-frame read with no timezone conversion) and the
+  // "Today" quick-button (via toLocaleDateString(...,{timeZone:'Asia/Kolkata'}),
+  // a genuine instant that DOES need timezone-aware conversion) -- resolve to
+  // the same kind of trusted value at the point each one is set, so nothing
+  // downstream can accidentally apply the wrong conversion to the wrong kind
+  // of origin the way a shared Date + single downstream conversion could.
+  const [filterDate, setFilterDate] = React.useState<string | undefined>(undefined)
   const [filterOutcome, setFilterOutcome] = React.useState<'all' | 'WON' | 'LOST'>('all')
   const [filterMode, setFilterMode] = React.useState<'all' | 'SINGLE' | 'DOUBLE' | 'TRIPLE'>('all')
 
@@ -151,13 +162,13 @@ export default function AgentDetailPage({ params }: Props) {
   // Filtered games list
   const filteredGames = React.useMemo(() => {
     return gamePlays.filter(spin => {
-      // Date Filter
+      // Date Filter -- Issue #90 fix: filterDate is already the resolved IST
+      // day key, no conversion needed here anymore.
       if (filterDate) {
-        const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        const spinDateStr = spin.created_at_iso 
+        const spinDateStr = spin.created_at_iso
           ? new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
           : spin.created_at
-        if (spinDateStr !== filterDateStr) return false
+        if (spinDateStr !== filterDate) return false
       }
 
       // Outcome Filter
@@ -177,12 +188,13 @@ export default function AgentDetailPage({ params }: Props) {
   // Filtered points history list
   const filteredPoints = React.useMemo(() => {
     return pointsHistory.filter(tx => {
+      // Issue #90 fix: same as filteredGames above -- filterDate is already
+      // the resolved IST day key.
       if (filterDate) {
-        const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
         const txDateStr = tx.created_at_iso
           ? new Date(tx.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
           : tx.created_at
-        if (txDateStr !== filterDateStr) return false
+        if (txDateStr !== filterDate) return false
       }
       return true
     })
@@ -224,7 +236,8 @@ export default function AgentDetailPage({ params }: Props) {
       getAgentProfitReportAction({
         targetAgentId: resolvedAgentIdRef.current || agentUsername,
         datePreset: statsScopeRef.current,
-        filterDate: filterDateRef.current ? filterDateRef.current.toISOString() : undefined
+        // Issue #90 fix: filterDateRef is already the resolved IST day key.
+        filterDate: filterDateRef.current
       })
     ]).then(([res, resProf]) => {
       if (showIndicator) setIsRefreshing(false)
@@ -929,9 +942,12 @@ export default function AgentDetailPage({ params }: Props) {
                     {/* Today / Lifetime Quick Date Presets */}
                     <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
                       <button
-                        onClick={() => setFilterDate(new Date())}
+                        // Issue #90 fix: "Today" is a real instant, so it
+                        // genuinely needs the IST-aware conversion (unlike a
+                        // Calendar pick below, which does not).
+                        onClick={() => setFilterDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))}
                         className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
-                          filterDate && filterDate.toDateString() === new Date().toDateString()
+                          filterDate === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
                             ? 'bg-primary text-primary-foreground font-black shadow-xs'
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
@@ -953,13 +969,18 @@ export default function AgentDetailPage({ params }: Props) {
                     <Popover>
                       <PopoverTrigger className="h-8 px-2.5 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-xl flex items-center justify-center cursor-pointer">
                         <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                        {filterDate ? filterDate.toLocaleDateString() : 'Custom Date'}
+                        {/* Display-only: parsed back to a local Date purely to
+                            format it, never compared or sent anywhere. */}
+                        {filterDate ? new Date(`${filterDate}T00:00:00`).toLocaleDateString() : 'Custom Date'}
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
                         <Calendar
                           mode="single"
-                          selected={filterDate}
-                          onSelect={setFilterDate}
+                          selected={filterDate ? new Date(`${filterDate}T00:00:00`) : undefined}
+                          // Issue #90 fix: a Calendar pick has no real instant
+                          // to convert -- pickedDayKey reads back exactly the
+                          // day the widget shows, in its own local frame.
+                          onSelect={(d) => setFilterDate(d ? pickedDayKey(d) : undefined)}
                           disabled={(date) => date > new Date()}
                         />
                       </PopoverContent>

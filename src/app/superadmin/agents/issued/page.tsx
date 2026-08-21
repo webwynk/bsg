@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input"
 import { Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, RefreshCw, Filter, ShieldCheck, Search, Users, Download } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { pickedDayKey } from "@/lib/date-range"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentsAction, getAgentCoinLedgerAction, getAgentCoinLedgerBreakdownAction, exportAgentCoinLedgerAction } from '../actions'
@@ -98,7 +99,19 @@ export default function CoinsIssuedPage() {
       // Issue #19 FIX: this used to send the exact same instant as both
       // bounds (a zero-width window). Now builds proper IST day boundaries,
       // matching the 'yesterday' preset's already-correct pattern below.
-      const istFpString = fp.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      //
+      // Issue #90 FIX: the boundary construction above was correct, but `fp`
+      // itself -- the raw Date the Calendar widget returns -- encodes local
+      // midnight in the BROWSER's own timezone, not IST midnight. Re-labeling
+      // that instant as an IST day via toLocaleDateString(...) answers the
+      // wrong question for any browser east of IST by more than +5:30
+      // (Bangkok, Singapore, China, Japan, Korea, Australia, NZ) -- local
+      // midnight of the picked day already falls on the PREVIOUS IST calendar
+      // day for those timezones. pickedDayKey() reads back exactly the
+      // year/month/day the widget was given, with no timezone conversion --
+      // an exact round trip of what was actually clicked, regardless of
+      // browser timezone.
+      const istFpString = pickedDayKey(fp)
       const istFpStart = new Date(`${istFpString}T00:00:00+05:30`)
       const istFpEnd = new Date(`${istFpString}T23:59:59.999+05:30`)
       startDate = istFpStart.toISOString()
@@ -478,7 +491,12 @@ export default function CoinsIssuedPage() {
             <Popover>
               <PopoverTrigger className="h-8 px-2.5 rounded-lg border border-border bg-background text-foreground text-xs font-medium flex items-center space-x-1.5 cursor-pointer hover:bg-secondary/40">
                 <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>{filterDate ? filterDate.toISOString().split('T')[0] : 'Custom Date'}</span>
+                {/* Issue #90 fix: this label used to show `.toISOString()`'s
+                    UTC-shifted date, which could disagree with both the day
+                    actually clicked AND (before the fix above) the data being
+                    shown. pickedDayKey() matches what the filter itself now
+                    uses, so label and data can never disagree again. */}
+                <span>{filterDate ? pickedDayKey(filterDate) : 'Custom Date'}</span>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 border-border bg-card">
                 <Calendar
