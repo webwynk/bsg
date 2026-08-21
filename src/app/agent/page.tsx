@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Coins, Users, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Check, Loader2, Search, Filter, History } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { SUPERADMIN_DISPLAY_NAME } from '@/lib/ledger'
