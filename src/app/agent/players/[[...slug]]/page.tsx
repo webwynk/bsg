@@ -94,8 +94,8 @@ export default function PlayersPage() {
 
     const targetPlays = gamePlays.filter(spin => {
       if (statsScope === 'today') {
-        if ((spin as any).createdAtIso) {
-          const spinIstStr = new Date((spin as any).createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        if (spin.created_at_iso) {
+          const spinIstStr = new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
           return spinIstStr === todayIstStr
         }
         return true
@@ -117,8 +117,8 @@ export default function PlayersPage() {
     return gamePlays.filter(spin => {
       if (filterDate) {
         const filterDateStr = filterDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-        const spinDateStr = (spin as any).createdAtIso 
-          ? new Date((spin as any).createdAtIso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+        const spinDateStr = spin.created_at_iso
+          ? new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
           : spin.created_at
         if (spinDateStr !== filterDateStr) return false
       }
