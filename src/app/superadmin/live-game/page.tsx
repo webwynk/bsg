@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction } from '../actions'
+import { formatCurrency } from '@/lib/utils'
 import { ErrorBanner } from '@/components/error-banner'
 import { 
   Radio, 
@@ -102,12 +103,6 @@ export default function SuperAdminLiveGamePage() {
     const pollInterval = setInterval(() => loadDraws(false), 5000)
     return () => clearInterval(pollInterval)
   }, [loadDraws])
-
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      maximumFractionDigits: 0
-    }).format(val) + ' Coins'
-  }
 
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {
@@ -402,7 +397,7 @@ export default function SuperAdminLiveGamePage() {
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Net Payout:</span>
                     <span className={`font-extrabold font-mono ${latest.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                      {latest.total_payout > 0 ? `+${formatCurrency(latest.total_payout)}` : '0 Coins'}
+                      {latest.total_payout > 0 ? `+${formatCurrency(latest.total_payout)}` : '0'}
                     </span>
                   </div>
                 </div>
@@ -593,7 +588,7 @@ export default function SuperAdminLiveGamePage() {
                           </td>
                           <td className="py-2.5 px-3 text-foreground font-semibold">{formatCurrency(draw.total_stake)}</td>
                           <td className={`py-2.5 px-3 text-right font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                            {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0 Coins'}
+                            {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0'}
                           </td>
                         </tr>,
                         isExpanded && draw.player_bets && draw.player_bets.length > 0 && (
@@ -690,7 +685,7 @@ export default function SuperAdminLiveGamePage() {
                           <span className="text-foreground">{draw.black}</span>
                         </div>
                         <span className={`font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                          {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0 Coins'}
+                          {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0'}
                         </span>
                       </div>
 
