@@ -498,9 +498,7 @@ export default function SuperAdminLiveGamePage() {
                   <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
                     <th className="py-2.5 px-3">Timestamp</th>
                     <th className="py-2.5 px-3">Hand ID</th>
-                    <th className="py-2.5 px-3">Player</th>
                     <th className="py-2.5 px-3">Digits (R • G • B)</th>
-                    <th className="py-2.5 px-3">3-Digit Outcome</th>
                     <th className="py-2.5 px-3">Wagered</th>
                     <th className="py-2.5 px-3 text-right">Net Payout</th>
                   </tr>
@@ -508,7 +506,7 @@ export default function SuperAdminLiveGamePage() {
                 <tbody className="divide-y divide-border/40">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-muted-foreground text-xs font-sans">
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs font-sans">
                         <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                         Loading game draws...
                       </td>
@@ -534,12 +532,20 @@ export default function SuperAdminLiveGamePage() {
                           className={`hover:bg-secondary/40 transition-colors ${hasMultiple ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-secondary/30' : ''}`}
                         >
                           <td className="py-2.5 px-3 text-muted-foreground text-[11px] font-sans">{formattedTime}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground text-[10px]">...{draw.round_id.slice(-8)}</td>
                           <td className="py-2.5 px-3 font-bold text-foreground font-sans">
-                            <span className="flex items-center space-x-1">
-                              <span>{draw.hand_id}</span>
+                            {/* Housekeeping #25 fix: this cell used to be split across two
+                                separate columns ("Hand ID" showing round_id.slice(-8), and a
+                                mislabeled "Player" column showing the exact same value again
+                                via draw.hand_id) -- confirmed both rendered identical text.
+                                Merged into one, now showing the full round_id (previously
+                                truncated to 8 characters) instead of duplicating a shortened
+                                copy of itself. The expand/collapse indicator, which used to
+                                live in the now-deleted "Player" cell, moved here so it isn't
+                                silently lost. */}
+                            <span className="flex items-center space-x-1.5">
+                              <span>{draw.round_id}</span>
                               {hasMultiple && (
-                                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">
+                                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono shrink-0">
                                   {isExpanded ? '▲ Hide' : '▼ Details'}
                                 </span>
                               )}
@@ -554,11 +560,6 @@ export default function SuperAdminLiveGamePage() {
                               <span className="text-foreground bg-secondary px-1.5 py-0.5 rounded border border-border">{draw.black}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3">
-                            <span className="font-extrabold text-primary bg-primary/10 px-2 py-1 rounded-lg text-xs border border-primary/20">
-                              {draw.result}
-                            </span>
-                          </td>
                           <td className="py-2.5 px-3 text-foreground font-semibold">{formatCurrency(draw.total_stake)}</td>
                           <td className={`py-2.5 px-3 text-right font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
                             {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0 Coins'}
@@ -566,7 +567,7 @@ export default function SuperAdminLiveGamePage() {
                         </tr>,
                         isExpanded && draw.player_bets && draw.player_bets.length > 0 && (
                           <tr key={`${draw.round_id}-expanded`} className="bg-secondary/20 border-b border-border/40">
-                            <td colSpan={7} className="p-3">
+                            <td colSpan={5} className="p-3">
                               <div className="bg-background/90 rounded-xl p-3 border border-border/60 space-y-2">
                                 <div className="text-[11px] font-bold text-primary flex items-center justify-between border-b border-border/40 pb-1.5">
                                   <span>Participating Player Breakdown ({draw.player_bets.length} Players)</span>
@@ -592,7 +593,7 @@ export default function SuperAdminLiveGamePage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-muted-foreground text-xs font-sans">
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs font-sans">
                         No game draws match your filter criteria.
                       </td>
                     </tr>
