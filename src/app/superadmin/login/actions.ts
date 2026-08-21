@@ -47,8 +47,15 @@ export async function superAdminLogin(formData: FormData) {
   })
   const attemptResult = attemptData ? asRpc<StaffLoginAttemptResult>(attemptData) : null
   if (attemptResult && attemptResult.success === false) {
+    // Issue #21 FIX: attempt_staff_login checks is_active BEFORE verifying
+    // the password, so this branch used to be reachable with any password
+    // at all -- revealing "this account exists and is suspended" to anyone
+    // testing a guessed/known username, no correct credentials required.
+    // Now collapsed to the same generic message every other rejection
+    // reason on this page uses; the real reason is still logged server-side.
     if (attemptResult.reason === 'account_blocked') {
-      redirect('/superadmin/login?error=This account is suspended.')
+      console.error(`[superAdminLogin] rejected: account suspended (username=${username})`)
+      redirect('/superadmin/login?error=Invalid credentials or account not authorized for this portal.')
     }
     // Mirrors bsg_app's ApiService.login wording for the same underlying
     // attempt_staff_login/attempt_player_login attempts_remaining contract.
@@ -81,19 +88,28 @@ export async function superAdminLogin(formData: FormData) {
     .single()
 
   // Fail closed: no profile, no entry. No metadata fallback.
+  // Issue #21 FIX: these 3 branches only fire once the password has already
+  // been confirmed correct, and each used to return a different message
+  // ("could not be verified" / "suspended" / "wrong role") -- letting anyone
+  // who already has (or guesses) valid credentials for SOME account learn
+  // that account's exact role and active-status. All 3 now return the same
+  // generic message; the real reason is still logged server-side.
   if (profileError || !profile) {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/superadmin/login?error=Account could not be verified.')
+    console.error(`[superAdminLogin] rejected: profile could not be verified (user_id=${data.user.id})`)
+    redirect('/superadmin/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   if (!profile.is_active) {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/superadmin/login?error=This account is suspended.')
+    console.error(`[superAdminLogin] rejected: account suspended (username=${username})`)
+    redirect('/superadmin/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   if (profile.role !== 'superadmin') {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/superadmin/login?error=Unauthorized. Only SuperAdmin accounts can sign in here.')
+    console.error(`[superAdminLogin] rejected: wrong role (username=${username}, role=${profile.role})`)
+    redirect('/superadmin/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   // Single-device enforcement -- same rule as the agent portal (both roles

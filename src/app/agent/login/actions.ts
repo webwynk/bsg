@@ -48,8 +48,15 @@ export async function agentLogin(formData: FormData) {
   })
   const attemptResult = attemptData ? asRpc<StaffLoginAttemptResult>(attemptData) : null
   if (attemptResult && attemptResult.success === false) {
+    // Issue #21 FIX: attempt_staff_login checks is_active BEFORE verifying
+    // the password, so this branch used to be reachable with any password
+    // at all -- revealing "this account exists and is suspended" to anyone
+    // testing a guessed/known username, no correct credentials required.
+    // Now collapsed to the same generic message every other rejection
+    // reason on this page uses; the real reason is still logged server-side.
     if (attemptResult.reason === 'account_blocked') {
-      redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
+      console.error(`[agentLogin] rejected: account suspended (username=${username})`)
+      redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
     }
     // Mirrors bsg_app's ApiService.login wording for the same underlying
     // attempt_staff_login/attempt_player_login attempts_remaining contract.
@@ -63,20 +70,12 @@ export async function agentLogin(formData: FormData) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error || !data.user) {
-    // Defensive backstop only -- attempt_staff_login above already catches a
-    // blocked account before this point in the normal case. Kept in case
-    // that check is ever skipped (e.g. the RPC call itself failing), same
-    // "backstop still applies" reasoning used elsewhere in this codebase
-    // (Issue #1's Layer A/B, agent_transfer_coins's RPC-level check).
-    const { data: blockedProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('is_active')
-      .eq('email', email)
-      .eq('role', 'agent')
-      .maybeSingle()
-    if (blockedProfile && !blockedProfile.is_active) {
-      redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
-    }
+    // Issue #21 FIX: this used to carry a "defensive backstop" that queried
+    // whether the email belonged to a suspended agent and revealed that
+    // distinctly -- reachable with ANY password, since it lived inside the
+    // sign-in-FAILED branch. That differentiation was its only purpose, so
+    // once the message became generic it had nothing left to do; removed
+    // rather than kept as a pointless (and newly re-introduced) oracle.
     redirect('/agent/login?error=Invalid username or password.')
   }
 
@@ -86,29 +85,40 @@ export async function agentLogin(formData: FormData) {
     .eq('id', data.user.id)
     .single()
 
+  // Issue #21 FIX: these branches only fire once the password has already
+  // been confirmed correct, and each used to return a different message
+  // ("could not be verified" / "suspended" / "wrong role") -- letting anyone
+  // who already has (or guesses) valid credentials for SOME account learn
+  // that account's exact role and active-status. All now return the same
+  // generic message; the real reason is still logged server-side.
   if (profileError || !profile) {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/agent/login?error=Account could not be verified.')
+    console.error(`[agentLogin] rejected: profile could not be verified (user_id=${data.user.id})`)
+    redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   if (!profile.is_active) {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
+    console.error(`[agentLogin] rejected: account suspended (username=${username})`)
+    redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   if (profile.role === 'superadmin') {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/agent/login?error=SuperAdmin accounts must sign in at /superadmin/login.')
+    console.error(`[agentLogin] rejected: wrong role (username=${username}, role=superadmin)`)
+    redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   if (profile.role === 'player') {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/agent/login?error=Player accounts must sign in through the game app.')
+    console.error(`[agentLogin] rejected: wrong role (username=${username}, role=player)`)
+    redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   if (profile.role !== 'agent') {
     await supabase.auth.signOut({ scope: 'local' })
-    redirect('/agent/login?error=Unauthorized account role.')
+    console.error(`[agentLogin] rejected: wrong role (username=${username}, role=${profile.role})`)
+    redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
   // Single-device enforcement -- refuses outright if another device's
