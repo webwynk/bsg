@@ -244,9 +244,12 @@ export default function AgentDetailPage({ params }: Props) {
       const errors = [res.error, resProf.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (res.agent) setAgentInfo(res.agent)
-      // Store the resolved UUID so other actions (transfer, toggle, password) can use it
-      if (res.agent?.id) resolvedAgentIdRef.current = res.agent?.id
-      else if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
+      // Store the resolved UUID so other actions (transfer, toggle, password) can use it.
+      // Housekeeping #28 fix: this used to also have a dead `else if
+      // (res.agent?.id)` branch re-testing the identical condition this
+      // line already tests -- unreachable, since nothing between the two
+      // checks could change res.agent.id. Removed; behavior is unchanged.
+      if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
       if (!res.error && res.players) {
         setPlayers(res.players)
         const targetId = selectedPlayerIdRef.current
