@@ -54,6 +54,15 @@ interface ActiveRound {
   black: number | null
 }
 
+/** Housekeeping #29 addendum: this page shows "Coins" next to every amount,
+ * unlike the rest of the dashboard -- kept local to this file only, not
+ * added to the shared formatCurrency() every other page also uses, and
+ * visually de-emphasized (smaller, muted) so it reads as a unit label
+ * rather than competing with the number itself. */
+function CoinsSuffix() {
+  return <span className="text-[9px] font-normal text-muted-foreground/60 ml-0.5">Coins</span>
+}
+
 export default function SuperAdminLiveGamePage() {
   const [latestDraws, setLatestDraws] = useState<GameDraw[]>([])
   const [activeRound, setActiveRound] = useState<ActiveRound | null>(null)
@@ -392,12 +401,12 @@ export default function SuperAdminLiveGamePage() {
                   </div>
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Wagered:</span>
-                    <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.total_stake)}</span>
+                    <span className="font-extrabold font-mono text-foreground">{formatCurrency(latest.total_stake)}<CoinsSuffix /></span>
                   </div>
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Net Payout:</span>
                     <span className={`font-extrabold font-mono ${latest.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                      {latest.total_payout > 0 ? `+${formatCurrency(latest.total_payout)}` : '0'}
+                      {latest.total_payout > 0 ? <>+{formatCurrency(latest.total_payout)}</> : '0'}<CoinsSuffix />
                     </span>
                   </div>
                 </div>
@@ -586,9 +595,9 @@ export default function SuperAdminLiveGamePage() {
                               <span className="text-foreground bg-secondary px-1.5 py-0.5 rounded border border-border">{draw.black}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-foreground font-semibold">{formatCurrency(draw.total_stake)}</td>
+                          <td className="py-2.5 px-3 text-foreground font-semibold">{formatCurrency(draw.total_stake)}<CoinsSuffix /></td>
                           <td className={`py-2.5 px-3 text-right font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                            {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0'}
+                            {draw.total_payout > 0 ? <>+{formatCurrency(draw.total_payout)}</> : '0'}<CoinsSuffix />
                           </td>
                         </tr>,
                         isExpanded && draw.player_bets && draw.player_bets.length > 0 && (
@@ -603,9 +612,9 @@ export default function SuperAdminLiveGamePage() {
                                     <div key={idx} className="flex items-center justify-between bg-secondary/40 px-2.5 py-1.5 rounded-lg border border-border/30">
                                       <span className="font-bold text-foreground">@{pb.username}</span>
                                       <div className="flex items-center space-x-2 text-[11px] font-mono">
-                                        <span className="text-muted-foreground">Bet: {formatCurrency(pb.total_stake)}</span>
+                                        <span className="text-muted-foreground">Bet: {formatCurrency(pb.total_stake)}<CoinsSuffix /></span>
                                         <span className={pb.total_payout > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
-                                          {pb.total_payout > 0 ? `+${formatCurrency(pb.total_payout)}` : '0'}
+                                          {pb.total_payout > 0 ? <>+{formatCurrency(pb.total_payout)}</> : '0'}<CoinsSuffix />
                                         </span>
                                       </div>
                                     </div>
@@ -685,7 +694,7 @@ export default function SuperAdminLiveGamePage() {
                           <span className="text-foreground">{draw.black}</span>
                         </div>
                         <span className={`font-extrabold ${draw.total_payout > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                          {draw.total_payout > 0 ? `+${formatCurrency(draw.total_payout)}` : '0'}
+                          {draw.total_payout > 0 ? <>+{formatCurrency(draw.total_payout)}</> : '0'}<CoinsSuffix />
                         </span>
                       </div>
 
@@ -696,9 +705,9 @@ export default function SuperAdminLiveGamePage() {
                             <div key={idx} className="flex items-center justify-between bg-background/80 p-2 rounded-lg border border-border/40 text-[11px]">
                               <span className="font-bold text-foreground">@{pb.username}</span>
                               <div className="flex items-center space-x-2 font-mono">
-                                <span className="text-muted-foreground">Bet: {formatCurrency(pb.total_stake)}</span>
+                                <span className="text-muted-foreground">Bet: {formatCurrency(pb.total_stake)}<CoinsSuffix /></span>
                                 <span className={pb.total_payout > 0 ? 'text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
-                                  {pb.total_payout > 0 ? `+${formatCurrency(pb.total_payout)}` : '0'}
+                                  {pb.total_payout > 0 ? <>+{formatCurrency(pb.total_payout)}</> : '0'}<CoinsSuffix />
                                 </span>
                               </div>
                             </div>
