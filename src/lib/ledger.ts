@@ -98,6 +98,23 @@ export function ledgerKindLabel(kind: string): string {
   }
 }
 
+/**
+ * Housekeeping #26 fix. The counterparty label an agent's own cashier
+ * transfer widgets show when the other side of the transfer is the
+ * superadmin directly, not one of the agent's players -- written by
+ * `agent/actions.ts` (`getAgentDashboardDataAction`/
+ * `getAgentTransactionHistoryAction`) and read by `agent/page.tsx` and
+ * `agent/history/page.tsx` to decide whether to render a redundant
+ * secondary username line. Previously a raw string literal duplicated
+ * across 6 call sites (2 producer, 4 consumer) -- the consumers' copy had
+ * silently drifted to a different capitalization (`'Superadmin'`, lowercase
+ * "a") than the producer's (`'SuperAdmin'`), so the case-sensitive
+ * comparison never matched and the redundant-line skip never fired. One
+ * shared constant, imported everywhere, so the two sides cannot drift apart
+ * again.
+ */
+export const SUPERADMIN_DISPLAY_NAME = 'SuperAdmin'
+
 /** Direction argument accepted by the transfer RPCs. */
 export type TransferDirection = 'credit' | 'debit'
 

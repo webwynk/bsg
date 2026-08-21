@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase'
 
 import { requireAuth } from '@/lib/auth-guard'
-import { CASHIER_KINDS, playerFacingDirection, type LedgerKind } from '@/lib/ledger'
+import { CASHIER_KINDS, playerFacingDirection, SUPERADMIN_DISPLAY_NAME, type LedgerKind } from '@/lib/ledger'
 
 /**
  * Agent cashier dashboard data.
@@ -143,8 +143,8 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
         id: row.id,
         direction: playerFacingDirection(row.kind as LedgerKind, Number(row.amount)),
         amount: Math.abs(Number(row.amount)),
-        target_name: isSuperadmin ? 'SuperAdmin' : (target?.full_name || target?.username || 'Player'),
-        target_username: isSuperadmin ? 'SuperAdmin' : `@${target?.username ?? 'player'}`,
+        target_name: isSuperadmin ? SUPERADMIN_DISPLAY_NAME : (target?.full_name || target?.username || 'Player'),
+        target_username: isSuperadmin ? SUPERADMIN_DISPLAY_NAME : `@${target?.username ?? 'player'}`,
         created_at: istDateTime(row.created_at),
       }
     })
@@ -245,8 +245,8 @@ export async function getAgentTransactionHistoryAction(): Promise<AgentTransferH
         kind: row.kind as LedgerKind,
         amount: Math.abs(Number(row.amount)),
         balance_after: Number(row.balance_after),
-        target_name: isSuperadmin ? 'SuperAdmin' : (target?.full_name || target?.username || 'Player'),
-        target_username: isSuperadmin ? 'SuperAdmin' : `@${target?.username ?? 'player'}`,
+        target_name: isSuperadmin ? SUPERADMIN_DISPLAY_NAME : (target?.full_name || target?.username || 'Player'),
+        target_username: isSuperadmin ? SUPERADMIN_DISPLAY_NAME : `@${target?.username ?? 'player'}`,
         created_at: istDateTime(row.created_at),
         created_at_iso: row.created_at,
       }

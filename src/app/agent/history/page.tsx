@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatCurrency } from "@/lib/utils"
+import { SUPERADMIN_DISPLAY_NAME } from "@/lib/ledger"
 import { ArrowDownRight, ArrowUpRight, Check, History, RefreshCw, Search, Filter, Wallet, Users, ShieldCheck } from "lucide-react"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
@@ -397,7 +398,7 @@ export default function HistoryPage() {
                     <TableCell className="py-2">
                       <div>
                         <div className="font-bold text-foreground text-xs">{txn.target_name}</div>
-                        {txn.target_name !== 'Superadmin' && txn.target_username && (
+                        {txn.target_name !== SUPERADMIN_DISPLAY_NAME && txn.target_username && (
                           <div className="text-[10px] text-muted-foreground font-mono">{txn.target_username}</div>
                         )}
                       </div>
@@ -473,7 +474,7 @@ export default function HistoryPage() {
                   <span className="font-extrabold text-foreground text-xs block">
                     {txn.target_name}
                   </span>
-                  {txn.target_name !== 'Superadmin' && txn.target_username && (
+                  {txn.target_name !== SUPERADMIN_DISPLAY_NAME && txn.target_username && (
                     <span className="text-[10px] text-muted-foreground font-mono block">{txn.target_username}</span>
                   )}
                   <span className="text-[10px] text-muted-foreground font-mono">{txn.created_at}</span>

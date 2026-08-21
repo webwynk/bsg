@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Coins, Users, ArrowUpRight, ArrowDownRight, RefreshCw, Send, Check, Loader2, Search, Filter, History } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { SUPERADMIN_DISPLAY_NAME } from '@/lib/ledger'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -439,7 +440,7 @@ export default function AgentDashboard() {
                       <TableCell className="py-2">
                         <div>
                           <div className="font-bold text-foreground text-xs">{txn.target_name}</div>
-                          {txn.target_name !== 'Superadmin' && txn.target_username && (
+                          {txn.target_name !== SUPERADMIN_DISPLAY_NAME && txn.target_username && (
                             <div className="text-[10px] text-muted-foreground font-mono">{txn.target_username}</div>
                           )}
                         </div>
@@ -490,7 +491,7 @@ export default function AgentDashboard() {
                 <div key={txn.id} className="p-2.5 rounded-lg border border-border/80 bg-background flex items-center justify-between text-xs">
                   <div>
                     <span className="font-extrabold text-foreground text-xs block">
-                      {txn.target_name === 'Superadmin' ? 'Superadmin' : `@${txn.target_name.replace(/^@+/, '')}`}
+                      {txn.target_name === SUPERADMIN_DISPLAY_NAME ? SUPERADMIN_DISPLAY_NAME : `@${txn.target_name.replace(/^@+/, '')}`}
                     </span>
                     <span className="text-[10px] text-muted-foreground font-mono">{txn.created_at}</span>
                   </div>
