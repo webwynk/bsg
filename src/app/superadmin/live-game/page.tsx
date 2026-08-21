@@ -642,17 +642,33 @@ export default function SuperAdminLiveGamePage() {
                       onClick={() => hasMultiple && setExpandedDrawId(isExpanded ? null : draw.round_id)}
                       className={`p-3 rounded-xl bg-secondary/30 border border-border/80 space-y-2 text-xs ${hasMultiple ? 'cursor-pointer' : ''}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-foreground">{draw.hand_id}</span>
+                      <div className="flex items-start justify-between gap-2">
+                        {/* Housekeeping #25 fix: full round_id instead of the
+                            previous 8-character truncation, matching the
+                            desktop table's fix. flex-wrap + break-all + a
+                            smaller font size keep this responsive -- a full
+                            UUID is ~36 characters, much longer than the old
+                            short form, and this card has no horizontal
+                            scroll to fall back on the way the desktop table
+                            does. shrink-0 on the result badge below keeps it
+                            fixed-width on the right regardless of how many
+                            lines the id wraps to. */}
+                        <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
+                          <span className="font-bold text-foreground text-[10px] font-mono break-all">{draw.round_id}</span>
                           {hasMultiple && (
-                            <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono">
+                            <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono shrink-0">
                               {isExpanded ? '▲ Hide' : '▼ Details'}
                             </span>
                           )}
                         </div>
-                        <span className="font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded text-xs border border-primary/20">
-                          {draw.result}
+                        {/* Per-digit colored combined result, matching the
+                            red/emerald/foreground convention already used
+                            for the individual R.G.B digits below -- previously
+                            a single uniformly-colored string. */}
+                        <span className="font-extrabold bg-primary/10 px-2 py-0.5 rounded text-xs border border-primary/20 shrink-0 font-mono">
+                          <span className="text-red-400">{draw.red}</span>
+                          <span className="text-emerald-400">{draw.green}</span>
+                          <span className="text-foreground">{draw.black}</span>
                         </span>
                       </div>
 
