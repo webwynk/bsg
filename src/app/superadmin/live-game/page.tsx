@@ -217,14 +217,20 @@ export default function SuperAdminLiveGamePage() {
             const diffSecs = latest ? Math.max(0, Math.floor((nowTime - drawTime) / 1000)) : 999999
             const isRecentCompletion = latest && diffSecs <= 15
 
-            // 90s UTC countdown calculation
-            const utcSecs = Math.floor(nowTime / 1000)
-            const cycleRem = 103 - (utcSecs % 103)
-            const roundCountdown = cycleRem >= 14 ? cycleRem - 13 : 0
-
             // Active Round Outcome Preview for SuperAdmin (God Mode)
             if (activeRound) {
               const hasDigits = activeRound.red !== null && activeRound.red !== undefined
+              // Housekeeping #24 fix: previously reconstructed a countdown
+              // from the client's own clock via a hardcoded epoch-modulo
+              // formula (`103 - (utcSecs % 103) - 13`) -- the "13" was
+              // silently `103 - draw_at_second`, baked in on the assumption
+              // draw_at_second would always be 90. activeRound.seconds_into
+              // and .draw_at_second are the server's own live values for
+              // the exact same thing, already fetched but previously never
+              // read anywhere on this page -- reading them directly can
+              // never drift out of sync with game_config, however
+              // draw_at_second is configured.
+              const secondsUntilDraw = Math.max(0, activeRound.draw_at_second - activeRound.seconds_into)
               return (
                 <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-950/20 via-card to-background border border-amber-500/40 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -232,25 +238,32 @@ export default function SuperAdminLiveGamePage() {
                       <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center space-x-1.5 animate-pulse">
                         <Sparkles className="h-3.5 w-3.5 text-amber-400" />
                         <span>
-                          {hasDigits 
-                            ? `⚡ God Mode Outcome Revealed (Round #${activeRound.round_number})` 
-                            : `⚡ Accumulating 70s Wagers & Exposure (Round #${activeRound.round_number})`}
+                          {hasDigits
+                            ? `⚡ God Mode Outcome Revealed (Round #${activeRound.round_number})`
+                            : `⚡ Waiting for Winning Number (Round #${activeRound.round_number})`}
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        {activeRound.phase === 'spinning' ? 'Spinning Phase' : 'Betting Phase (Live)'}
+                        {/* Housekeeping #24 fix: 'spinning' is not a real
+                            phase value -- confirmed live against the
+                            database's own CHECK constraint, only 'betting',
+                            'drawing', and 'settled' can ever occur -- so this
+                            badge could never show anything but "Betting
+                            Phase (Live)" before, even while a round was
+                            genuinely in its 'drawing' phase. */}
+                        {activeRound.phase === 'drawing' ? 'Drawing...' : 'Betting Phase (Live)'}
                       </span>
                     </div>
 
-                    <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
+                    <div className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20 shrink-0">
                       <Clock className="h-4 w-4" />
-                      <span>{roundCountdown}s remaining in round</span>
+                      <span>{hasDigits ? 'Winning number selected' : `${secondsUntilDraw}s until draw`}</span>
                     </div>
                   </div>
 
                   {hasDigits ? (
-                    /* Pre-Calculated Winning Digits Display (Second 71+) */
+                    /* Pre-Calculated Winning Digits Display */
                     <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
                       <div className="flex items-center space-x-3 sm:space-x-4">
                         {/* Red Digit (1st) */}
@@ -291,26 +304,22 @@ export default function SuperAdminLiveGamePage() {
                       </div>
                     </div>
                   ) : (
-                    /* Wager Accumulation Phase Display (0s to 70s) */
-                    <div className="flex items-center justify-between flex-wrap gap-3 py-4 px-5 rounded-2xl bg-amber-500/5 border border-amber-500/20">
-                      <div className="flex items-center space-x-3">
-                        <Loader2 className="h-6 w-6 text-amber-400 animate-spin shrink-0" />
-                        <div>
-                          <div className="text-sm font-black text-foreground">Collecting Live Player Wagers & Exposure (0s ──► 70s)</div>
-                          <div className="text-xs font-semibold text-muted-foreground mt-0.5">
-                            RTP Engine will analyze all bets and calculate the optimal winning combination at <strong className="text-amber-400">20s remaining (Second 71)</strong>.
-                          </div>
-                        </div>
-                      </div>
-                      <span className="px-3 py-1 text-xs font-mono font-bold rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        {roundCountdown > 20 ? `${roundCountdown - 20}s until calculation` : 'Calculating now...'}
+                    /* Housekeeping #24 fix: replaces the previous two-line
+                       "Collecting Live Player Wagers... RTP Engine will
+                       analyze... at Second 71" copy -- which described a
+                       70-second-snapshot mechanism that doesn't exist
+                       anywhere in the live draw_round() function -- with one
+                       compact, honest line. The real countdown already
+                       lives in the header badge above; no need to repeat it
+                       here. Compact and full-width, wraps cleanly on narrow
+                       mobile via flex-wrap. */
+                    <div className="flex items-center gap-3 py-3 px-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 w-full flex-wrap">
+                      <Loader2 className="h-5 w-5 text-amber-400 animate-spin shrink-0" />
+                      <span className="text-sm font-bold text-foreground">
+                        Waiting for the winning number to be selected...
                       </span>
                     </div>
                   )}
-
-                  <p className="text-xs text-amber-300/80 font-medium pt-2 border-t border-amber-500/20 flex items-center space-x-1">
-                    <span>⚡ <strong>God Mode Telemetry:</strong> At Second 71 (20s remaining), the 70s snapshot RTP calculation completes and reveals the winning numbers here to SuperAdmin.</span>
-                  </p>
                 </div>
               )
             }
