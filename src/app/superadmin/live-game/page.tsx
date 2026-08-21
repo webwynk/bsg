@@ -67,7 +67,7 @@ export default function SuperAdminLiveGamePage() {
 
   // Table search & filter state
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'WON' | 'LOST'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'WON' | 'LOST' | 'NO BETS'>('ALL')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
 
@@ -111,15 +111,24 @@ export default function SuperAdminLiveGamePage() {
 
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {
-    const matchesSearch = 
+    // Housekeeping #25 fix: the placeholder promised "outcome or player"
+    // search, but player_bets[].username was never actually checked.
+    const matchesSearch =
       draw.result.toString().includes(searchQuery) ||
       draw.hand_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      draw.round_id.toLowerCase().includes(searchQuery.toLowerCase())
+      draw.round_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (draw.player_bets ?? []).some(pb => pb.username.toLowerCase().includes(searchQuery.toLowerCase()))
 
-    const matchesStatus = 
+    // Housekeeping #25 fix: total_payout === 0 is true for BOTH a genuine
+    // loss and a round nobody bet on -- the two were indistinguishable to
+    // this filter. draw.outcome is the server's own, already-correct 3-way
+    // classification; reading it directly instead of re-deriving a guess
+    // from total_payout is what actually tells the two cases apart.
+    const matchesStatus =
       statusFilter === 'ALL' ||
-      (statusFilter === 'WON' && draw.total_payout > 0) ||
-      (statusFilter === 'LOST' && draw.total_payout === 0)
+      (statusFilter === 'WON' && draw.outcome === 'WON') ||
+      (statusFilter === 'LOST' && draw.outcome === 'LOST') ||
+      (statusFilter === 'NO BETS' && draw.outcome === 'NO BETS')
 
     return matchesSearch && matchesStatus
   })
@@ -486,6 +495,19 @@ export default function SuperAdminLiveGamePage() {
                     }`}
                   >
                     Lost
+                  </button>
+                  {/* Housekeeping #25 fix: previously there was no way to
+                      deliberately filter FOR empty rounds -- only the buggy
+                      "Lost" filter silently included them. Now a real,
+                      distinct choice, backed by the server's own outcome
+                      field rather than a total_payout guess. */}
+                  <button
+                    onClick={() => { setStatusFilter('NO BETS'); setCurrentPage(1); }}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded-lg transition-all ${
+                      statusFilter === 'NO BETS' ? 'bg-secondary text-foreground border border-border' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    No Bets
                   </button>
                 </div>
               </div>
