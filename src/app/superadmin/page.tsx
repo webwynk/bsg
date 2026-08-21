@@ -3,13 +3,13 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Sparkles, Clock, Radio, Trophy } from 'lucide-react'
+import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Clock } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
-import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction, getLatestGameDrawsAction } from './actions'
+import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
@@ -30,23 +30,6 @@ export default function SuperAdminDashboard() {
   const [todayBetCoins, setTodayBetCoins] = React.useState(0)
   const [todayWinCoins, setTodayWinCoins] = React.useState(0)
   const [todayLostCoins, setTodayLostCoins] = React.useState(0)
-
-  // Live Draw Monitor & Multi-Game State
-  const [selectedGameTab, setSelectedGameTab] = React.useState<'triple_chance' | 'game_2' | 'game_3'>('triple_chance')
-  const [latestDraws, setLatestDraws] = React.useState<Array<{
-    id: string
-    game: string
-    resultNumber: number
-    redDigit: number
-    greenDigit: number
-    blackDigit: number
-    betAmount: number
-    winAmount: number
-    status: string
-    playerUsername: string
-    createdAt: string
-  }>>([])
-  const [nowTime, setNowTime] = React.useState(Date.now())
 
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; kind: string; detail: string; time: string; actor: string }>>([])
   // Issue #15: surfaces a real backend failure instead of silently leaving
@@ -84,14 +67,6 @@ export default function SuperAdminDashboard() {
   const [logSearchQuery, setLogSearchQuery] = React.useState('')
   const [logPage, setLogPage] = React.useState(1)
   const logsPerPage = 4
-
-  // Live 1-second Ticker Interval for Relative Timestamps (e.g. 25s ago)
-  React.useEffect(() => {
-    const ticker = setInterval(() => {
-      setNowTime(Date.now())
-    }, 1000)
-    return () => clearInterval(ticker)
-  }, [])
 
   const fetchMetrics = (isInitial = false) => {
     if (isInitial) {
