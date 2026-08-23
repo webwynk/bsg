@@ -70,7 +70,10 @@ export default function SuperAdminLiveGamePage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
   const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'game2' | 'game3'>('triple_chance')
-  const [nowTime, setNowTime] = useState(Date.now())
+  // Housekeeping #91 fix: Date.now() can't be called during render (React
+  // purity rule) -- start at 0 and let the ticker effect below set the real
+  // value immediately, which is the only place it's safe to read the clock.
+  const [nowTime, setNowTime] = useState(0)
   // Issue #15: page-load error surfaced to the user instead of silently
   // leaving latestDraws/activeRound stale on a backend failure.
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -81,35 +84,47 @@ export default function SuperAdminLiveGamePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
 
-  // Live second ticker
+  // Live second ticker -- the 0 placeholder above self-corrects on the
+  // first tick (within 1s of mount); not worth a synchronous correction
+  // here, since that would just trade one lint finding for another
+  // (react-hooks/set-state-in-effect) for an imperceptible cosmetic gain.
   useEffect(() => {
     const timer = setInterval(() => setNowTime(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  // Fetch draws from server action
-  const loadDraws = useCallback(async (showIndicator = false) => {
-    if (showIndicator) setIsRefreshing(true)
-    try {
-      const res = await getLatestGameDrawsAction()
+  // Fetch draws from server action. Housekeeping #91 fix: no longer takes a
+  // "show the refresh spinner" flag -- that branch was never true from
+  // either call site below (both always passed false), but its mere
+  // presence meant any direct call from an effect got flagged, since React
+  // can't statically prove which branch runs. Spinner control now lives
+  // only in handleManualRefresh, the one place it's actually used.
+  const loadDraws = useCallback(() => {
+    getLatestGameDrawsAction().then((res) => {
+      setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(res.error)
       if (!res.error) {
         setLatestDraws(res.draws)
         setActiveRound(res.active_round)
       }
-    } catch (e) {
-      console.error('Error loading game draws:', e)
-      setLoadError(e instanceof Error ? e.message : 'Could not load game draws.')
-    } finally {
+    }).catch((e) => {
       setIsLoading(false)
       setIsRefreshing(false)
-    }
+      console.error('Error loading game draws:', e)
+      setLoadError(e instanceof Error ? e.message : 'Could not load game draws.')
+    })
   }, [])
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true)
+    loadDraws()
+  }
 
   // Initial load + 5-second background auto-polling
   useEffect(() => {
-    loadDraws(false)
-    const pollInterval = setInterval(() => loadDraws(false), 5000)
+    loadDraws()
+    const pollInterval = setInterval(() => loadDraws(), 5000)
     return () => clearInterval(pollInterval)
   }, [loadDraws])
 
@@ -169,7 +184,7 @@ export default function SuperAdminLiveGamePage() {
             Auto-Sync (5s)
           </span>
           <button
-            onClick={() => loadDraws(true)}
+            onClick={handleManualRefresh}
             disabled={isRefreshing}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground transition-all cursor-pointer disabled:opacity-50"
           >
@@ -219,7 +234,6 @@ export default function SuperAdminLiveGamePage() {
             const latest = latestDraws.length > 0 ? latestDraws[0] : null
             const drawTime = latest?.created_at ? new Date(latest.created_at).getTime() : 0
             const diffSecs = latest ? Math.max(0, Math.floor((nowTime - drawTime) / 1000)) : 999999
-            const isRecentCompletion = latest && diffSecs <= 15
 
             // Active Round Outcome Preview for SuperAdmin (God Mode)
             if (activeRound) {
@@ -426,7 +440,7 @@ export default function SuperAdminLiveGamePage() {
               </div>
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
                 {latestDraws.map(draw => {
-                  const drawTime = draw.created_at ? new Date(draw.created_at).getTime() : Date.now()
+                  const drawTime = draw.created_at ? new Date(draw.created_at).getTime() : nowTime
                   const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
                   let relTime = 'Just now'
                   if (diffSecs >= 5 && diffSecs < 60) relTime = `${diffSecs}s ago`
