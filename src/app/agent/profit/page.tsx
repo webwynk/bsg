@@ -64,8 +64,7 @@ export default function AgentProfitPage() {
   // leaving summary/players/pagination stale on a backend failure.
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
-  const loadProfitReport = React.useCallback((isInitial = false) => {
-    if (isInitial) setIsLoading(true) // skeleton only on first load
+  const loadProfitReport = React.useCallback(() => {
     getAgentProfitReportAction({
       datePreset: datePresetRef.current,
       // Issue #90 fix: send the exact day the user clicked (read back from the
@@ -100,11 +99,11 @@ export default function AgentProfitPage() {
       isInitialMountRef.current = false
       return
     }
-    loadProfitReport(false)
+    loadProfitReport() // filter/page change: isLoading already false by now
   }, [datePreset, filterDate, searchQuery, currentPage, loadProfitReport])
 
   React.useEffect(() => {
-    loadProfitReport(true) // initial: show skeleton
+    loadProfitReport() // initial: isLoading already starts true
 
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
@@ -112,7 +111,7 @@ export default function AgentProfitPage() {
 
     const dataInterval = setInterval(() => {
       setCountdown(60)
-      loadProfitReport(false) // silent: no skeleton
+      loadProfitReport() // silent: isLoading already false by now
     }, 60000)
 
     return () => {
@@ -124,7 +123,7 @@ export default function AgentProfitPage() {
   const handleManualRefresh = () => {
     setIsRefreshing(true)
     setCountdown(60)
-    loadProfitReport(false) // no skeleton on manual refresh
+    loadProfitReport() // manual: isLoading already false by now
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
@@ -270,7 +269,7 @@ export default function AgentProfitPage() {
                 <button
                   key={btn.value}
                   onClick={() => {
-                    setDatePreset(btn.value as any)
+                    setDatePreset(btn.value as 'today' | '7days' | '30days' | 'lifetime')
                     setFilterDate(undefined)
                     setCurrentPage(1)
                   }}
