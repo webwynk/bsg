@@ -746,9 +746,9 @@ export default function AgentDetailPage({ params }: Props) {
       </div>
 
       {/* Main Player & History Layout Grid (3:9 Ratio) */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 min-h-[600px]">
-        {/* --- LEFT SIDE: COMPACT PLAYERS LIST (md:col-span-2) --- */}
-        <div className={`md:col-span-2 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 min-h-[600px]">
+        {/* --- LEFT SIDE: COMPACT PLAYERS LIST (md:col-span-1 = 20%) --- */}
+        <div className={`md:col-span-1 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
           <div className="p-3 bg-card border border-border/80 rounded-2xl shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center space-x-1.5 whitespace-nowrap">
@@ -815,8 +815,8 @@ export default function AgentDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* --- RIGHT SIDE: PLAYER HISTORY (md:col-span-10) --- */}
-        <div className={`md:col-span-10 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
+        {/* --- RIGHT SIDE: PLAYER HISTORY (md:col-span-4 = 80%) --- */}
+        <div className={`md:col-span-4 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
           {selectedPlayer ? (
             <div className="space-y-3">
               {/* 📊 SLIM HIGH-DENSITY PERFORMANCE METRIC STRIP */}
