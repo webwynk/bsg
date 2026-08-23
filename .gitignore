@@ -10,6 +10,12 @@
 !.yarn/releases
 !.yarn/versions
 
+# this project uses pnpm (pnpm-lock.yaml is the real lockfile) -- ignore
+# npm's own lockfile so an accidental `npm install` can't silently commit
+# a mismatched one again (see the ERR_PNPM_OUTDATED_LOCKFILE deploy failure
+# this caused, fixed 2026-08-23)
+package-lock.json
+
 # testing
 /coverage
 
