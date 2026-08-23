@@ -5,8 +5,16 @@
 // throwing, so a bad column name degraded silently into a fallback.
 const { Client } = require('pg');
 const fs = require('fs');
+const path = require('path');
 
-const c = new Client({ connectionString: process.env.PG_URL, ssl: { rejectUnauthorized: false } });
+// Housekeeping #33 fix: this connection carries the production superuser
+// password, so the server's identity must actually be verified -- not
+// skipped. Supabase's pooler is signed by their own private root CA (not in
+// the public trust store Node checks by default), so strict verification
+// needs that CA pinned explicitly, rather than disabling verification
+// entirely. See ../certs/supabase-root-ca.crt for how it was obtained/verified.
+const supabaseRootCa = fs.readFileSync(path.join(__dirname, '..', 'certs', 'supabase-root-ca.crt'), 'utf8');
+const c = new Client({ connectionString: process.env.PG_URL, ssl: { rejectUnauthorized: true, ca: supabaseRootCa } });
 
 // Mirrors the mapping used by `supabase gen types typescript`.
 function tsType(dataType, udt) {
