@@ -128,12 +128,19 @@ export default function AgentDetailPage({ params }: Props) {
   const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 5
+  // Housekeeping #87 fix: tracks the last-seen filter values so pagination
+  // can be corrected during render itself -- React's own recommended
+  // pattern for "adjust state when a dependency changes" -- instead of an
+  // effect, which draws one wrong frame before fixing itself a render later.
+  const [lastFilters, setLastFilters] = React.useState<[string | undefined, typeof filterOutcome, typeof filterMode]>([filterDate, filterOutcome, filterMode])
 
-  // Reset pagination when filters change
-  React.useEffect(() => {
+  // Reset pagination when filters change -- corrected during render (see
+  // lastFilters above), not in an effect.
+  if (lastFilters[0] !== filterDate || lastFilters[1] !== filterOutcome || lastFilters[2] !== filterMode) {
+    setLastFilters([filterDate, filterOutcome, filterMode])
     setGamesPage(1)
     setPointsPage(1)
-  }, [filterDate, filterOutcome, filterMode])
+  }
 
   // Compute performance metrics
   const performanceStats = React.useMemo(() => {
