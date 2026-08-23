@@ -66,6 +66,13 @@ export default function SuperAdminDashboard() {
   const [logSearchQuery, setLogSearchQuery] = React.useState('')
   const [logPage, setLogPage] = React.useState(1)
   const logsPerPage = 4
+  // Housekeeping #92 fix: tracks the last-seen filter values so the page
+  // number can be corrected during render itself -- React's own recommended
+  // pattern for "adjust state when a dependency changes" -- instead of a
+  // useEffect, which would draw one wrong frame before fixing itself a
+  // render later. The actual comparison/correction lives further down,
+  // right before the JSX return.
+  const [lastLogFilters, setLastLogFilters] = React.useState<[typeof logCategory, string]>([logCategory, logSearchQuery])
 
   const fetchMetrics = () => {
     Promise.all([
@@ -181,10 +188,12 @@ export default function SuperAdminDashboard() {
     return filteredLogs.slice(start, start + logsPerPage)
   }, [filteredLogs, logPage])
 
-  // Reset page when log filter changes
-  React.useEffect(() => {
+  // Reset page when log filter changes -- corrected during render (see
+  // lastLogFilters above), not in an effect.
+  if (lastLogFilters[0] !== logCategory || lastLogFilters[1] !== logSearchQuery) {
+    setLastLogFilters([logCategory, logSearchQuery])
     setLogPage(1)
-  }, [logCategory, logSearchQuery])
+  }
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
