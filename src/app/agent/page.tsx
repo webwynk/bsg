@@ -49,8 +49,7 @@ export default function AgentDashboard() {
   // leaving balance/KPIs/players stale on a backend failure.
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
-  const fetchDashboardData = React.useCallback((isInitial = false) => {
-    if (isInitial) setIsLoadingDashboard(true) // skeleton only on first load
+  const fetchDashboardData = React.useCallback(() => {
     getAgentDashboardDataAction().then((resDash) => {
       setIsLoadingDashboard(false)
       setLoadError(resDash.error)
@@ -80,7 +79,7 @@ export default function AgentDashboard() {
   }, [])
 
   React.useEffect(() => {
-    fetchDashboardData(true) // initial: show skeleton
+    fetchDashboardData() // initial: isLoadingDashboard already starts true
 
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
@@ -88,7 +87,7 @@ export default function AgentDashboard() {
 
     const dataInterval = setInterval(() => {
       setCountdown(60)
-      fetchDashboardData(false) // silent: no skeleton
+      fetchDashboardData() // silent: isLoadingDashboard already false by now
     }, 60000)
 
     return () => {
@@ -100,7 +99,7 @@ export default function AgentDashboard() {
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
     setCountdown(60)
-    fetchDashboardData(false) // manual: no skeleton, just spinner on button
+    fetchDashboardData() // manual: no skeleton, just spinner on button
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
@@ -405,7 +404,7 @@ export default function AgentDashboard() {
               <select
                 value={typeFilter}
                 onChange={(e) => {
-                  setTypeFilter(e.target.value as any)
+                  setTypeFilter(e.target.value as 'all' | 'deposit' | 'withdraw')
                   setCurrentPage(1)
                 }}
                 className="h-7 px-1.5 rounded bg-card border border-border/60 text-foreground text-[11px] font-semibold focus:outline-none cursor-pointer"

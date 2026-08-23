@@ -16,12 +16,12 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import {
   Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound,
   ArrowLeft, Eye, EyeOff, ChevronRight, Search, Users, Gamepad2, Coins,
-  Calendar as CalendarIcon, Filter, Activity, TrendingUp, TrendingDown, RefreshCw, X,
-  CheckCircle2, AlertCircle, ShieldCheck, Lock
+  Calendar as CalendarIcon, Activity, RefreshCw, X,
+  CheckCircle2, AlertCircle, Lock
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { USERNAME_PATTERN } from "@/lib/validation"
@@ -49,7 +49,6 @@ export default function PlayersPage() {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [isLoadingPlayers, setIsLoadingPlayers] = React.useState(true)
   const params = useParams()
-  const router = useRouter()
   const urlSlug = Array.isArray(params?.slug) ? params.slug[0] : (params?.slug || '')
 
   const [usernameInput, setUsernameInput] = React.useState('')

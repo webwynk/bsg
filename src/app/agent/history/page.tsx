@@ -48,8 +48,7 @@ export default function HistoryPage() {
   const itemsPerPage = 10
   const [countdown, setCountdown] = React.useState(60)
 
-  const loadHistory = React.useCallback((isInitial = false) => {
-    if (isInitial) setIsLoading(true)
+  const loadHistory = React.useCallback(() => {
     getAgentTransactionHistoryAction().then((res) => {
       setIsLoading(false)
       setLoadError(res.error)
@@ -66,12 +65,12 @@ export default function HistoryPage() {
   const handleManualRefresh = () => {
     setIsRefreshing(true)
     setCountdown(60)
-    loadHistory(false)
+    loadHistory() // manual: isLoading already false by now
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
   React.useEffect(() => {
-    loadHistory(true)
+    loadHistory() // initial: isLoading already starts true
 
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
@@ -79,7 +78,7 @@ export default function HistoryPage() {
 
     const dataInterval = setInterval(() => {
       setCountdown(60)
-      loadHistory(false)
+      loadHistory() // silent auto-refresh: isLoading already false by now
     }, 60000)
 
     return () => {
@@ -300,7 +299,7 @@ export default function HistoryPage() {
               <select
                 value={typeFilter}
                 onChange={(e) => {
-                  setTypeFilter(e.target.value as any)
+                  setTypeFilter(e.target.value as 'all' | 'deposit' | 'withdraw')
                   setCurrentPage(1)
                 }}
                 className="h-8 px-2 rounded-lg border border-border bg-background text-foreground text-xs font-semibold focus:outline-none cursor-pointer"
@@ -322,7 +321,7 @@ export default function HistoryPage() {
                 <button
                   key={btn.value}
                   onClick={() => {
-                    setDatePreset(btn.value as any)
+                    setDatePreset(btn.value as 'all' | 'today' | 'yesterday' | '7days' | '30days')
                     setCurrentPage(1)
                   }}
                   className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
