@@ -15,7 +15,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
@@ -23,9 +22,9 @@ import { Card } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { 
-  Plus, Search, ShieldCheck, Eye, RefreshCw, Loader2, Coins, ArrowUpRight, 
-  ArrowDownRight, Users, EyeOff, UserX, UserCheck, KeyRound, CheckCircle2, AlertCircle,
+import {
+  Plus, Search, ShieldCheck, Eye, RefreshCw, Loader2, Coins,
+  Users, EyeOff, UserCheck, CheckCircle2, AlertCircle,
   Filter, ArrowRight
 } from 'lucide-react'
 import { formatCurrency } from "@/lib/utils"
@@ -60,8 +59,7 @@ export default function AgentsPage() {
 
   const itemsPerPage = 10
 
-  const loadAgents = React.useCallback((isInitial: boolean = false) => {
-    if (isInitial) setIsLoadingAgents(true)
+  const loadAgents = React.useCallback(() => {
     getAgentsAction().then((res) => {
       setIsLoadingAgents(false)
       setLoadError(res.error)
@@ -75,7 +73,7 @@ export default function AgentsPage() {
   }, [])
 
   React.useEffect(() => {
-    loadAgents(true)
+    loadAgents() // initial: isLoadingAgents already starts true
 
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
@@ -83,7 +81,7 @@ export default function AgentsPage() {
 
     const dataInterval = setInterval(() => {
       setCountdown(60)
-      loadAgents(false)
+      loadAgents() // silent: isLoadingAgents already false by now
     }, 60000)
 
     return () => {
@@ -95,7 +93,7 @@ export default function AgentsPage() {
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
     setCountdown(60)
-    loadAgents(false)
+    loadAgents() // manual: isLoadingAgents already false by now
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
