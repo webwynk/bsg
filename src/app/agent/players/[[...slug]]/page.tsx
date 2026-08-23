@@ -570,8 +570,8 @@ export default function PlayersPage() {
 
       {/* Compact Grid Layout (3 cols left vs 9 cols right) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 min-h-[600px]">
-        {/* --- LEFT SIDE: COMPACT PLAYERS LIST (md:col-span-3) --- */}
-        <div className={`md:col-span-3 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
+        {/* --- LEFT SIDE: COMPACT PLAYERS LIST (md:col-span-2) --- */}
+        <div className={`md:col-span-2 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
           {/* Search Box */}
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
@@ -658,8 +658,8 @@ export default function PlayersPage() {
           </div>
         </div>
 
-        {/* --- RIGHT SIDE: MAIN PLAYER DETAILS & HISTORY (md:col-span-9) --- */}
-        <div className={`md:col-span-9 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
+        {/* --- RIGHT SIDE: MAIN PLAYER DETAILS & HISTORY (md:col-span-10) --- */}
+        <div className={`md:col-span-10 space-y-3 ${showMobileDetail ? 'block' : 'hidden md:block'}`}>
           {selectedPlayer ? (
             <div className="space-y-3">
               {/* Selected Player Header Card (ULTRA COMPACT) */}
