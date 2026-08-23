@@ -751,11 +751,11 @@ export default function AgentDetailPage({ params }: Props) {
         <div className={`md:col-span-2 space-y-2.5 ${showMobileDetail ? 'hidden md:block' : 'block'}`}>
           <div className="p-3 bg-card border border-border/80 rounded-2xl shadow-sm space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center space-x-1.5">
-                <Users className="h-3.5 w-3.5 text-primary" />
-                <span>Agent Players</span>
+              <h3 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center space-x-1.5 whitespace-nowrap">
+                <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>Players</span>
               </h3>
-              <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
+              <span className="inline-flex items-center px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20 shrink-0 whitespace-nowrap">
                 {players.length} total
               </span>
             </div>
