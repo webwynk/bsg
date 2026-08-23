@@ -212,12 +212,17 @@ export default function PlayersPage() {
   // Stable ref — tracks selected player ID without being a useCallback dependency
   const selectedPlayerIdRef = React.useRef<string | null>(null)
 
-  const loadPlayers = React.useCallback((opts?: { silent?: boolean; reloadHistory?: boolean }) => {
-    const silent = opts?.silent ?? false
+  // Housekeeping #87 fix: no longer takes a "show the refresh spinner" flag
+  // -- that branch was genuinely live (unlike the equivalent finding on
+  // other pages), so removing it isn't a no-op: it moves the decision of
+  // whether to show the spinner out to each caller instead. Per user
+  // decision, the mount effect below no longer shows the spinner (matching
+  // every other page's initial-load behavior) -- the 6 other call sites all
+  // explicitly set it themselves now, preserving their exact prior behavior.
+  const loadPlayers = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
-    if (!silent) setIsRefreshing(true)
     getPlayersAction().then((res) => {
-      if (!silent) setIsRefreshing(false)
+      setIsRefreshing(false)
       setIsLoadingPlayers(false)
       setLoadError(res.error)
       if (!res.error) {
@@ -246,7 +251,7 @@ export default function PlayersPage() {
         }
       }
     }).catch((e) => {
-      if (!silent) setIsRefreshing(false)
+      setIsRefreshing(false)
       setIsLoadingPlayers(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load players.')
     })
@@ -263,7 +268,7 @@ export default function PlayersPage() {
     // 10s data interval — silent, reloads list AND history for selected player
     const dataInterval = setInterval(() => {
       setCountdown(10)
-      loadPlayers({ silent: true, reloadHistory: true })
+      loadPlayers({ reloadHistory: true })
     }, 10000)
 
     return () => {
@@ -274,6 +279,7 @@ export default function PlayersPage() {
 
   const handleManualRefresh = async () => {
     setCountdown(10)
+    setIsRefreshing(true)
     loadPlayers({ reloadHistory: true })
   }
 
@@ -316,6 +322,7 @@ export default function PlayersPage() {
       setErrorMessage(res.error)
     } else {
       setSuccessMessage(`Player "@${username}" registered successfully!`)
+      setIsRefreshing(true)
       loadPlayers({ reloadHistory: true })
       setTimeout(() => {
         setIsOpen(false)
@@ -342,6 +349,7 @@ export default function PlayersPage() {
       setTransferError(res.error)
     } else {
       setTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${formatCurrency(amountNum)} Coins for @${selectedPlayer.username}!`)
+      setIsRefreshing(true)
       loadPlayers({ reloadHistory: true })
       setTimeout(() => {
         setActiveTransferModal(null)
@@ -369,6 +377,7 @@ export default function PlayersPage() {
       // silently if it's ever hit some other way.
       setToggleStatusError(res.error)
     } else {
+      setIsRefreshing(true)
       loadPlayers({ reloadHistory: true })
     }
   }
@@ -838,7 +847,7 @@ export default function PlayersPage() {
                     playerId={selectedPlayer.id}
                     playerName={selectedPlayer.full_name}
                     playerUsername={selectedPlayer.username}
-                    onSuccess={() => loadPlayers({ silent: true })}
+                    onSuccess={() => loadPlayers()}
                     trigger={
                       <button className="w-full h-8 border border-primary/40 text-primary hover:bg-primary/10 cursor-pointer text-[11px] font-extrabold rounded-lg flex items-center justify-center bg-transparent">
                         <KeyRound className="mr-1 h-3.5 w-3.5" /> Password

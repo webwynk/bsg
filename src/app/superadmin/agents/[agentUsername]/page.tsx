@@ -227,10 +227,14 @@ export default function AgentDetailPage({ params }: Props) {
     })
   }, [])
 
-  const loadAgentDetails = React.useCallback((opts?: { showIndicator?: boolean; reloadHistory?: boolean }) => {
-    const showIndicator = opts?.showIndicator ?? false
+  // Housekeeping #87 fix: no longer takes a "show the refresh spinner" flag
+  // -- that branch was never true from any of the 3 effect-triggered call
+  // sites below (all passed false), but its mere presence meant any direct
+  // call from an effect got flagged (react-hooks/set-state-in-effect), since
+  // React can't statically prove which branch runs. Spinner control now
+  // lives only in handleManualRefresh, the one place it's actually used.
+  const loadAgentDetails = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
-    if (showIndicator) setIsRefreshing(true)
     Promise.all([
       getAgentDetailAction(agentUsername),
       getAgentProfitReportAction({
@@ -240,7 +244,7 @@ export default function AgentDetailPage({ params }: Props) {
         filterDate: filterDateRef.current
       })
     ]).then(([res, resProf]) => {
-      if (showIndicator) setIsRefreshing(false)
+      setIsRefreshing(false)
       const errors = [res.error, resProf.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (res.agent) setAgentInfo(res.agent)
@@ -271,7 +275,7 @@ export default function AgentDetailPage({ params }: Props) {
         setProfitPlayers(resProf.players)
       }
     }).catch((e) => {
-      if (showIndicator) setIsRefreshing(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load agent details.')
     })
   }, [agentUsername, loadPlayerHistory]) // Stable — agentUsername from params, loadPlayerHistory has [] deps
@@ -286,11 +290,11 @@ export default function AgentDetailPage({ params }: Props) {
       return
     }
     // Re-fetch profit report whenever user changes date/scope filter
-    loadAgentDetails({ showIndicator: false, reloadHistory: false })
+    loadAgentDetails({ reloadHistory: false })
   }, [filterDate, statsScope, loadAgentDetails])
 
   React.useEffect(() => {
-    loadAgentDetails({ showIndicator: false, reloadHistory: true }) // initial: full load
+    loadAgentDetails({ reloadHistory: true }) // initial: full load
 
     // 1s countdown tick — UI only, no DB fetch
     const countdownTick = setInterval(() => {
@@ -300,7 +304,7 @@ export default function AgentDetailPage({ params }: Props) {
     // 90s data interval — silent, balances + player list only (no history cascade)
     const dataInterval = setInterval(() => {
       setCountdown(90)
-      loadAgentDetails({ showIndicator: false })
+      loadAgentDetails()
     }, 90000)
 
     return () => {
@@ -311,7 +315,8 @@ export default function AgentDetailPage({ params }: Props) {
 
   const handleManualRefresh = async () => {
     setCountdown(90)
-    loadAgentDetails({ showIndicator: true, reloadHistory: true })
+    setIsRefreshing(true)
+    loadAgentDetails({ reloadHistory: true })
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
@@ -339,7 +344,7 @@ export default function AgentDetailPage({ params }: Props) {
     setIsTogglingStatus(false)
     if (res.success) {
       setAgentInfo({ ...agentInfo, is_active: !agentInfo.is_active, auto_locked_at: null })
-      loadAgentDetails({ showIndicator: false, reloadHistory: false })
+      loadAgentDetails({ reloadHistory: false })
     } else if (res.error) {
       // Surfaces the auto-lock guard's "reset password instead" message --
       // previously this action could never fail, so there was nowhere for an
@@ -386,7 +391,7 @@ export default function AgentDetailPage({ params }: Props) {
       setTransferError(res.error)
     } else {
       setTransferSuccess(`Successfully ${type === 'deposit' ? 'deposited' : 'withdrawn'} ${formatCurrency(amountNum)} Coins for @${agentInfo?.username || 'agent'}!`)
-      loadAgentDetails({ showIndicator: false, reloadHistory: false })
+      loadAgentDetails({ reloadHistory: false })
       setTimeout(() => {
         setActiveTransferModal(null)
         setTransferAmount('')
