@@ -365,7 +365,7 @@ export async function getLatestGameDrawsAction(): Promise<{
       return {
         round_id: r.id,
         round_number: Number(r.round_number),
-        hand_id: `...${String(r.id).slice(-8)}`,
+        hand_id: String(r.id),
         red: Number(r.red), green: Number(r.green), black: Number(r.black),
         result: `${r.red}${r.green}${r.black}`,
         total_stake: stake,

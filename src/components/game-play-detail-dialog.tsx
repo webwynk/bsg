@@ -110,7 +110,7 @@ export function GamePlayDetailDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger render={trigger} />
       <DialogContent
-        className="sm:max-w-[540px] w-[calc(100%-1.5rem)] max-h-[90vh] overflow-y-auto rounded-2xl p-0 border-0 shadow-2xl"
+        className="w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] sm:max-w-[640px] lg:max-w-[1200px] max-h-[90vh] overflow-y-auto rounded-2xl p-0 border-0 shadow-2xl"
         style={{ background: '#ffffff', color: '#1e293b' }}
       >
         {/* Gradient accent bar */}
@@ -186,7 +186,7 @@ export function GamePlayDetailDialog({
 
           {/* Stats grid: Result · Bet · Win · Status */}
           <div
-            className="grid grid-cols-4 gap-px rounded-lg overflow-hidden"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-lg overflow-hidden"
             style={{ background: '#e2e8f0' }}
           >
             {/* Result */}
@@ -348,7 +348,7 @@ function PicksSection({
                 key={num}
                 className="flex flex-col rounded-lg overflow-hidden"
                 style={{
-                  minWidth: pad === 1 ? '40px' : pad === 2 ? '46px' : '52px',
+                  minWidth: pad === 1 ? '48px' : pad === 2 ? '56px' : '64px',
                   boxShadow: winning
                     ? '0 0 8px rgba(16,185,129,0.3), 0 1px 3px rgba(0,0,0,0.08)'
                     : '0 1px 3px rgba(0,0,0,0.06)',
@@ -358,7 +358,7 @@ function PicksSection({
                 <div
                   className="flex items-center justify-center px-1.5 py-1 font-black font-mono"
                   style={{
-                    fontSize: pad === 3 ? '11px' : '13px',
+                    fontSize: pad === 3 ? '14px' : '18px',
                     background: winning
                       ? 'linear-gradient(135deg, #ecfdf5, #d1fae5)'
                       : '#f8fafc',
@@ -368,7 +368,7 @@ function PicksSection({
                   {display}
                 </div>
                 <div
-                  className="flex items-center justify-center px-1 py-0.5 text-[9px] font-bold font-mono"
+                  className="flex items-center justify-center px-1.5 py-0.5 text-[10px] font-black font-mono"
                   style={{
                     background: winning ? '#10b981' : '#ef4444',
                     color: '#ffffff',

@@ -611,9 +611,9 @@ export async function getPlayerDetailHistoryAction(playerIdentifier: string): Pr
       const payout = Number(b.total_payout ?? 0)
 
       return {
-        // Canonical Hand ID: last 8 characters of the round UUID, identical to
-        // what the game app shows the player.
-        hand_id: `...${String(b.round_id).slice(-8)}`,
+        // Full round UUID as Hand ID — displayed in full in the dashboard
+        // detail popup per explicit user requirement.
+        hand_id: String(b.round_id),
         round_number: Number(round.round_number),
         mode: modes.join(' + ') || 'TRIPLE CHANCE',
         selections: parts.join(' | ') || 'Multi-board bet',
