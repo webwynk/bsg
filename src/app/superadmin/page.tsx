@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Activity, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Clock } from 'lucide-react'
+import { Users, Coins, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Clock } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,6 @@ import { formatCurrency } from '@/lib/utils'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
-  const [totalCoins, setTotalCoins] = React.useState(0)
   const [todayDeposited, setTodayDeposited] = React.useState(0)
   const [todayWithdrawn, setTodayWithdrawn] = React.useState(0)
   const [activeAgents, setActiveAgents] = React.useState(0)
@@ -68,10 +67,7 @@ export default function SuperAdminDashboard() {
   const [logPage, setLogPage] = React.useState(1)
   const logsPerPage = 4
 
-  const fetchMetrics = (isInitial = false) => {
-    if (isInitial) {
-      setIsLoadingMetrics(true)
-    }
+  const fetchMetrics = () => {
     Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
@@ -81,7 +77,6 @@ export default function SuperAdminDashboard() {
       const errors = [resMetrics.error, resRtp.error, resLogs.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (resMetrics && !resMetrics.error) {
-        setTotalCoins(resMetrics.total_coins || 0)
         setTodayDeposited(resMetrics.today_deposited || 0)
         setTodayWithdrawn(resMetrics.today_withdrawn || 0)
         setActiveAgents(resMetrics.active_agents || 0)
@@ -112,7 +107,7 @@ export default function SuperAdminDashboard() {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    fetchMetrics(false)
+    fetchMetrics() // isLoadingMetrics already false by now
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
@@ -125,13 +120,13 @@ export default function SuperAdminDashboard() {
     if (res.success) {
       setRtpValue(valToApply)
       setRtpSuccess(`RTP updated to ${valToApply}%`)
-      fetchMetrics(false)
+      fetchMetrics() // isLoadingMetrics already false by now
       setTimeout(() => setRtpSuccess(null), 2500)
     }
   }
 
   React.useEffect(() => {
-    fetchMetrics(true)
+    fetchMetrics() // initial: isLoadingMetrics already starts true
 
     const countdownTick = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
@@ -139,7 +134,7 @@ export default function SuperAdminDashboard() {
 
     const autoPoll = setInterval(() => {
       setCountdown(60)
-      fetchMetrics(false)
+      fetchMetrics() // silent: isLoadingMetrics already false by now
     }, 60000)
 
     return () => {
