@@ -252,7 +252,7 @@ export function GamePlayDetailDialog({
           </div>
 
           {/* 3. Picks Breakdown Sections (Single, Double, Triple) */}
-          <div className="space-y-5 pt-2">
+          <div className="space-y-7 pt-3">
             <PicksSection
               title="SINGLE"
               entries={singleEntries}
@@ -329,18 +329,22 @@ function PicksSection({
 }) {
   return (
     <div>
-      {/* Section title with left accent bar and bet count */}
-      <div className="flex items-center gap-2 mb-2.5">
+      {/* Section title with left accent bar and highlighted bet count */}
+      <div className="flex items-center gap-2.5 mb-3.5">
         <div
-          className="w-1 h-3.5 rounded-full"
+          className="w-1.5 h-4 sm:h-4.5 rounded-full"
           style={{ background: 'linear-gradient(180deg, #6366f1, #a855f7)' }}
         />
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+        <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-800">
           {title}
         </h3>
-        {entries.length > 0 && (
-          <span className="text-[10px] font-extrabold font-mono px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+        {entries.length > 0 ? (
+          <span className="text-[11px] sm:text-xs font-black font-mono px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/90 shadow-2xs">
             {entries.length} {entries.length === 1 ? 'bet' : 'bets'}
+          </span>
+        ) : (
+          <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">
+            0 bets
           </span>
         )}
       </div>
