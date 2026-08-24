@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction } from '../actions'
+import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
 import { formatCurrency } from '@/lib/utils'
 import { ErrorBanner } from '@/components/error-banner'
 import { 
@@ -77,6 +78,16 @@ export default function SuperAdminLiveGamePage() {
   // Issue #15: page-load error surfaced to the user instead of silently
   // leaving latestDraws/activeRound stale on a backend failure.
   const [loadError, setLoadError] = useState<string | null>(null)
+  const isLive = useLiveConnectionStatus()
+  // Client timestamp of the last time activeRound was actually fetched --
+  // lets the countdown below interpolate smoothly between fetches using the
+  // existing nowTime clock (no extra network calls), rather than freezing at
+  // whatever seconds_into said at fetch time until the next push/fallback.
+  // State, not a ref -- react-hooks/refs (this project's lint config)
+  // disallows reading a ref's .current during render, since a ref change
+  // doesn't itself trigger a re-render; nowTime already re-renders this
+  // component every second regardless, so state costs nothing extra here.
+  const [activeRoundFetchedAt, setActiveRoundFetchedAt] = useState<number>(0)
 
   // Table search & filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -107,6 +118,7 @@ export default function SuperAdminLiveGamePage() {
       if (!res.error) {
         setLatestDraws(res.draws)
         setActiveRound(res.active_round)
+        setActiveRoundFetchedAt(Date.now())
       }
     }).catch((e) => {
       setIsLoading(false)
@@ -121,12 +133,19 @@ export default function SuperAdminLiveGamePage() {
     loadDraws()
   }
 
-  // Initial load + 5-second background auto-polling
+  // Issue #91 Phase 4: replaces the old 5s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in superadmin/layout.tsx) and changes the instant a round row
+  // changes -- a new round starting, digits being revealed, or a round
+  // settling -- usually well under a second, plus once every 90s as a
+  // fallback. Scoped to just 'rounds', not 'bets'/'coin_ledger' -- nothing
+  // this page shows changes from those tables that isn't already implied by
+  // a rounds change (a bet on the still-open active round doesn't affect
+  // anything rendered here until that round's own row changes).
+  const liveTick = useLiveVersion(['rounds'])
   useEffect(() => {
     loadDraws()
-    const pollInterval = setInterval(() => loadDraws(), 5000)
-    return () => clearInterval(pollInterval)
-  }, [loadDraws])
+  }, [liveTick, loadDraws])
 
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {
@@ -168,9 +187,11 @@ export default function SuperAdminLiveGamePage() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">Live Game Telemetry</h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Sync
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${
+                isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+                {isLive ? 'Live Sync' : 'Connecting…'}
               </span>
             </div>
             <p className="text-xs text-muted-foreground font-semibold mt-0.5">
@@ -180,9 +201,6 @@ export default function SuperAdminLiveGamePage() {
         </div>
 
         <div className="flex items-center space-x-2 self-end sm:self-center">
-          <span className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-2.5 py-1 rounded-lg border border-border/60">
-            Auto-Sync (5s)
-          </span>
           <button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
@@ -248,7 +266,16 @@ export default function SuperAdminLiveGamePage() {
               // read anywhere on this page -- reading them directly can
               // never drift out of sync with game_config, however
               // draw_at_second is configured.
-              const secondsUntilDraw = Math.max(0, activeRound.draw_at_second - activeRound.seconds_into)
+              // Ticks smoothly every second between real fetches, using the
+              // existing local nowTime clock -- interpolates from the
+              // seconds_into value captured at the last actual fetch instead
+              // of freezing until the next push/fallback event. Falls back to
+              // the raw (non-interpolated) value for the brief window before
+              // both clocks have their first real reading.
+              const secondsIntoNow = activeRoundFetchedAt > 0 && nowTime > 0
+                ? activeRound.seconds_into + (nowTime - activeRoundFetchedAt) / 1000
+                : activeRound.seconds_into
+              const secondsUntilDraw = Math.max(0, Math.round(activeRound.draw_at_second - secondsIntoNow))
               return (
                 <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-950/20 via-card to-background border border-amber-500/40 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between flex-wrap gap-2">

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { AgentNotificationsProvider, useAgentNotifications } from '@/components/agent-notifications-provider'
+import { LiveDataProvider } from '@/components/live-data-provider'
 import { Wallet, Users, History, LogOut, ShieldCheck, TrendingUp, Bell } from 'lucide-react'
 
 /** Small red count pill, capped at "9+" -- same treatment on both the
@@ -27,9 +28,11 @@ export default function AgentLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AgentNotificationsProvider>
-      <AgentLayoutShell pathname={pathname}>{children}</AgentLayoutShell>
-    </AgentNotificationsProvider>
+    <LiveDataProvider>
+      <AgentNotificationsProvider>
+        <AgentLayoutShell pathname={pathname}>{children}</AgentLayoutShell>
+      </AgentNotificationsProvider>
+    </LiveDataProvider>
   )
 }
 

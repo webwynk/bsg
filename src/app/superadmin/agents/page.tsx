@@ -33,6 +33,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { createAgentAction, getAgentsAction } from './actions'
 import { playerStatus } from '@/lib/player-status'
+import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
 
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; auto_locked_at: string | null; player_count: number }>>([])
@@ -41,7 +42,7 @@ export default function AgentsPage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(60)
+  const isLive = useLiveConnectionStatus()
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Temporary Block' | 'Blocked'>('all')
@@ -72,27 +73,19 @@ export default function AgentsPage() {
     })
   }, [])
 
+  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in superadmin/layout.tsx) and changes the instant any agent/player
+  // profile row changes, plus once every 90s as a fallback. Matches
+  // getAgentsAction's actual query scope (profiles only), re-verified by
+  // reading the live action body.
+  const liveTick = useLiveVersion(['profiles'])
   React.useEffect(() => {
-    loadAgents() // initial: isLoadingAgents already starts true
-
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
-    }, 1000)
-
-    const dataInterval = setInterval(() => {
-      setCountdown(60)
-      loadAgents() // silent: isLoadingAgents already false by now
-    }, 60000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(dataInterval)
-    }
-  }, [loadAgents])
+    loadAgents()
+  }, [liveTick, loadAgents])
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    setCountdown(60)
     loadAgents() // manual: isLoadingAgents already false by now
     setTimeout(() => setIsRefreshing(false), 600)
   }
@@ -167,9 +160,11 @@ export default function AgentsPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="flex-1 sm:flex-none h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

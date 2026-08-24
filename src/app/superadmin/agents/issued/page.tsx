@@ -21,6 +21,7 @@ import { pickedDayKey } from "@/lib/date-range"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentsAction, getAgentCoinLedgerAction, getAgentCoinLedgerBreakdownAction, exportAgentCoinLedgerAction } from '../actions'
+import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
 
 export default function CoinsIssuedPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string }>>([])
@@ -58,7 +59,7 @@ export default function CoinsIssuedPage() {
   const [totalItems, setTotalItems] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(60)
+  const isLive = useLiveConnectionStatus()
 
   // Stable refs — avoids useCallback dep on filter state (interval leak fix)
   const selectedAgentIdRef = React.useRef('all')
@@ -234,27 +235,28 @@ export default function CoinsIssuedPage() {
     loadData(false)
   }, [selectedAgentId, selectedType, filterDate, datePreset, currentPage, searchTxQuery, loadData])
 
+  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in superadmin/layout.tsx) and changes the instant a coin_ledger row
+  // changes, plus once every 90s as a fallback. Matches getAgentCoinLedgerAction's
+  // actual query scope (coin_ledger; profiles is only touched for resolving a
+  // free-text search term, not a data dependency worth tracking live).
+  //
+  // loadData's isInitial flag needs a real "have I ever loaded before" check,
+  // not liveTick's own value -- LiveDataProvider is mounted once per portal
+  // and its counters persist across client-side navigation between pages, so
+  // liveTick can already be nonzero the moment this page mounts (e.g. arriving
+  // here from another page after something changed elsewhere). A ref, same
+  // pattern as isInitialMountRef above, tracks this correctly regardless.
+  const hasLoadedOnceRef = React.useRef(false)
+  const liveTick = useLiveVersion(['coin_ledger'])
   React.useEffect(() => {
-    loadData(true)
-
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
-    }, 1000)
-
-    const dataInterval = setInterval(() => {
-      setCountdown(60)
-      loadData(false) // silent: no skeleton
-    }, 60000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(dataInterval)
-    }
-  }, [loadData])
+    loadData(!hasLoadedOnceRef.current)
+    hasLoadedOnceRef.current = true
+  }, [liveTick, loadData])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    setCountdown(60)
     loadData(false)
     setTimeout(() => setIsRefreshing(false), 600)
   }
@@ -291,9 +293,11 @@ export default function CoinsIssuedPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button
             onClick={() => setShowBreakdown(v => !v)}

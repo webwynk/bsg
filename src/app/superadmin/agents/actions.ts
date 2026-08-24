@@ -103,17 +103,26 @@ export async function getAgentDetailAction(agentIdentifier: string) {
     if (!agentId) return { agent: null, players: [], error: 'Agent not found.' }
 
     const db = createAdminClient()
-    const [agentRes, playersRes, sessionsRes] = await Promise.all([
+    const [agentRes, playersRes] = await Promise.all([
       db.from('profiles')
         .select('id, username, full_name, coin_balance, is_active, auto_locked_at, created_at')
         .eq('id', agentId).single(),
       db.from('profiles')
         .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
         .eq('agent_id', agentId).order('username'),
-      db.from('active_sessions').select('user_id, last_seen_at'),
     ])
     if (agentRes.error) throw new Error(agentRes.error.message)
     if (playersRes.error) throw new Error(playersRes.error.message)
+
+    // Scoped to this agent's own players, not a full-table scan (was
+    // previously unfiltered -- fetched every session on the platform just to
+    // compute a handful of online/offline dots). Player IDs aren't known
+    // until playersRes resolves, so this runs after the Promise.all above
+    // rather than inside it.
+    const playerIds = (playersRes.data ?? []).map(p => p.id)
+    const sessionsRes = playerIds.length > 0
+      ? await db.from('active_sessions').select('user_id, last_seen_at').in('user_id', playerIds)
+      : { data: [] as { user_id: string; last_seen_at: string }[] }
 
     const seenAt = new Map((sessionsRes.data ?? []).map(s => [s.user_id, new Date(s.last_seen_at).getTime()]))
     const now = Date.now()

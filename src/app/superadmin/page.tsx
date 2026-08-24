@@ -11,6 +11,7 @@ import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
 import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
+import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
@@ -59,7 +60,7 @@ export default function SuperAdminDashboard() {
   const [roundSecondsInto, setRoundSecondsInto] = React.useState<number | null>(null)
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
-  const [countdown, setCountdown] = React.useState(60)
+  const isLive = useLiveConnectionStatus()
 
   // Log Filter, Search & Pagination states
   const [logCategory, setLogCategory] = React.useState<'ALL' | 'System' | 'Transaction' | 'Security'>('ALL')
@@ -132,23 +133,24 @@ export default function SuperAdminDashboard() {
     }
   }
 
+  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in superadmin/layout.tsx) and changes the instant a profile,
+  // bet, or coin-ledger row changes anywhere on the platform, plus once
+  // every 90s as a fallback. Matches getSystemOverviewMetricsAction's actual
+  // query scope (profiles/coin_ledger/bets), re-verified by reading the live
+  // action body. Note: getAuditLogsAction reads audit_log, which is not in
+  // the Realtime publication (out of Issue #91's original 4-table scope) --
+  // the audit log list on this page still only refreshes on the 90s
+  // fallback or a manual refresh, not on its own real-time events.
+  // fetchMetrics is intentionally not in this effect's deps (same as the
+  // code it replaces) -- it's a plain function, not memoized with
+  // useCallback, so a fresh identity every render would otherwise be a
+  // dependency-array footgun; eslint doesn't flag the omission here.
+  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
   React.useEffect(() => {
-    fetchMetrics() // initial: isLoadingMetrics already starts true
-
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
-    }, 1000)
-
-    const autoPoll = setInterval(() => {
-      setCountdown(60)
-      fetchMetrics() // silent: isLoadingMetrics already false by now
-    }, 60000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(autoPoll)
-    }
-  }, [])
+    fetchMetrics()
+  }, [liveTick])
 
   // Separate, faster poll dedicated to the RTP-lock countdown -- 60s (the
   // metrics poll above) is far too coarse to reliably catch an 11-second
@@ -215,9 +217,11 @@ export default function SuperAdminDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button 
             onClick={handleManualRefresh} 

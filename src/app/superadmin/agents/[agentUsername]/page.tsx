@@ -34,6 +34,7 @@ import { ErrorBanner } from "@/components/error-banner"
 import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
+import { useLiveVersion, useLiveConnectionStatus } from "@/components/live-data-provider"
 import { getAgentDetailAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
 import { getAgentProfitReportAction } from '@/app/agent/profit/actions'
@@ -71,7 +72,7 @@ export default function AgentDetailPage({ params }: Props) {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(90)
+  const isLive = useLiveConnectionStatus()
   // Stable refs — avoid interval leaks caused by state deps in useCallback
   const selectedPlayerIdRef = React.useRef<string | null>(null)
   // Issue #90 fix: stores the resolved IST day key (e.g. "2026-08-15"), not a
@@ -213,11 +214,23 @@ export default function AgentDetailPage({ params }: Props) {
     return filteredPoints.slice(start, start + itemsPerPage)
   }, [filteredPoints, pointsPage])
 
+  // Tracks which player's history is currently loaded on screen. Reset
+  // (page 1 + loading skeleton) only fires when this call is for a
+  // *different* player than what's already loaded -- a genuine switch, not a
+  // background refresh of the same player's data. See the identical fix on
+  // agent/players/[[...slug]]/page.tsx (Issue #91 Phase 2) for the full
+  // rationale -- previously reset unconditionally on every call.
+  const loadedHistoryPlayerIdRef = React.useRef<string | null>(null)
+
   const loadPlayerHistory = React.useCallback((playerId: string) => {
-    setIsLoadingHistory(true)
-    setGamesPage(1)
-    setPointsPage(1)
+    const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
+    if (isSwitchingPlayer) {
+      setIsLoadingHistory(true)
+      setGamesPage(1)
+      setPointsPage(1)
+    }
     getPlayerDetailHistoryAction(playerId).then((res) => {
+      loadedHistoryPlayerIdRef.current = playerId
       setIsLoadingHistory(false)
       setLoadError(res.error)
       if (!res.error) {
@@ -264,7 +277,11 @@ export default function AgentDetailPage({ params }: Props) {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
-            // Only reload history on explicit request, NOT on silent auto-tick
+            // Only reload history when the caller asks for it -- the
+            // filter/scope-change effect below deliberately passes false
+            // (a date/scope change shouldn't refetch raw history, only
+            // recompute the profit report for the new filter); the live-sync
+            // effect and manual refresh both pass true.
             if (reloadHistory) loadPlayerHistory(updated.id)
           }
         } else if (res.players.length > 0) {
@@ -296,28 +313,27 @@ export default function AgentDetailPage({ params }: Props) {
     loadAgentDetails({ reloadHistory: false })
   }, [filterDate, statsScope, loadAgentDetails])
 
+  // Issue #91 Phase 3: replaces the old 90s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in superadmin/layout.tsx) and changes the instant a bet, balance,
+  // or player row changes for this agent's roster -- usually well under a
+  // second -- plus once every 90s as a fallback in case the live connection
+  // ever silently drops. This effect fires once on mount (the initial load)
+  // and again every time liveTick changes thereafter.
+  //
+  // Unlike the old 90s poll, this now cascades into a full history reload
+  // (reloadHistory: true) on every tick, not just balances/player list. The
+  // original design deliberately skipped history on the silent tick to limit
+  // poll cost -- but that cost concern mostly disappears once refetches only
+  // fire on a real event instead of a blind clock, so this now matches
+  // agent/players' Phase 2 behavior for full consistency between the agent
+  // and superadmin views of the same player.
+  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
   React.useEffect(() => {
-    loadAgentDetails({ reloadHistory: true }) // initial: full load
-
-    // 1s countdown tick — UI only, no DB fetch
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 90 : prev - 1))
-    }, 1000)
-
-    // 90s data interval — silent, balances + player list only (no history cascade)
-    const dataInterval = setInterval(() => {
-      setCountdown(90)
-      loadAgentDetails()
-    }, 90000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(dataInterval)
-    }
-  }, [loadAgentDetails])
+    loadAgentDetails({ reloadHistory: true })
+  }, [liveTick, loadAgentDetails])
 
   const handleManualRefresh = async () => {
-    setCountdown(90)
     setIsRefreshing(true)
     loadAgentDetails({ reloadHistory: true })
   }
@@ -437,9 +453,11 @@ export default function AgentDetailPage({ params }: Props) {
 
         {/* High-Contrast Quick Action Controls & Refresh Bar */}
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

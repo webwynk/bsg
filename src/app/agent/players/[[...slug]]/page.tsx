@@ -31,6 +31,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
+import { useLiveVersion, useLiveConnectionStatus } from "@/components/live-data-provider"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
 import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
 
@@ -193,11 +194,25 @@ export default function PlayersPage() {
   // which are each scoped to their own specific mutation.
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
+  // Tracks which player's history is currently loaded on screen. Reset
+  // (page 1 + loading skeleton) only fires when this call is for a
+  // *different* player than what's already loaded -- a genuine switch, not a
+  // background refresh of the same player's data. Previously reset
+  // unconditionally on every call, including the silent live-sync refresh
+  // and the manual refresh button, which meant an agent reading page 3 of a
+  // player's bet history got silently kicked back to page 1 on every refresh
+  // even though nothing about which player was selected had changed.
+  const loadedHistoryPlayerIdRef = React.useRef<string | null>(null)
+
   const loadPlayerHistory = React.useCallback((playerId: string) => {
-    setIsLoadingHistory(true)
-    setGamesPage(1)
-    setPointsPage(1)
+    const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
+    if (isSwitchingPlayer) {
+      setIsLoadingHistory(true)
+      setGamesPage(1)
+      setPointsPage(1)
+    }
     getPlayerDetailHistoryAction(playerId).then((res) => {
+      loadedHistoryPlayerIdRef.current = playerId
       setIsLoadingHistory(false)
       setLoadError(res.error)
       if (!res.error) {
@@ -211,7 +226,7 @@ export default function PlayersPage() {
   }, [])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(10)
+  const isLive = useLiveConnectionStatus()
   // Stable ref — tracks selected player ID without being a useCallback dependency
   const selectedPlayerIdRef = React.useRef<string | null>(null)
 
@@ -260,28 +275,20 @@ export default function PlayersPage() {
     })
   }, [loadPlayerHistory, urlSlug]) // Stable — no selectedPlayer?.id dep, no interval leak
 
+  // Issue #91 Phase 2: replaces the old 10s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in agent/layout.tsx) and changes the instant a bet, balance, or
+  // player row actually changes for this agent -- usually well under a
+  // second -- plus once every 90s as a fallback in case the live connection
+  // ever silently drops. This effect fires once on mount (the initial load)
+  // and again every time liveTick changes thereafter; no separate
+  // mount-only effect is needed.
+  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
   React.useEffect(() => {
-    loadPlayers({ reloadHistory: true }) // initial load: players + history
-
-    // 1s countdown tick — UI only, no DB fetch
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 10 : prev - 1))
-    }, 1000)
-
-    // 10s data interval — silent, reloads list AND history for selected player
-    const dataInterval = setInterval(() => {
-      setCountdown(10)
-      loadPlayers({ reloadHistory: true })
-    }, 10000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(dataInterval)
-    }
-  }, [loadPlayers])
+    loadPlayers({ reloadHistory: true })
+  }, [liveTick, loadPlayers])
 
   const handleManualRefresh = async () => {
-    setCountdown(10)
     setIsRefreshing(true)
     loadPlayers({ reloadHistory: true })
   }
@@ -413,9 +420,11 @@ export default function PlayersPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

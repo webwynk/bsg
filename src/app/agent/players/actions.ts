@@ -98,14 +98,22 @@ export async function getPlayersAction(
 
   try {
     const db = createAdminClient()
-    const [profilesRes, sessionsRes] = await Promise.all([
-      db.from('profiles')
-        .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
-        .eq('agent_id', agentId)
-        .order('username'),
-      db.from('active_sessions').select('user_id, last_seen_at'),
-    ])
+    const profilesRes = await db.from('profiles')
+      .select('id, username, full_name, coin_balance, is_active, auto_locked_at')
+      .eq('agent_id', agentId)
+      .order('username')
     if (profilesRes.error) throw new Error(profilesRes.error.message)
+
+    // Scoped to this agent's own players, not a full-table scan (was
+    // previously unfiltered -- fetched every session on the platform just to
+    // compute a handful of online/offline dots). Sequential rather than
+    // parallel with the profiles query since the player IDs to scope by
+    // aren't known until profiles resolves; active_sessions is small enough
+    // that this extra round-trip is inconsequential.
+    const playerIds = (profilesRes.data ?? []).map(p => p.id)
+    const sessionsRes = playerIds.length > 0
+      ? await db.from('active_sessions').select('user_id, last_seen_at').in('user_id', playerIds)
+      : { data: [] as { user_id: string; last_seen_at: string }[] }
 
     const seenAt = new Map((sessionsRes.data ?? []).map(s => [s.user_id, new Date(s.last_seen_at).getTime()]))
     const now = Date.now()

@@ -18,6 +18,7 @@ import { ArrowDownRight, ArrowUpRight, Check, History, RefreshCw, Search, Filter
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentTransactionHistoryAction } from '../actions'
+import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
 
 export default function HistoryPage() {
   const [agentBalance, setAgentBalance] = React.useState(0)
@@ -46,7 +47,7 @@ export default function HistoryPage() {
   const [datePreset, setDatePreset] = React.useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
 
   const itemsPerPage = 10
-  const [countdown, setCountdown] = React.useState(60)
+  const isLive = useLiveConnectionStatus()
 
   const loadHistory = React.useCallback(() => {
     getAgentTransactionHistoryAction().then((res) => {
@@ -64,28 +65,20 @@ export default function HistoryPage() {
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    setCountdown(60)
     loadHistory() // manual: isLoading already false by now
     setTimeout(() => setIsRefreshing(false), 600)
   }
 
+  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in agent/layout.tsx). Watches both coin_ledger (the transfer
+  // history itself) and profiles (getAgentTransactionHistoryAction also
+  // reads this agent's own coin_balance from there) -- changes the instant
+  // either changes, plus once every 90s as a fallback.
+  const liveTick = useLiveVersion(['profiles', 'coin_ledger'])
   React.useEffect(() => {
-    loadHistory() // initial: isLoading already starts true
-
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
-    }, 1000)
-
-    const dataInterval = setInterval(() => {
-      setCountdown(60)
-      loadHistory() // silent auto-refresh: isLoading already false by now
-    }, 60000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(dataInterval)
-    }
-  }, [loadHistory])
+    loadHistory()
+  }, [liveTick, loadHistory])
 
   const handleResetFilters = () => {
     setSearchQuery('')
@@ -170,9 +163,11 @@ export default function HistoryPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

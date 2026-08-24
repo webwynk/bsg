@@ -20,6 +20,7 @@ import { TrendingUp, Coins, Calendar as CalendarIcon, RefreshCw, Search, X, Acti
 import { formatCurrency } from '@/lib/utils'
 import { pickedDayKey } from '@/lib/date-range'
 import { getAgentProfitReportAction } from './actions'
+import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
 
 export default function AgentProfitPage() {
   const [summary, setSummary] = React.useState({
@@ -45,7 +46,7 @@ export default function AgentProfitPage() {
 
   const [isLoading, setIsLoading] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [countdown, setCountdown] = React.useState(60)
+  const isLive = useLiveConnectionStatus()
 
   // Stable refs — avoids useCallback dep on filter state (interval leak fix)
   const datePresetRef = React.useRef<'today' | '7days' | '30days' | 'lifetime'>('today')
@@ -102,27 +103,20 @@ export default function AgentProfitPage() {
     loadProfitReport() // filter/page change: isLoading already false by now
   }, [datePreset, filterDate, searchQuery, currentPage, loadProfitReport])
 
+  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
+  // from the single shared Realtime connection (LiveDataProvider, mounted
+  // once in agent/layout.tsx) and changes the instant a bet or player row
+  // changes for this agent's roster, plus once every 90s as a fallback.
+  // Fires once on mount (the initial load) and again on every subsequent
+  // change -- separate from the filter/page-change effect above, which
+  // handles its own re-fetch independently.
+  const liveTick = useLiveVersion(['profiles', 'bets'])
   React.useEffect(() => {
-    loadProfitReport() // initial: isLoading already starts true
-
-    const countdownTick = setInterval(() => {
-      setCountdown(prev => (prev <= 1 ? 60 : prev - 1))
-    }, 1000)
-
-    const dataInterval = setInterval(() => {
-      setCountdown(60)
-      loadProfitReport() // silent: isLoading already false by now
-    }, 60000)
-
-    return () => {
-      clearInterval(countdownTick)
-      clearInterval(dataInterval)
-    }
-  }, [loadProfitReport])
+    loadProfitReport()
+  }, [liveTick, loadProfitReport])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    setCountdown(60)
     loadProfitReport() // manual: isLoading already false by now
     setTimeout(() => setIsRefreshing(false), 600)
   }
@@ -161,9 +155,11 @@ export default function AgentProfitPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Auto-Sync ({countdown}s)
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
+            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
+            {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
           <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh
