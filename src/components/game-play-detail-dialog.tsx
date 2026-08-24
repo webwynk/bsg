@@ -176,43 +176,46 @@ export function GamePlayDetailDialog({
 
           {/* 2. Unified 4-in-1 KPI Ribbon (Result · Bet · Win · Status) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 rounded-xl bg-slate-50/90 border border-slate-200/80 divide-y lg:divide-y-0 lg:divide-x divide-slate-200/80 overflow-hidden shadow-2xs">
-            {/* 1. Result (Boxed 0-8-9) */}
-            <div className="flex flex-col items-center justify-center py-2 px-3">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
+            {/* 1. Result (Boxed Red - Green - Black) */}
+            <div className="flex flex-col items-center justify-center py-2.5 px-3">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
                 Result
               </span>
-              <div className="flex items-center gap-1">
-                <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                {/* 1st Digit: Red Wheel */}
+                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-red-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
                   {d1}
                 </span>
-                <span className="text-slate-400 font-bold text-xs">-</span>
-                <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
+                <span className="text-slate-400 font-black text-xs sm:text-sm">-</span>
+                {/* 2nd Digit: Green Wheel */}
+                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
                   {d2}
                 </span>
-                <span className="text-slate-400 font-bold text-xs">-</span>
-                <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
+                <span className="text-slate-400 font-black text-xs sm:text-sm">-</span>
+                {/* 3rd Digit: Black Wheel */}
+                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
                   {d3}
                 </span>
               </div>
             </div>
 
             {/* 2. Total Bet */}
-            <div className="flex flex-col items-center justify-center py-2 px-3">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
+            <div className="flex flex-col items-center justify-center py-2.5 px-3">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
                 Total Bet
               </span>
-              <span className="text-xs sm:text-sm font-black font-mono text-slate-900">
+              <span className="text-sm sm:text-base font-black font-mono text-slate-900">
                 {formatCurrency(spin.total_stake)}
               </span>
             </div>
 
             {/* 3. Total Win */}
-            <div className="flex flex-col items-center justify-center py-2 px-3 border-t lg:border-t-0">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
+            <div className="flex flex-col items-center justify-center py-2.5 px-3 border-t lg:border-t-0">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
                 Total Win
               </span>
               <span
-                className={`text-xs sm:text-sm font-black font-mono ${
+                className={`text-sm sm:text-base font-black font-mono ${
                   spin.total_payout > 0 ? 'text-emerald-600' : 'text-slate-400'
                 }`}
               >
@@ -221,19 +224,19 @@ export function GamePlayDetailDialog({
             </div>
 
             {/* 4. Status */}
-            <div className="flex flex-col items-center justify-center py-2 px-3 border-t lg:border-t-0">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
+            <div className="flex flex-col items-center justify-center py-2.5 px-3 border-t lg:border-t-0">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
                 Status
               </span>
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-black tracking-wide ${
                   spin.outcome === 'WON'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs'
-                    : 'bg-red-50 text-red-700 border border-red-200'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs'
+                    : 'bg-red-50 text-red-700 border border-red-300'
                 }`}
               >
                 <span
-                  className={`w-1.5 h-1.5 rounded-full ${
+                  className={`w-2 h-2 rounded-full ${
                     spin.outcome === 'WON' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                   }`}
                 />
