@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction } from '../actions'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 import { formatCurrency } from '@/lib/utils'
 import { ErrorBanner } from '@/components/error-banner'
 import { 
@@ -110,8 +111,11 @@ export default function SuperAdminLiveGamePage() {
   // presence meant any direct call from an effect got flagged, since React
   // can't statically prove which branch runs. Spinner control now lives
   // only in handleManualRefresh, the one place it's actually used.
+  const drawsRequest = useRequestGeneration()
   const loadDraws = useCallback(() => {
+    const token = drawsRequest.nextGeneration()
     getLatestGameDrawsAction().then((res) => {
+      if (!drawsRequest.isCurrent(token)) return
       setIsLoading(false)
       setIsRefreshing(false)
       setLoadError(res.error)
@@ -121,12 +125,13 @@ export default function SuperAdminLiveGamePage() {
         setActiveRoundFetchedAt(Date.now())
       }
     }).catch((e) => {
+      if (!drawsRequest.isCurrent(token)) return
       setIsLoading(false)
       setIsRefreshing(false)
       console.error('Error loading game draws:', e)
       setLoadError(e instanceof Error ? e.message : 'Could not load game draws.')
     })
-  }, [])
+  }, [drawsRequest])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)

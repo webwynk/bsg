@@ -21,6 +21,7 @@ import { formatCurrency } from '@/lib/utils'
 import { pickedDayKey } from '@/lib/date-range'
 import { getAgentProfitReportAction } from './actions'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentProfitPage() {
   const [summary, setSummary] = React.useState({
@@ -65,7 +66,9 @@ export default function AgentProfitPage() {
   // leaving summary/players/pagination stale on a backend failure.
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
+  const profitRequest = useRequestGeneration()
   const loadProfitReport = React.useCallback(() => {
+    const token = profitRequest.nextGeneration()
     getAgentProfitReportAction({
       datePreset: datePresetRef.current,
       // Issue #90 fix: send the exact day the user clicked (read back from the
@@ -76,7 +79,9 @@ export default function AgentProfitPage() {
       page: currentPageRef.current,
       limit: itemsPerPage
     }).then((res) => {
+      if (!profitRequest.isCurrent(token)) return
       setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(res.error)
       if (!res.error) {
         setSummary(res.summary)
@@ -85,10 +90,12 @@ export default function AgentProfitPage() {
         setTotalItems(res.total_items)
       }
     }).catch((e) => {
+      if (!profitRequest.isCurrent(token)) return
       setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load profit report.')
     })
-  }, []) // stable — reads filters from refs, not state
+  }, [profitRequest]) // reads filters from refs, not state -- only profitRequest as a dep
 
   // Sync refs + re-fetch on filter/page change
   React.useEffect(() => {
@@ -117,8 +124,7 @@ export default function AgentProfitPage() {
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadProfitReport() // manual: isLoading already false by now
-    setTimeout(() => setIsRefreshing(false), 600)
+    loadProfitReport() // manual: cleared by loadProfitReport's own completion
   }
 
   const handleResetFilters = () => {
@@ -161,7 +167,7 @@ export default function AgentProfitPage() {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>

@@ -35,6 +35,7 @@ import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
 import { useLiveVersion, useLiveConnectionStatus } from "@/components/live-data-provider"
+import { useRequestGeneration } from "@/hooks/use-request-generation"
 import { getAgentDetailAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
 import { getAgentProfitReportAction } from '@/app/agent/profit/actions'
@@ -73,6 +74,10 @@ export default function AgentDetailPage({ params }: Props) {
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const isLive = useLiveConnectionStatus()
+  // Guards loadAgentDetails against out-of-order responses -- this page has
+  // 3 independent triggers into it (live sync, filter/scope change, manual
+  // refresh), the most of any page audited.
+  const agentDetailsRequest = useRequestGeneration()
   // Stable refs — avoid interval leaks caused by state deps in useCallback
   const selectedPlayerIdRef = React.useRef<string | null>(null)
   // Issue #90 fix: stores the resolved IST day key (e.g. "2026-08-15"), not a
@@ -221,6 +226,9 @@ export default function AgentDetailPage({ params }: Props) {
   // agent/players/[[...slug]]/page.tsx (Issue #91 Phase 2) for the full
   // rationale -- previously reset unconditionally on every call.
   const loadedHistoryPlayerIdRef = React.useRef<string | null>(null)
+  // Guards against an older, slower response overwriting a newer one -- see
+  // the identical fix on agent/players/[[...slug]]/page.tsx.
+  const historyRequest = useRequestGeneration()
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
@@ -229,7 +237,9 @@ export default function AgentDetailPage({ params }: Props) {
       setGamesPage(1)
       setPointsPage(1)
     }
+    const token = historyRequest.nextGeneration()
     getPlayerDetailHistoryAction(playerId).then((res) => {
+      if (!historyRequest.isCurrent(token)) return
       loadedHistoryPlayerIdRef.current = playerId
       setIsLoadingHistory(false)
       setLoadError(res.error)
@@ -238,10 +248,11 @@ export default function AgentDetailPage({ params }: Props) {
         setPointsHistory(res.coin_movements)
       }
     }).catch((e) => {
+      if (!historyRequest.isCurrent(token)) return
       setIsLoadingHistory(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load player history.')
     })
-  }, [])
+  }, [historyRequest])
 
   // Housekeeping #87 fix: no longer takes a "show the refresh spinner" flag
   // -- that branch was never true from any of the 3 effect-triggered call
@@ -251,6 +262,7 @@ export default function AgentDetailPage({ params }: Props) {
   // lives only in handleManualRefresh, the one place it's actually used.
   const loadAgentDetails = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
+    const token = agentDetailsRequest.nextGeneration()
     Promise.all([
       getAgentDetailAction(agentUsername),
       getAgentProfitReportAction({
@@ -260,6 +272,7 @@ export default function AgentDetailPage({ params }: Props) {
         filterDate: filterDateRef.current
       })
     ]).then(([res, resProf]) => {
+      if (!agentDetailsRequest.isCurrent(token)) return
       setIsRefreshing(false)
       const errors = [res.error, resProf.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
@@ -295,10 +308,11 @@ export default function AgentDetailPage({ params }: Props) {
         setProfitPlayers(resProf.players)
       }
     }).catch((e) => {
+      if (!agentDetailsRequest.isCurrent(token)) return
       setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load agent details.')
     })
-  }, [agentUsername, loadPlayerHistory]) // Stable — agentUsername from params, loadPlayerHistory has [] deps
+  }, [agentUsername, loadPlayerHistory, agentDetailsRequest])
 
   // Keep filter refs in sync so stable loadAgentDetails always reads latest values
   React.useEffect(() => {
@@ -459,7 +473,7 @@ export default function AgentDetailPage({ params }: Props) {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
           {/* Deposit Modal */}

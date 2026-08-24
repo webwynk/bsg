@@ -22,6 +22,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentsAction, getAgentCoinLedgerAction, getAgentCoinLedgerBreakdownAction, exportAgentCoinLedgerAction } from '../actions'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function CoinsIssuedPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string }>>([])
@@ -140,9 +141,11 @@ export default function CoinsIssuedPage() {
     return { startDate, endDate }
   }, [])
 
+  const ledgerRequest = useRequestGeneration()
   const loadData = React.useCallback((isInitial: boolean = false) => {
     if (isInitial) setIsLoading(true)
     const { startDate, endDate } = computeDateRange()
+    const token = ledgerRequest.nextGeneration()
 
     getAgentCoinLedgerAction({
       agentId: selectedAgentIdRef.current,
@@ -153,7 +156,9 @@ export default function CoinsIssuedPage() {
       page: currentPageRef.current,
       limit: itemsPerPage
     }).then((res) => {
+      if (!ledgerRequest.isCurrent(token)) return
       setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(res.error)
       if (!res.error) {
         setTransactions(res.rows)
@@ -162,10 +167,12 @@ export default function CoinsIssuedPage() {
         setSummary(res.summary)
       }
     }).catch((e) => {
+      if (!ledgerRequest.isCurrent(token)) return
       setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load ledger.')
     })
-  }, [computeDateRange])
+  }, [computeDateRange, ledgerRequest])
 
   // Per-agent breakdown -- same filters as the table (minus the single-agent
   // filter, and minus pagination), fetched only while the panel is open so a
@@ -257,8 +264,7 @@ export default function CoinsIssuedPage() {
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadData(false)
-    setTimeout(() => setIsRefreshing(false), 600)
+    loadData(false) // cleared by loadData's own completion above
   }
 
   const handleResetFilters = () => {
@@ -316,7 +322,7 @@ export default function CoinsIssuedPage() {
           >
             <Download className={`mr-1.5 h-3.5 w-3.5 ${isExporting ? 'animate-pulse' : ''}`} /> {isExporting ? 'Exporting...' : 'Export CSV'}
           </Button>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>

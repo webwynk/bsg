@@ -34,6 +34,7 @@ import { ErrorBanner } from "@/components/error-banner"
 import { createAgentAction, getAgentsAction } from './actions'
 import { playerStatus } from '@/lib/player-status'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentsPage() {
   const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; auto_locked_at: string | null; player_count: number }>>([])
@@ -60,18 +61,24 @@ export default function AgentsPage() {
 
   const itemsPerPage = 10
 
+  const agentsRequest = useRequestGeneration()
   const loadAgents = React.useCallback(() => {
+    const token = agentsRequest.nextGeneration()
     getAgentsAction().then((res) => {
+      if (!agentsRequest.isCurrent(token)) return
       setIsLoadingAgents(false)
+      setIsRefreshing(false)
       setLoadError(res.error)
       if (!res.error) {
         setAgents(res.agents)
       }
     }).catch((e) => {
+      if (!agentsRequest.isCurrent(token)) return
       setIsLoadingAgents(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load agents.')
     })
-  }, [])
+  }, [agentsRequest])
 
   // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
   // from the single shared Realtime connection (LiveDataProvider, mounted
@@ -86,8 +93,7 @@ export default function AgentsPage() {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    loadAgents() // manual: isLoadingAgents already false by now
-    setTimeout(() => setIsRefreshing(false), 600)
+    loadAgents() // manual: cleared by loadAgents' own completion above
   }
 
   const handleCreateAgent = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -166,7 +172,7 @@ export default function AgentsPage() {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="flex-1 sm:flex-none h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="flex-1 sm:flex-none h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
 

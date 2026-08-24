@@ -32,6 +32,7 @@ import { ErrorBanner } from "@/components/error-banner"
 import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
 import { useLiveVersion, useLiveConnectionStatus } from "@/components/live-data-provider"
+import { useRequestGeneration } from "@/hooks/use-request-generation"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
 import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
 
@@ -203,6 +204,11 @@ export default function PlayersPage() {
   // player's bet history got silently kicked back to page 1 on every refresh
   // even though nothing about which player was selected had changed.
   const loadedHistoryPlayerIdRef = React.useRef<string | null>(null)
+  // Guards against an older, slower response overwriting a newer one -- e.g.
+  // clicking between two players quickly enough that the first player's
+  // request is still in flight when the second one starts; without this, a
+  // stale response could win the race and show the wrong player's history.
+  const historyRequest = useRequestGeneration()
 
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
@@ -211,7 +217,9 @@ export default function PlayersPage() {
       setGamesPage(1)
       setPointsPage(1)
     }
+    const token = historyRequest.nextGeneration()
     getPlayerDetailHistoryAction(playerId).then((res) => {
+      if (!historyRequest.isCurrent(token)) return
       loadedHistoryPlayerIdRef.current = playerId
       setIsLoadingHistory(false)
       setLoadError(res.error)
@@ -220,13 +228,17 @@ export default function PlayersPage() {
         setPointsHistory(res.coin_movements)
       }
     }).catch((e) => {
+      if (!historyRequest.isCurrent(token)) return
       setIsLoadingHistory(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load player history.')
     })
-  }, [])
+  }, [historyRequest])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const isLive = useLiveConnectionStatus()
+  // Same guard for the player-list fetch -- can be triggered by a live
+  // event, the fallback timer, or a manual click, all independently.
+  const playersRequest = useRequestGeneration()
   // Stable ref — tracks selected player ID without being a useCallback dependency
   const selectedPlayerIdRef = React.useRef<string | null>(null)
 
@@ -239,7 +251,9 @@ export default function PlayersPage() {
   // explicitly set it themselves now, preserving their exact prior behavior.
   const loadPlayers = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
+    const token = playersRequest.nextGeneration()
     getPlayersAction().then((res) => {
+      if (!playersRequest.isCurrent(token)) return
       setIsRefreshing(false)
       setIsLoadingPlayers(false)
       setLoadError(res.error)
@@ -269,11 +283,12 @@ export default function PlayersPage() {
         }
       }
     }).catch((e) => {
+      if (!playersRequest.isCurrent(token)) return
       setIsRefreshing(false)
       setIsLoadingPlayers(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load players.')
     })
-  }, [loadPlayerHistory, urlSlug]) // Stable — no selectedPlayer?.id dep, no interval leak
+  }, [loadPlayerHistory, urlSlug, playersRequest])
 
   // Issue #91 Phase 2: replaces the old 10s setInterval poll. liveTick comes
   // from the single shared Realtime connection (LiveDataProvider, mounted
@@ -426,7 +441,7 @@ export default function PlayersPage() {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
 

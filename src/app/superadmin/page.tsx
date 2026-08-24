@@ -12,6 +12,7 @@ import { ErrorBanner } from '@/components/error-banner'
 import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
@@ -61,6 +62,10 @@ export default function SuperAdminDashboard() {
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
   const isLive = useLiveConnectionStatus()
+  // Guards fetchMetrics against out-of-order responses -- this page has 3
+  // independent triggers into it (live sync, manual refresh, and a
+  // successful RTP change), the most of any page audited.
+  const metricsRequest = useRequestGeneration()
 
   // Log Filter, Search & Pagination states
   const [logCategory, setLogCategory] = React.useState<'ALL' | 'System' | 'Transaction' | 'Security'>('ALL')
@@ -75,13 +80,16 @@ export default function SuperAdminDashboard() {
   // right before the JSX return.
   const [lastLogFilters, setLastLogFilters] = React.useState<[typeof logCategory, string]>([logCategory, logSearchQuery])
 
-  const fetchMetrics = () => {
+  const fetchMetrics = React.useCallback(() => {
+    const token = metricsRequest.nextGeneration()
     Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
       getAuditLogsAction()
     ]).then(([resMetrics, resRtp, resLogs]) => {
+      if (!metricsRequest.isCurrent(token)) return
       setIsLoadingMetrics(false)
+      setIsRefreshing(false)
       const errors = [resMetrics.error, resRtp.error, resLogs.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (resMetrics && !resMetrics.error) {
@@ -108,15 +116,16 @@ export default function SuperAdminDashboard() {
         setSystemLogs(resLogs.logs)
       }
     }).catch((e) => {
+      if (!metricsRequest.isCurrent(token)) return
       setIsLoadingMetrics(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load dashboard data.')
     })
-  }
+  }, [metricsRequest])
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    fetchMetrics() // isLoadingMetrics already false by now
-    setTimeout(() => setIsRefreshing(false), 500)
+    fetchMetrics() // cleared by fetchMetrics' own completion above
   }
 
   const handleApplyRtp = async (targetVal?: number) => {
@@ -143,14 +152,16 @@ export default function SuperAdminDashboard() {
   // the Realtime publication (out of Issue #91's original 4-table scope) --
   // the audit log list on this page still only refreshes on the 90s
   // fallback or a manual refresh, not on its own real-time events.
-  // fetchMetrics is intentionally not in this effect's deps (same as the
-  // code it replaces) -- it's a plain function, not memoized with
-  // useCallback, so a fresh identity every render would otherwise be a
-  // dependency-array footgun; eslint doesn't flag the omission here.
+  // fetchMetrics is now memoized with useCallback (previously the one fetch
+  // function on any of these 9 pages that wasn't -- a pre-existing
+  // inconsistency, fixed here while adding the request-generation guard
+  // needed a stable place to live anyway), so it can be included in this
+  // effect's deps correctly instead of the omission needing its own
+  // justifying comment.
   const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
   React.useEffect(() => {
     fetchMetrics()
-  }, [liveTick])
+  }, [liveTick, fetchMetrics])
 
   // Separate, faster poll dedicated to the RTP-lock countdown -- 60s (the
   // metrics poll above) is far too coarse to reliably catch an 11-second
@@ -223,10 +234,11 @@ export default function SuperAdminDashboard() {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button 
-            onClick={handleManualRefresh} 
-            variant="outline" 
-            size="sm" 
+          <Button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            variant="outline"
+            size="sm"
             className="h-7.5 sm:h-8 text-[11px] sm:text-xs font-extrabold px-2.5 sm:px-3 rounded-xl border-border/80 hover:bg-secondary cursor-pointer shrink-0 w-auto"
           >
             <RefreshCw className={`mr-1 sm:mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh

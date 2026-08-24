@@ -19,6 +19,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentTransactionHistoryAction } from '../actions'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function HistoryPage() {
   const [agentBalance, setAgentBalance] = React.useState(0)
@@ -49,24 +50,29 @@ export default function HistoryPage() {
   const itemsPerPage = 10
   const isLive = useLiveConnectionStatus()
 
+  const historyRequest = useRequestGeneration()
   const loadHistory = React.useCallback(() => {
+    const token = historyRequest.nextGeneration()
     getAgentTransactionHistoryAction().then((res) => {
+      if (!historyRequest.isCurrent(token)) return
       setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(res.error)
       if (!res.error) {
         setTransactions(res.transfers)
         setAgentBalance(res.coin_balance)
       }
     }).catch((e) => {
+      if (!historyRequest.isCurrent(token)) return
       setIsLoading(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load history.')
     })
-  }, [])
+  }, [historyRequest])
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadHistory() // manual: isLoading already false by now
-    setTimeout(() => setIsRefreshing(false), 600)
+    loadHistory() // manual: cleared by loadHistory's own completion above
   }
 
   // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
@@ -169,7 +175,7 @@ export default function HistoryPage() {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>

@@ -20,6 +20,7 @@ import { ErrorBanner } from "@/components/error-banner"
 import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
 import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number }>>([])
@@ -50,9 +51,13 @@ export default function AgentDashboard() {
   // leaving balance/KPIs/players stale on a backend failure.
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
+  const dashboardRequest = useRequestGeneration()
   const fetchDashboardData = React.useCallback(() => {
+    const token = dashboardRequest.nextGeneration()
     getAgentDashboardDataAction().then((resDash) => {
+      if (!dashboardRequest.isCurrent(token)) return
       setIsLoadingDashboard(false)
+      setIsRefreshing(false)
       setLoadError(resDash.error)
       if (!resDash.error) {
         setBalance(resDash.coin_balance || 0)
@@ -74,10 +79,12 @@ export default function AgentDashboard() {
         }
       }
     }).catch((e) => {
+      if (!dashboardRequest.isCurrent(token)) return
       setIsLoadingDashboard(false)
+      setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load dashboard data.')
     })
-  }, [])
+  }, [dashboardRequest])
 
   // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
   // from the single shared Realtime connection (LiveDataProvider, mounted
@@ -92,8 +99,9 @@ export default function AgentDashboard() {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
-    fetchDashboardData() // manual: no skeleton, just spinner on button
-    setTimeout(() => setIsRefreshing(false), 600)
+    fetchDashboardData() // manual: no skeleton, just spinner on button -- now
+    // cleared by fetchDashboardData's own completion, not a fixed timeout
+    // that could resolve before or after the real request actually finishes.
   }
 
   const handleQuickTransfer = async (type: 'deposit' | 'withdraw') => {
@@ -176,7 +184,7 @@ export default function AgentDashboard() {
             <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
             {isLive ? 'Live Sync' : 'Connecting…'}
           </span>
-          <Button onClick={handleManualRefresh} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
+          <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>
