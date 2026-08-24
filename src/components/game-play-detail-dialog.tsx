@@ -90,13 +90,30 @@ export function GamePlayDetailDialog({
         import('html2canvas-pro'),
         import('jspdf'),
       ])
+
+      // Render fixed 1050px desktop layout on ALL devices (mobile, tablet, desktop)
       const canvas = await html2canvas(printableRef.current, {
         scale: 2,
+        windowWidth: 1200,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.querySelector('[data-printable="true"]') as HTMLElement
+          if (el) {
+            el.style.width = '1050px'
+            el.style.minWidth = '1050px'
+            el.style.maxWidth = '1050px'
+          }
+        },
       })
-      const imgData = canvas.toDataURL('image/png')
 
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width, canvas.height] })
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height)
+      // High-quality JPEG compression (drops file size from ~6MB to ~300KB-400KB)
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+
+      // Set logical desktop page dimensions (1050px width)
+      const pdfWidth = 1050
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [pdfWidth, pdfHeight] })
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight)
 
       const safeHandId = spin.hand_id.replace(/[^a-zA-Z0-9]/g, '')
       pdf.save(`hand-${safeHandId}-${playerUsername}.pdf`)
@@ -132,7 +149,12 @@ export function GamePlayDetailDialog({
           </DialogHeader>
         </div>
 
-        <div ref={printableRef} className="px-4 sm:px-5 py-3 space-y-3" style={{ background: '#ffffff' }}>
+        <div
+          ref={printableRef}
+          data-printable="true"
+          className="px-4 sm:px-5 py-3 space-y-3"
+          style={{ background: '#ffffff' }}
+        >
 
           {/* 1. Consolidated Identity Ribbon (Player + Mode + Date + Hand ID) */}
           <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50/90 border border-slate-200/80 space-y-2">
