@@ -246,7 +246,7 @@ export function GamePlayDetailDialog({
           </div>
 
           {/* 3. Picks Breakdown Sections (Single, Double, Triple) */}
-          <div className="space-y-3 pt-1">
+          <div className="space-y-5 pt-2">
             <PicksSection
               title="SINGLE"
               entries={singleEntries}
@@ -307,7 +307,7 @@ export function GamePlayDetailDialog({
 }
 
 /** One Single/Double/Triple picks section -- with category header, count tag,
- * and wrapping responsive cards (number on top with bold font, bold coin pill below). */
+ * and auto-fill responsive grid eliminating right-side white gap (equal sizing across all tiers). */
 function PicksSection({
   title,
   entries,
@@ -324,7 +324,7 @@ function PicksSection({
   return (
     <div>
       {/* Section title with left accent bar and bet count */}
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2.5">
         <div
           className="w-1 h-3.5 rounded-full"
           style={{ background: 'linear-gradient(180deg, #6366f1, #a855f7)' }}
@@ -340,27 +340,26 @@ function PicksSection({
       </div>
 
       {entries.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(48px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(54px,1fr))] gap-1.5">
           {entries.map(([num, val]) => {
             const winning = isWinning(num)
             const display = num.padStart(pad, '0')
             return (
               <div
                 key={num}
-                className="flex flex-col rounded-xl overflow-hidden transition-all shadow-2xs"
+                className="flex flex-col rounded-lg overflow-hidden transition-all shadow-2xs"
                 style={{
-                  minWidth: pad === 1 ? '48px' : pad === 2 ? '56px' : '64px',
                   boxShadow: winning
                     ? '0 0 10px rgba(16,185,129,0.35), 0 2px 4px rgba(0,0,0,0.06)'
-                    : '0 1px 3px rgba(0,0,0,0.04)',
+                    : '0 1px 2px rgba(0,0,0,0.04)',
                   border: winning ? '1.5px solid #10b981' : '1px solid #e2e8f0',
                 }}
               >
                 {/* Number Box on Top */}
                 <div
-                  className="flex items-center justify-center px-1.5 py-1 font-black font-mono tracking-tight"
+                  className="flex items-center justify-center py-1 font-black font-mono tracking-tight"
                   style={{
-                    fontSize: pad === 3 ? '13px' : '16px',
+                    fontSize: pad === 3 ? '13px' : '15.5px',
                     background: winning
                       ? 'linear-gradient(180deg, #ecfdf5, #d1fae5)'
                       : '#f8fafc',
@@ -372,7 +371,7 @@ function PicksSection({
 
                 {/* Coin Stake Pill on Bottom */}
                 <div
-                  className="flex items-center justify-center px-1.5 py-0.5 font-black font-mono tracking-tight"
+                  className="flex items-center justify-center py-0.5 font-black font-mono tracking-tight"
                   style={{
                     fontSize: '11px',
                     background: winning ? '#10b981' : '#ef4444',
