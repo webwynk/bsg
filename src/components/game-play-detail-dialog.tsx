@@ -66,7 +66,7 @@ export function GamePlayDetailDialog({
     ? `${spin.red}${spin.green}${spin.black}`.padStart(3, '0')
     : null
 
-  // Extract individual outcome digits reliably (preferring numeric values, with fallback regex match)
+  // Extract individual outcome digits reliably
   const redDigit = spin.red !== null && spin.red !== undefined ? String(spin.red) : null
   const greenDigit = spin.green !== null && spin.green !== undefined ? String(spin.green) : null
   const blackDigit = spin.black !== null && spin.black !== undefined ? String(spin.black) : null
@@ -105,20 +105,20 @@ export function GamePlayDetailDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger render={trigger} />
       <DialogContent
-        className="w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-[95vw] lg:max-w-[1200px] max-h-[92vh] overflow-y-auto rounded-2xl p-0 border border-slate-200 shadow-2xl"
+        className="w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] max-w-[95vw] lg:max-w-[1100px] max-h-[92vh] overflow-y-auto rounded-2xl p-0 border border-slate-200 shadow-2xl"
         style={{ background: '#ffffff', color: '#1e293b' }}
       >
-        {/* Modern Top Gradient Accent */}
+        {/* Modern Top Gradient Accent Bar */}
         <div
-          className="h-1.5 w-full rounded-t-2xl"
+          className="h-1 w-full rounded-t-2xl"
           style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899, #f59e0b)' }}
         />
 
         {/* Modal Header */}
-        <div className="px-4 sm:px-6 pt-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-4 sm:px-5 pt-3 pb-2 border-b border-slate-100 flex items-center justify-between">
           <DialogHeader>
             <DialogTitle
-              className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2"
+              className="text-sm sm:text-base font-black tracking-tight flex items-center gap-2"
               style={{ color: '#0f172a' }}
             >
               <span>Game Play Details</span>
@@ -126,99 +126,93 @@ export function GamePlayDetailDialog({
           </DialogHeader>
         </div>
 
-        <div ref={printableRef} className="px-4 sm:px-6 py-4 space-y-4" style={{ background: '#ffffff' }}>
+        <div ref={printableRef} className="px-4 sm:px-5 py-3 space-y-3" style={{ background: '#ffffff' }}>
 
-          {/* Top Bar: Player Info & Hand ID */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Player Identity Card */}
-            <div
-              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-slate-50/70"
-            >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 shadow-xs"
-                style={{ background: '#eef2ff', color: '#6366f1', border: '1.5px solid #c7d2fe' }}
-              >
-                {playerFullName[0]?.toUpperCase() || 'P'}
+          {/* 1. Consolidated Identity Ribbon (Player + Mode + Date + Hand ID) */}
+          <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50/90 border border-slate-200/80 space-y-2">
+            {/* Top Row: Avatar + Name + Tags + Timestamp */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 shadow-2xs"
+                  style={{ background: '#eef2ff', color: '#6366f1', border: '1.5px solid #c7d2fe' }}
+                >
+                  {playerFullName[0]?.toUpperCase() || 'P'}
+                </div>
+                <div className="flex items-baseline gap-1.5 min-w-0">
+                  <span className="text-xs sm:text-sm font-black text-slate-900 truncate">{playerFullName}</span>
+                  <span className="text-[11px] font-mono text-slate-400 truncate">@{playerUsername}</span>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">{playerFullName}</p>
-                <p className="text-[11px] font-mono text-slate-500 truncate">@{playerUsername}</p>
+
+              {/* Badges */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold"
+                  style={{ background: '#ffffff', color: '#475569', border: '1px solid #e2e8f0' }}
+                >
+                  Triple Chance
+                </span>
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black tracking-wide"
+                  style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}
+                >
+                  {spin.mode}
+                </span>
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono text-slate-500 bg-white border border-slate-200"
+                >
+                  {spin.created_at}
+                </span>
               </div>
             </div>
 
-            {/* Hand ID Card */}
-            <div
-              className="flex flex-col justify-center px-3.5 py-2 rounded-xl border border-slate-200/90 bg-slate-50/70"
-            >
-              <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
-                Hand ID
-              </span>
-              <p className="text-xs font-mono font-bold text-slate-800 break-all select-all leading-tight mt-0.5">
-                {spin.hand_id}
-              </p>
+            {/* Bottom Row: Full Hand ID */}
+            <div className="flex items-center gap-2 pt-1.5 border-t border-slate-200/70 text-[11px] font-mono">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Hand ID:</span>
+              <span className="font-bold text-slate-700 truncate select-all">{spin.hand_id}</span>
             </div>
           </div>
 
-          {/* Info Badges Row */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold shadow-2xs"
-              style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0' }}
-            >
-              Triple Chance
-            </span>
-            <span
-              className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide"
-              style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}
-            >
-              {spin.mode}
-            </span>
-            <span
-              className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-mono text-slate-500 bg-slate-50 border border-slate-200/80"
-            >
-              {spin.created_at}
-            </span>
-          </div>
-
-          {/* 4-Tile Metrics Grid: Result (0-8-9) · Total Bet · Total Win · Status */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {/* 2. Unified 4-in-1 KPI Ribbon (Result · Bet · Win · Status) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 rounded-xl bg-slate-50/90 border border-slate-200/80 divide-y lg:divide-y-0 lg:divide-x divide-slate-200/80 overflow-hidden shadow-2xs">
             {/* 1. Result (Boxed 0-8-9) */}
-            <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50/80 border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
+            <div className="flex flex-col items-center justify-center py-2 px-3">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
                 Result
               </span>
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-xs">
+              <div className="flex items-center gap-1">
+                <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
                   {d1}
                 </span>
-                <span className="text-slate-400 font-black text-xs sm:text-sm">-</span>
-                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-xs">
+                <span className="text-slate-400 font-bold text-xs">-</span>
+                <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
                   {d2}
                 </span>
-                <span className="text-slate-400 font-black text-xs sm:text-sm">-</span>
-                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-xs">
+                <span className="text-slate-400 font-bold text-xs">-</span>
+                <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-indigo-600 text-white font-mono font-black text-xs sm:text-sm flex items-center justify-center shadow-2xs">
                   {d3}
                 </span>
               </div>
             </div>
 
             {/* 2. Total Bet */}
-            <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50/80 border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
+            <div className="flex flex-col items-center justify-center py-2 px-3">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
                 Total Bet
               </span>
-              <span className="text-sm sm:text-base font-black font-mono text-slate-900">
+              <span className="text-xs sm:text-sm font-black font-mono text-slate-900">
                 {formatCurrency(spin.total_stake)}
               </span>
             </div>
 
             {/* 3. Total Win */}
-            <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50/80 border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
+            <div className="flex flex-col items-center justify-center py-2 px-3 border-t lg:border-t-0">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
                 Total Win
               </span>
               <span
-                className={`text-sm sm:text-base font-black font-mono ${
+                className={`text-xs sm:text-sm font-black font-mono ${
                   spin.total_payout > 0 ? 'text-emerald-600' : 'text-slate-400'
                 }`}
               >
@@ -227,19 +221,19 @@ export function GamePlayDetailDialog({
             </div>
 
             {/* 4. Status */}
-            <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50/80 border border-slate-200/90 shadow-2xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
+            <div className="flex flex-col items-center justify-center py-2 px-3 border-t lg:border-t-0">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
                 Status
               </span>
               <span
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-wide ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide ${
                   spin.outcome === 'WON'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs'
-                    : 'bg-red-50 text-red-700 border border-red-300'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs'
+                    : 'bg-red-50 text-red-700 border border-red-200'
                 }`}
               >
                 <span
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-1.5 h-1.5 rounded-full ${
                     spin.outcome === 'WON' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                   }`}
                 />
@@ -248,8 +242,8 @@ export function GamePlayDetailDialog({
             </div>
           </div>
 
-          {/* Picks Breakdown Sections: Single, Double, Triple */}
-          <div className="space-y-4 pt-1">
+          {/* 3. Picks Breakdown Sections (Single, Double, Triple) */}
+          <div className="space-y-3 pt-1">
             <PicksSection
               title="SINGLE"
               entries={singleEntries}
@@ -276,7 +270,7 @@ export function GamePlayDetailDialog({
 
         {/* Modal Footer */}
         <div
-          className="flex items-center justify-between px-4 sm:px-6 py-3 border-t border-slate-200 bg-slate-50/80 rounded-b-2xl"
+          className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-t border-slate-200 bg-slate-50/80 rounded-b-2xl"
         >
           <span className="text-[11px] font-medium text-slate-400 hidden sm:inline">
             Game play receipt & details
@@ -284,7 +278,7 @@ export function GamePlayDetailDialog({
           <Button
             onClick={handleDownloadPdf}
             disabled={isDownloading}
-            className="gap-2 text-xs font-bold h-9 px-4 rounded-xl cursor-pointer ml-auto shadow-xs hover:opacity-95 transition-opacity"
+            className="gap-2 text-xs font-bold h-8 px-3.5 rounded-lg cursor-pointer ml-auto shadow-xs hover:opacity-95 transition-opacity"
             style={{
               background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
               color: '#ffffff',
@@ -293,7 +287,7 @@ export function GamePlayDetailDialog({
           >
             {isDownloading ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" />
                 <span>Generating PDF…</span>
               </>
             ) : (
@@ -327,7 +321,7 @@ function PicksSection({
   return (
     <div>
       {/* Section title with left accent bar and bet count */}
-      <div className="flex items-center gap-2 mb-2.5">
+      <div className="flex items-center gap-2 mb-2">
         <div
           className="w-1 h-3.5 rounded-full"
           style={{ background: 'linear-gradient(180deg, #6366f1, #a855f7)' }}
@@ -336,34 +330,34 @@ function PicksSection({
           {title}
         </h3>
         {entries.length > 0 && (
-          <span className="text-[10px] font-extrabold font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+          <span className="text-[10px] font-extrabold font-mono px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
             {entries.length} {entries.length === 1 ? 'bet' : 'bets'}
           </span>
         )}
       </div>
 
       {entries.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {entries.map(([num, val]) => {
             const winning = isWinning(num)
             const display = num.padStart(pad, '0')
             return (
               <div
                 key={num}
-                className="flex flex-col rounded-xl overflow-hidden transition-all"
+                className="flex flex-col rounded-xl overflow-hidden transition-all shadow-2xs"
                 style={{
-                  minWidth: pad === 1 ? '52px' : pad === 2 ? '60px' : '68px',
+                  minWidth: pad === 1 ? '48px' : pad === 2 ? '56px' : '64px',
                   boxShadow: winning
                     ? '0 0 10px rgba(16,185,129,0.35), 0 2px 4px rgba(0,0,0,0.06)'
-                    : '0 1px 3px rgba(0,0,0,0.05)',
+                    : '0 1px 3px rgba(0,0,0,0.04)',
                   border: winning ? '1.5px solid #10b981' : '1px solid #e2e8f0',
                 }}
               >
                 {/* Number Box on Top */}
                 <div
-                  className="flex items-center justify-center px-2 py-1.5 font-black font-mono tracking-tight"
+                  className="flex items-center justify-center px-1.5 py-1 font-black font-mono tracking-tight"
                   style={{
-                    fontSize: pad === 3 ? '14px' : '17px',
+                    fontSize: pad === 3 ? '13px' : '16px',
                     background: winning
                       ? 'linear-gradient(180deg, #ecfdf5, #d1fae5)'
                       : '#f8fafc',
@@ -375,9 +369,9 @@ function PicksSection({
 
                 {/* Coin Stake Pill on Bottom */}
                 <div
-                  className="flex items-center justify-center px-2 py-1 font-black font-mono tracking-tight"
+                  className="flex items-center justify-center px-1.5 py-0.5 font-black font-mono tracking-tight"
                   style={{
-                    fontSize: '11.5px',
+                    fontSize: '11px',
                     background: winning ? '#10b981' : '#ef4444',
                     color: '#ffffff',
                   }}
@@ -389,7 +383,7 @@ function PicksSection({
           })}
         </div>
       ) : (
-        <p className="text-xs text-slate-400 italic pl-3">{emptyText}</p>
+        <p className="text-[11px] text-slate-400 italic pl-3">{emptyText}</p>
       )}
     </div>
   )
