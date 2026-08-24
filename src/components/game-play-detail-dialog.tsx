@@ -55,9 +55,15 @@ export function GamePlayDetailDialog({
   const [isDownloading, setIsDownloading] = React.useState(false)
   const printableRef = React.useRef<HTMLDivElement>(null)
 
-  const singleEntries = Object.entries(spin.single_bets || {})
-  const doubleEntries = Object.entries(spin.double_bets || {})
-  const tripleEntries = Object.entries(spin.triple_bets || {})
+  const singleEntries = Object.entries(spin.single_bets || {}).sort(
+    ([a], [b]) => Number(a) - Number(b) || a.localeCompare(b)
+  )
+  const doubleEntries = Object.entries(spin.double_bets || {}).sort(
+    ([a], [b]) => Number(a) - Number(b) || a.localeCompare(b)
+  )
+  const tripleEntries = Object.entries(spin.triple_bets || {}).sort(
+    ([a], [b]) => Number(a) - Number(b) || a.localeCompare(b)
+  )
 
   const targetDouble = (spin.green !== null && spin.black !== null)
     ? `${spin.green}${spin.black}`.padStart(2, '0')
@@ -357,9 +363,8 @@ function PicksSection({
               >
                 {/* Number Box on Top */}
                 <div
-                  className="flex items-center justify-center py-1 font-black font-mono tracking-tight"
+                  className="flex items-center justify-center py-1 text-[14px] sm:text-[15px] font-black font-mono tracking-tight"
                   style={{
-                    fontSize: pad === 3 ? '13px' : '15.5px',
                     background: winning
                       ? 'linear-gradient(180deg, #ecfdf5, #d1fae5)'
                       : '#f8fafc',
@@ -371,9 +376,8 @@ function PicksSection({
 
                 {/* Coin Stake Pill on Bottom */}
                 <div
-                  className="flex items-center justify-center py-0.5 font-black font-mono tracking-tight"
+                  className="flex items-center justify-center py-0.5 text-[11.5px] sm:text-[12px] font-black font-mono tracking-tight"
                   style={{
-                    fontSize: '11px',
                     background: winning ? '#10b981' : '#ef4444',
                     color: '#ffffff',
                   }}
