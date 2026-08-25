@@ -287,7 +287,11 @@ export default function AgentDetailPage({ params }: Props) {
     const requestedPlayerId = selectedPlayerIdRef.current
     const historyTargetId = reloadHistory ? requestedPlayerId ?? undefined : undefined
 
-    getAgentDetailBundleAction(
+    // Returned (not fire-and-forget) so useLiveSync can await it and skip
+    // starting an overlapping poll tick while this one is still in flight --
+    // see the in-flight guard added to use-live-sync.ts for why that matters
+    // for this page specifically.
+    return getAgentDetailBundleAction(
       agentUsername,
       {
         datePreset: statsScopeRef.current,

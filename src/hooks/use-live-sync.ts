@@ -68,7 +68,7 @@ export interface LiveSyncStatus {
  */
 export function useLiveSync(
   tables: LiveTable[],
-  fetchFn: () => void,
+  fetchFn: () => void | Promise<unknown>,
   tier: LiveSyncTier = "normal"
 ): LiveSyncStatus {
   const liveTick = useLiveVersion(tables)
@@ -88,8 +88,38 @@ export function useLiveSync(
     fetchFnRef.current = fetchFn
   })
 
+  // Issue #93 bug fix: guards against runFetch overlapping itself. The
+  // interval backstop below fires unconditionally on schedule regardless of
+  // whether a previous call's fetch has resolved -- fine as long as fetchFn
+  // reliably completes well within tierMs, but confirmed live to fail badly
+  // once it doesn't: superadmin/agents/[agentUsername] and agent/players had
+  // their per-page actions bundled into one heavier combined action, and
+  // that single request's round-trip time (1.2-2.9s, driven by a Vercel/
+  // Supabase region mismatch -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md
+  // Issue #93) now regularly meets or exceeds the 3s poll interval. Every
+  // route's own fetch function guards against out-of-order responses with
+  // useRequestGeneration, accepting only the response for the LATEST-issued
+  // request -- so once ticks start piling up faster than they resolve, NO
+  // response can ever "win": each new tick invalidates the previous one's
+  // still-in-flight request before it completes, forever. Confirmed live: a
+  // manual refresh button stuck spinning for 27+ seconds straight. Skipping
+  // a tick entirely while the previous one is still in flight removes the
+  // pile-up at its source, for every route using this hook -- not a patch on
+  // the two pages it was first found on. fetchFn is only required to return
+  // its promise for this guard to apply; a fetchFn that returns void (every
+  // other current route, all confirmed to complete well under their tier's
+  // interval) keeps the exact previous fire-and-forget behavior.
+  const inFlightRef = React.useRef(false)
+
   const runFetch = React.useCallback(() => {
-    fetchFnRef.current()
+    if (inFlightRef.current) return
+    const result = fetchFnRef.current()
+    if (result && typeof (result as Promise<unknown>).then === "function") {
+      inFlightRef.current = true
+      ;(result as Promise<unknown>).finally(() => {
+        inFlightRef.current = false
+      })
+    }
     setLastSyncedAt(Date.now())
   }, [])
 

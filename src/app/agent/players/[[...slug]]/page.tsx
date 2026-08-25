@@ -279,7 +279,11 @@ export default function PlayersPage() {
     const requestedPlayerId = selectedPlayerIdRef.current
     const historyTargetId = (reloadHistory && requestedPlayerId) ? requestedPlayerId : undefined
 
-    getPlayersWithHistoryAction(undefined, historyTargetId).then((res) => {
+    // Returned (not fire-and-forget) so useLiveSync can await it and skip
+    // starting an overlapping poll tick while this one is still in flight --
+    // see the in-flight guard added to use-live-sync.ts for why that matters
+    // for this page specifically.
+    return getPlayersWithHistoryAction(undefined, historyTargetId).then((res) => {
       if (!playersRequest.isCurrent(token)) return
       setIsRefreshing(false)
       setIsLoadingPlayers(false)
