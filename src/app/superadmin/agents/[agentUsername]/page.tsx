@@ -275,19 +275,17 @@ export default function AgentDetailPage({ params }: Props) {
   const loadAgentDetails = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
     const token = agentDetailsRequest.nextGeneration()
-    const targetId = selectedPlayerIdRef.current
     // Issue #93: agent detail + profit report + (when relevant) the already-
     // selected player's history now come back from ONE combined action/
     // requireAuth() call instead of 2-3 separate ones. History is only asked
     // for when the caller wants a reload AND a player is already selected --
     // same condition the old separate loadPlayerHistory(updated.id) call
     // below used to gate on, preserving the original "a filter/scope-only
-    // change never refetches history" behavior.
-    const historyTargetId = reloadHistory ? targetId ?? undefined : undefined
-    // Shares historyRequest's generation counter with loadPlayerHistory (the
-    // manual-click path) so a newer manual player switch always wins over a
-    // slower, now-stale bundle response, regardless of which resolves first.
-    const historyToken = historyTargetId ? historyRequest.nextGeneration() : null
+    // change never refetches history" behavior. Read once, up front, ONLY to
+    // decide what to ask the server for -- reconciling the response below
+    // uses a FRESH read of the ref instead of this value (see bug note there).
+    const requestedPlayerId = selectedPlayerIdRef.current
+    const historyTargetId = reloadHistory ? requestedPlayerId ?? undefined : undefined
 
     getAgentDetailBundleAction(
       agentUsername,
@@ -311,12 +309,35 @@ export default function AgentDetailPage({ params }: Props) {
       if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
       if (!res.error && res.players) {
         setPlayers(res.players)
-        if (targetId) {
-          const updated = res.players.find(p => p.id === targetId)
+        // Issue #93 bug fix: this used to reuse the `targetId` captured
+        // BEFORE the request was sent, which goes stale if the user clicks a
+        // different player while this response is still in flight -- that
+        // stale value would then silently revert the selection back to
+        // whichever player was selected when this request was ISSUED, not
+        // whichever one is actually selected now. Re-reading the ref fresh,
+        // here, matches the page's pre-Issue-93 behavior.
+        const currentlySelectedId = selectedPlayerIdRef.current
+        if (currentlySelectedId) {
+          const updated = res.players.find(p => p.id === currentlySelectedId)
           if (updated) {
             setSelectedPlayer(updated)
-            if (historyTargetId && historyToken !== null && historyRequest.isCurrent(historyToken)) {
-              applyHistoryResult(updated.id, res.history)
+            // Only apply this response's history if it was actually fetched
+            // for the player still selected right now. A mismatch means the
+            // user switched players after this request went out (its own
+            // loadPlayerHistory call already owns that player's history) --
+            // this bundle's now-stale-for-that-player history must not
+            // overwrite it. Deliberately NOT gated behind a shared
+            // generation counter with loadPlayerHistory here (an earlier
+            // version of this fix was): under real production latency this
+            // page's own requests sometimes run close to or past the 3s poll
+            // interval, and a counter bumped by every single poll tick
+            // regardless of relevance meant a response could permanently
+            // never catch up to "current", leaving the history skeleton
+            // stuck loading forever -- confirmed live. agentDetailsRequest's
+            // check above already discards a genuinely out-of-order/stale
+            // response; this only needs to confirm the player still matches.
+            if (historyTargetId && historyTargetId === currentlySelectedId) {
+              applyHistoryResult(currentlySelectedId, res.history)
             }
           }
         } else if (res.players.length > 0) {
@@ -337,7 +358,7 @@ export default function AgentDetailPage({ params }: Props) {
       setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load agent details.')
     })
-  }, [agentUsername, loadPlayerHistory, applyHistoryResult, agentDetailsRequest, historyRequest])
+  }, [agentUsername, loadPlayerHistory, applyHistoryResult, agentDetailsRequest])
 
   // Keep filter refs in sync so stable loadAgentDetails always reads latest values
   React.useEffect(() => {

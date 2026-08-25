@@ -273,12 +273,11 @@ export default function PlayersPage() {
   const loadPlayers = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
     const token = playersRequest.nextGeneration()
-    const targetId = selectedPlayerIdRef.current
-    const historyTargetId = (reloadHistory && targetId) ? targetId : undefined
-    // Shares historyRequest's generation counter with loadPlayerHistory (the
-    // manual-click path) so a newer manual player switch always wins over a
-    // slower, now-stale bundled response, regardless of which resolves first.
-    const historyToken = historyTargetId ? historyRequest.nextGeneration() : null
+    // Read once, up front, ONLY to decide what to ask the server for --
+    // reconciling the response below uses a FRESH read of the ref instead of
+    // this value (see bug note there).
+    const requestedPlayerId = selectedPlayerIdRef.current
+    const historyTargetId = (reloadHistory && requestedPlayerId) ? requestedPlayerId : undefined
 
     getPlayersWithHistoryAction(undefined, historyTargetId).then((res) => {
       if (!playersRequest.isCurrent(token)) return
@@ -297,12 +296,34 @@ export default function PlayersPage() {
             return
           }
         }
-        if (targetId) {
-          const updated = res.players.find(p => p.id === targetId)
+        // Issue #93 bug fix: this used to reuse the `targetId` captured
+        // BEFORE the request was sent, which goes stale if the user clicks a
+        // different player while this response is still in flight -- that
+        // stale value would then silently revert the selection back to
+        // whichever player was selected when this request was ISSUED, not
+        // whichever one is actually selected now. Re-reading the ref fresh,
+        // here, matches the page's pre-Issue-93 behavior.
+        const currentlySelectedId = selectedPlayerIdRef.current
+        if (currentlySelectedId) {
+          const updated = res.players.find(p => p.id === currentlySelectedId)
           if (updated) {
             setSelectedPlayer(updated)
-            if (historyTargetId && historyToken !== null && historyRequest.isCurrent(historyToken)) {
-              applyHistoryResult(updated.id, res.history)
+            // Only apply this response's history if it was actually fetched
+            // for the player still selected right now -- see the identical
+            // fix and full explanation on
+            // superadmin/agents/[agentUsername]/page.tsx's loadAgentDetails.
+            // Deliberately NOT gated behind a shared generation counter with
+            // loadPlayerHistory here (an earlier version of this fix was):
+            // under real production latency this page's own requests
+            // sometimes run close to or past the 3s poll interval, and a
+            // counter bumped by every single poll tick regardless of
+            // relevance meant a response could permanently never catch up to
+            // "current", leaving the history skeleton stuck loading forever
+            // -- confirmed live. playersRequest's check above already
+            // discards a genuinely out-of-order/stale response; this only
+            // needs to confirm the player still matches.
+            if (historyTargetId && historyTargetId === currentlySelectedId) {
+              applyHistoryResult(currentlySelectedId, res.history)
             }
           }
         } else if (res.players.length > 0) {
@@ -317,7 +338,7 @@ export default function PlayersPage() {
       setIsLoadingPlayers(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load players.')
     })
-  }, [loadPlayerHistory, applyHistoryResult, urlSlug, playersRequest, historyRequest])
+  }, [loadPlayerHistory, applyHistoryResult, urlSlug, playersRequest])
 
   // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
   // effect (mirrors the same fix on superadmin/agents/[agentUsername], the
