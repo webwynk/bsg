@@ -21,7 +21,8 @@ import { pickedDayKey } from "@/lib/date-range"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentsAction, getAgentCoinLedgerAction, getAgentCoinLedgerBreakdownAction, exportAgentCoinLedgerAction } from '../actions'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function CoinsIssuedPage() {
@@ -60,7 +61,6 @@ export default function CoinsIssuedPage() {
   const [totalItems, setTotalItems] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const isLive = useLiveConnectionStatus()
 
   // Stable refs — avoids useCallback dep on filter state (interval leak fix)
   const selectedAgentIdRef = React.useRef('all')
@@ -242,25 +242,33 @@ export default function CoinsIssuedPage() {
     loadData(false)
   }, [selectedAgentId, selectedType, filterDate, datePreset, currentPage, searchTxQuery, loadData])
 
-  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in superadmin/layout.tsx) and changes the instant a coin_ledger row
-  // changes, plus once every 90s as a fallback. Matches getAgentCoinLedgerAction's
-  // actual query scope (coin_ledger; profiles is only touched for resolving a
-  // free-text search term, not a data dependency worth tracking live).
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
+  // -- still usually well under a second when Realtime is actually
+  // delivering) but adds a guaranteed poll backstop instead of the old 90s
+  // one -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91: Realtime's own
+  // "SUBSCRIBED"/connected status was proven able to stay true for an entire
+  // session while every event silently failed a server-side authorization
+  // check, with zero client-visible signal. Tier 'normal' (10s) since this is
+  // an audit ledger view, not a live-gameplay-outcome page. Matches
+  // getAgentCoinLedgerAction's actual query scope (coin_ledger; profiles is
+  // only touched for resolving a free-text search term, not a data
+  // dependency worth tracking live).
   //
   // loadData's isInitial flag needs a real "have I ever loaded before" check,
-  // not liveTick's own value -- LiveDataProvider is mounted once per portal
-  // and its counters persist across client-side navigation between pages, so
-  // liveTick can already be nonzero the moment this page mounts (e.g. arriving
-  // here from another page after something changed elsewhere). A ref, same
-  // pattern as isInitialMountRef above, tracks this correctly regardless.
+  // not useLiveSync's own internal state -- LiveDataProvider is mounted once
+  // per portal and its counters persist across client-side navigation
+  // between pages, so useLiveSync's realtime-driven fast path can fire on
+  // this page's very first mount already reflecting a nonzero prior count
+  // (e.g. arriving here from another page after something changed
+  // elsewhere). A ref, same pattern as isInitialMountRef above, tracks this
+  // correctly regardless of what triggered the fetch.
   const hasLoadedOnceRef = React.useRef(false)
-  const liveTick = useLiveVersion(['coin_ledger'])
-  React.useEffect(() => {
+  const { lastSyncedAt, tierMs } = useLiveSync(['coin_ledger'], () => {
     loadData(!hasLoadedOnceRef.current)
     hasLoadedOnceRef.current = true
-  }, [liveTick, loadData])
+  }, 'normal')
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
@@ -299,12 +307,7 @@ export default function CoinsIssuedPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button
             onClick={() => setShowBreakdown(v => !v)}
             variant="outline"

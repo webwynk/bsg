@@ -11,7 +11,8 @@ import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
 import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function SuperAdminDashboard() {
@@ -61,7 +62,6 @@ export default function SuperAdminDashboard() {
   const [roundSecondsInto, setRoundSecondsInto] = React.useState<number | null>(null)
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
-  const isLive = useLiveConnectionStatus()
   // Guards fetchMetrics against out-of-order responses -- this page has 3
   // independent triggers into it (live sync, manual refresh, and a
   // successful RTP change), the most of any page audited.
@@ -142,26 +142,25 @@ export default function SuperAdminDashboard() {
     }
   }
 
-  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in superadmin/layout.tsx) and changes the instant a profile,
-  // bet, or coin-ledger row changes anywhere on the platform, plus once
-  // every 90s as a fallback. Matches getSystemOverviewMetricsAction's actual
-  // query scope (profiles/coin_ledger/bets), re-verified by reading the live
-  // action body. Note: getAuditLogsAction reads audit_log, which is not in
-  // the Realtime publication (out of Issue #91's original 4-table scope) --
-  // the audit log list on this page still only refreshes on the 90s
-  // fallback or a manual refresh, not on its own real-time events.
-  // fetchMetrics is now memoized with useCallback (previously the one fetch
-  // function on any of these 9 pages that wasn't -- a pre-existing
-  // inconsistency, fixed here while adding the request-generation guard
-  // needed a stable place to live anyway), so it can be included in this
-  // effect's deps correctly instead of the omission needing its own
-  // justifying comment.
-  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
-  React.useEffect(() => {
-    fetchMetrics()
-  }, [liveTick, fetchMetrics])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
+  // -- still usually well under a second when Realtime is actually
+  // delivering) but adds a guaranteed poll backstop instead of the old 90s
+  // one -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91: Realtime's own
+  // "SUBSCRIBED"/connected status was proven able to stay true for an entire
+  // session while every event silently failed a server-side authorization
+  // check, with zero client-visible signal. Tier 'normal' (10s, not the 3s
+  // 'fast' tier) since getSystemOverviewMetricsAction does full-table scans
+  // (profiles/coin_ledger/bets, unfiltered) -- this is a summary view, not a
+  // live-gameplay-outcome page, so the heavier query cost gets a longer
+  // interval. Matches getSystemOverviewMetricsAction's actual query scope,
+  // re-verified by reading the live action body. Note: getAuditLogsAction
+  // reads audit_log, which is not in the Realtime publication (out of scope
+  // since Issue #91's original design) -- the audit log list on this page
+  // still only refreshes on this same poll or a manual refresh, never on its
+  // own real-time events.
+  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchMetrics, 'normal')
 
   // Separate, faster poll dedicated to the RTP-lock countdown -- 60s (the
   // metrics poll above) is far too coarse to reliably catch an 11-second
@@ -228,12 +227,7 @@ export default function SuperAdminDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button
             onClick={handleManualRefresh}
             disabled={isRefreshing}

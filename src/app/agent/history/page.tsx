@@ -18,7 +18,8 @@ import { ArrowDownRight, ArrowUpRight, Check, History, RefreshCw, Search, Filter
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { getAgentTransactionHistoryAction } from '../actions'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function HistoryPage() {
@@ -48,7 +49,6 @@ export default function HistoryPage() {
   const [datePreset, setDatePreset] = React.useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all')
 
   const itemsPerPage = 10
-  const isLive = useLiveConnectionStatus()
 
   const historyRequest = useRequestGeneration()
   const loadHistory = React.useCallback(() => {
@@ -75,16 +75,20 @@ export default function HistoryPage() {
     loadHistory() // manual: cleared by loadHistory's own completion above
   }
 
-  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in agent/layout.tsx). Watches both coin_ledger (the transfer
-  // history itself) and profiles (getAgentTransactionHistoryAction also
-  // reads this agent's own coin_balance from there) -- changes the instant
-  // either changes, plus once every 90s as a fallback.
-  const liveTick = useLiveVersion(['profiles', 'coin_ledger'])
-  React.useEffect(() => {
-    loadHistory()
-  }, [liveTick, loadHistory])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in agent/layout.tsx --
+  // still usually well under a second when Realtime is actually delivering)
+  // but adds a guaranteed poll backstop instead of the old 90s one -- see
+  // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91: Realtime's own
+  // "SUBSCRIBED"/connected status was proven able to stay true for an entire
+  // session while every event silently failed a server-side authorization
+  // check, with zero client-visible signal. Tier 'normal' (10s) since this is
+  // an audit/history view, not a live-gameplay-outcome page. Watches both
+  // coin_ledger (the transfer history itself) and profiles
+  // (getAgentTransactionHistoryAction also reads this agent's own
+  // coin_balance from there).
+  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'coin_ledger'], loadHistory, 'normal')
 
   const handleResetFilters = () => {
     setSearchQuery('')
@@ -169,12 +173,7 @@ export default function HistoryPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>

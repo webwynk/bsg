@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Bell, ShieldAlert, CheckCheck, RefreshCw, Clock, KeyRound, Check, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { useAgentNotifications } from '@/components/agent-notifications-provider'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { ResetPasswordDialog } from '@/components/reset-password-dialog'
 import { ResponsivePagination } from '@/components/responsive-pagination'
 import { updateAgentPasswordAction } from '@/app/superadmin/agents/actions'
@@ -26,7 +27,7 @@ const ITEMS_PER_PAGE = 10
  * this one.
  */
 export function AlertsContent() {
-  const { notifications, unreadCount, loading, refresh, markRead, markAllRead } = useAgentNotifications()
+  const { notifications, unreadCount, loading, refresh, markRead, markAllRead, lastSyncedAt, tierMs } = useAgentNotifications()
   const [filter, setFilter] = React.useState<'all' | 'unread'>('all')
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -67,6 +68,7 @@ export function AlertsContent() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           {unreadCount > 0 && (
             <Button
               onClick={markAllRead}

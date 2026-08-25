@@ -31,7 +31,8 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
-import { useLiveVersion, useLiveConnectionStatus } from "@/components/live-data-provider"
+import { useLiveSync } from "@/hooks/use-live-sync"
+import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
 import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
@@ -235,7 +236,6 @@ export default function PlayersPage() {
   }, [historyRequest])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const isLive = useLiveConnectionStatus()
   // Same guard for the player-list fetch -- can be triggered by a live
   // event, the fallback timer, or a manual click, all independently.
   const playersRequest = useRequestGeneration()
@@ -290,18 +290,24 @@ export default function PlayersPage() {
     })
   }, [loadPlayerHistory, urlSlug, playersRequest])
 
-  // Issue #91 Phase 2: replaces the old 10s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in agent/layout.tsx) and changes the instant a bet, balance, or
-  // player row actually changes for this agent -- usually well under a
-  // second -- plus once every 90s as a fallback in case the live connection
-  // ever silently drops. This effect fires once on mount (the initial load)
-  // and again every time liveTick changes thereafter; no separate
-  // mount-only effect is needed.
-  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
-  React.useEffect(() => {
-    loadPlayers({ reloadHistory: true })
-  }, [liveTick, loadPlayers])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect (mirrors the same fix on superadmin/agents/[agentUsername], the
+  // superadmin-portal equivalent of this page). useLiveSync keeps the same
+  // Realtime-driven fast path (the shared connection from LiveDataProvider,
+  // mounted once in agent/layout.tsx -- still usually well under a second
+  // when Realtime is actually delivering) but adds a guaranteed 3s poll
+  // backstop instead of the old 90s one. Realtime's own "SUBSCRIBED"/
+  // connected status was proven able to stay true for an entire session
+  // while every event silently failed a server-side authorization check,
+  // with zero client-visible signal -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md
+  // Issue #91 for the full evidence. Tier 'fast' (3s) since this page shows
+  // live gameplay outcomes for this agent's own players. No separate
+  // mount-only effect is needed -- useLiveSync fires once on mount too.
+  const { lastSyncedAt, tierMs } = useLiveSync(
+    ['profiles', 'bets', 'coin_ledger'],
+    () => loadPlayers({ reloadHistory: true }),
+    'fast'
+  )
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
@@ -435,12 +441,7 @@ export default function PlayersPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border flex-1 sm:flex-none">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>

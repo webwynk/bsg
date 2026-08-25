@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction } from '../actions'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 import { formatCurrency } from '@/lib/utils'
 import { ErrorBanner } from '@/components/error-banner'
@@ -79,7 +80,6 @@ export default function SuperAdminLiveGamePage() {
   // Issue #15: page-load error surfaced to the user instead of silently
   // leaving latestDraws/activeRound stale on a backend failure.
   const [loadError, setLoadError] = useState<string | null>(null)
-  const isLive = useLiveConnectionStatus()
   // Client timestamp of the last time activeRound was actually fetched --
   // lets the countdown below interpolate smoothly between fetches using the
   // existing nowTime clock (no extra network calls), rather than freezing at
@@ -138,19 +138,21 @@ export default function SuperAdminLiveGamePage() {
     loadDraws()
   }
 
-  // Issue #91 Phase 4: replaces the old 5s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in superadmin/layout.tsx) and changes the instant a round row
-  // changes -- a new round starting, digits being revealed, or a round
-  // settling -- usually well under a second, plus once every 90s as a
-  // fallback. Scoped to just 'rounds', not 'bets'/'coin_ledger' -- nothing
-  // this page shows changes from those tables that isn't already implied by
-  // a rounds change (a bet on the still-open active round doesn't affect
-  // anything rendered here until that round's own row changes).
-  const liveTick = useLiveVersion(['rounds'])
-  useEffect(() => {
-    loadDraws()
-  }, [liveTick, loadDraws])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
+  // -- still usually well under a second when Realtime is actually
+  // delivering) but adds a guaranteed 3s poll backstop instead of the old
+  // 90s one -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91, where
+  // this exact page was used to confirm a round settling live without a
+  // manual refresh, but only via the (then 90s) fallback poll, since
+  // Realtime's own connected status was proven unable to guarantee delivery.
+  // Tier 'fast' (3s) since this is the live gameplay monitor itself. Scoped
+  // to just 'rounds', not 'bets'/'coin_ledger' -- nothing this page shows
+  // changes from those tables that isn't already implied by a rounds change
+  // (a bet on the still-open active round doesn't affect anything rendered
+  // here until that round's own row changes).
+  const { lastSyncedAt, tierMs } = useLiveSync(['rounds'], loadDraws, 'fast')
 
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {
@@ -192,12 +194,7 @@ export default function SuperAdminLiveGamePage() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">Live Game Telemetry</h1>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${
-                isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-                {isLive ? 'Live Sync' : 'Connecting…'}
-              </span>
+              <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
             </div>
             <p className="text-xs text-muted-foreground font-semibold mt-0.5">
               Real-time 24/7 global round outcome monitor & draw history ledger.

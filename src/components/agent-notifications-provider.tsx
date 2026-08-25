@@ -3,6 +3,7 @@
 import * as React from "react"
 import { getAgentNotificationsAction, markNotificationReadAction, type AgentNotification } from "@/app/agent/players/actions"
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser"
+import { LIVE_SYNC_TIER_MS } from "@/hooks/use-live-sync"
 
 interface AgentNotificationsContextValue {
   notifications: AgentNotification[]
@@ -11,16 +12,35 @@ interface AgentNotificationsContextValue {
   refresh: () => Promise<void>
   markRead: (id: string) => Promise<void>
   markAllRead: () => Promise<void>
+  /** Epoch ms of the last time refresh() actually completed, from ANY
+   *  trigger (Realtime push, the fallback poll, or the initial load). For
+   *  LiveSyncBadge -- see the note on FALLBACK_POLL_MS below for why this
+   *  provider needs the same honest-sync-status treatment as useLiveSync's
+   *  consumers, not just a static "connected" claim. */
+  lastSyncedAt: number | null
+  /** This provider's configured poll interval, in ms -- LiveSyncBadge uses
+   *  this to judge whether lastSyncedAt is within the expected freshness
+   *  window. */
+  tierMs: number
 }
 
 const AgentNotificationsContext = React.createContext<AgentNotificationsContextValue | null>(null)
 
-// 5 minutes -- a safety net only, not the primary update path anymore (that's
-// the Realtime subscription below). Never trust Realtime as the only source
+// Issue #91 addendum (2026-08-25): shortened from 5 minutes to the shared
+// 'fast' tier (see use-live-sync.ts, LIVE_SYNC_TIER_MS) -- the investigation
+// that led to LiveDataProvider getting a much tighter poll backstop found
+// this provider's own Realtime subscription is subject to the exact same
+// silent-failure mode: a real notification insert on this exact
+// channel/table produced zero events while the channel reported healthy the
+// whole time (see MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91). This
+// carries security-relevant content (account lockouts) -- it deserves at
+// least as tight a guaranteed worst case as gameplay pages, not a looser
+// one. Still a safety net only, not the primary update path (that's the
+// Realtime subscription below) -- never trust Realtime as the only source
 // of truth: a dropped WebSocket, a missed event during a brief disconnect,
-// or simply loading the page before the subscription finishes connecting all
-// need a fallback that eventually self-corrects on its own.
-const FALLBACK_POLL_MS = 5 * 60_000
+// or simply loading the page before the subscription finishes connecting
+// all need a fallback that eventually self-corrects on its own.
+const FALLBACK_POLL_MS = LIVE_SYNC_TIER_MS.fast
 
 /**
  * Single source of truth for security alerts, read once here rather than
@@ -49,11 +69,13 @@ const FALLBACK_POLL_MS = 5 * 60_000
 export function AgentNotificationsProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = React.useState<AgentNotification[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [lastSyncedAt, setLastSyncedAt] = React.useState<number | null>(null)
 
   const refresh = React.useCallback(async () => {
     const res = await getAgentNotificationsAction()
     if (!res.error) setNotifications(res.notifications)
     setLoading(false)
+    setLastSyncedAt(Date.now())
   }, [])
 
   React.useEffect(() => {
@@ -86,11 +108,40 @@ export function AgentNotificationsProvider({ children }: { children: React.React
         .subscribe()
     })()
 
-    const fallbackPoll = setInterval(refresh, FALLBACK_POLL_MS)
+    // Guaranteed backstop, tab-visibility aware -- same reasoning and
+    // pattern as useLiveSync's own poll (see use-live-sync.ts and
+    // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91): pauses while the tab
+    // is backgrounded since nobody is watching it, and catches up
+    // immediately on refocus instead of waiting for the next scheduled tick.
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    const startPoll = () => {
+      if (intervalId) return
+      intervalId = setInterval(refresh, FALLBACK_POLL_MS)
+    }
+    const stopPoll = () => {
+      if (!intervalId) return
+      clearInterval(intervalId)
+      intervalId = null
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh()
+        startPoll()
+      } else {
+        stopPoll()
+      }
+    }
+    if (typeof document !== "undefined") {
+      if (document.visibilityState === "visible") startPoll()
+      document.addEventListener("visibilitychange", onVisibilityChange)
+    }
 
     return () => {
       cancelled = true
-      clearInterval(fallbackPoll)
+      stopPoll()
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange)
+      }
       if (channel) supabase.removeChannel(channel)
     }
   }, [refresh])
@@ -109,7 +160,9 @@ export function AgentNotificationsProvider({ children }: { children: React.React
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   return (
-    <AgentNotificationsContext.Provider value={{ notifications, unreadCount, loading, refresh, markRead, markAllRead }}>
+    <AgentNotificationsContext.Provider
+      value={{ notifications, unreadCount, loading, refresh, markRead, markAllRead, lastSyncedAt, tierMs: FALLBACK_POLL_MS }}
+    >
       {children}
     </AgentNotificationsContext.Provider>
   )

@@ -33,7 +33,8 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { createAgentAction, getAgentsAction } from './actions'
 import { playerStatus } from '@/lib/player-status'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentsPage() {
@@ -43,7 +44,6 @@ export default function AgentsPage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [isLoadingAgents, setIsLoadingAgents] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const isLive = useLiveConnectionStatus()
   const [currentPage, setCurrentPage] = React.useState(1)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<'all' | 'Active' | 'Temporary Block' | 'Blocked'>('all')
@@ -80,16 +80,19 @@ export default function AgentsPage() {
     })
   }, [agentsRequest])
 
-  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in superadmin/layout.tsx) and changes the instant any agent/player
-  // profile row changes, plus once every 90s as a fallback. Matches
-  // getAgentsAction's actual query scope (profiles only), re-verified by
-  // reading the live action body.
-  const liveTick = useLiveVersion(['profiles'])
-  React.useEffect(() => {
-    loadAgents()
-  }, [liveTick, loadAgents])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
+  // -- still usually well under a second when Realtime is actually
+  // delivering) but adds a guaranteed poll backstop instead of the old 90s
+  // one -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91: Realtime's own
+  // "SUBSCRIBED"/connected status was proven able to stay true for an entire
+  // session while every event silently failed a server-side authorization
+  // check, with zero client-visible signal. Tier 'normal' (10s) since this is
+  // an agent directory/summary view, not a live-gameplay-outcome page.
+  // Matches getAgentsAction's actual query scope (profiles only),
+  // re-verified by reading the live action body.
+  const { lastSyncedAt, tierMs } = useLiveSync(['profiles'], loadAgents, 'normal')
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
@@ -166,12 +169,7 @@ export default function AgentsPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="flex-1 sm:flex-none h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>

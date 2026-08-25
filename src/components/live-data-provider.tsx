@@ -29,11 +29,6 @@ interface LiveDataContextValue {
    *  silently re-fetch -- this provider never fetches or holds the actual
    *  player/bet/balance data itself, only the "something changed" signal. */
   versions: Record<LiveTable, number>
-  /** True once the Realtime channel has actually finished subscribing. Not
-   *  required for correctness (the fallback timer above still bumps versions
-   *  even if this never goes true) -- only useful for an optional "Live"
-   *  indicator on a page. */
-  isLive: boolean
 }
 
 const LiveDataContext = React.createContext<LiveDataContextValue | null>(null)
@@ -60,11 +55,9 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
     coin_ledger: 0,
     rounds: 0,
   })
-  const [isLive, setIsLive] = React.useState(false)
 
   React.useEffect(() => {
     const supabase = createBrowserSupabaseClient()
-    let cancelled = false
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
     let pending = new Set<LiveTable>()
 
@@ -91,9 +84,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, () => scheduleBump('bets'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'coin_ledger' }, () => scheduleBump('coin_ledger'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds' }, () => scheduleBump('rounds'))
-      .subscribe((status) => {
-        if (!cancelled) setIsLive(status === 'SUBSCRIBED')
-      })
+      .subscribe()
 
     const fallbackTimer = setInterval(() => {
       setVersions(prev => {
@@ -104,7 +95,6 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
     }, FALLBACK_POLL_MS)
 
     return () => {
-      cancelled = true
       if (debounceTimer) clearTimeout(debounceTimer)
       clearInterval(fallbackTimer)
       supabase.removeChannel(channel)
@@ -112,7 +102,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <LiveDataContext.Provider value={{ versions, isLive }}>
+    <LiveDataContext.Provider value={{ versions }}>
       {children}
     </LiveDataContext.Provider>
   )
@@ -125,17 +115,14 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
  *
  *   const liveTick = useLiveVersion(['profiles', 'bets'])
  *   React.useEffect(() => { loadPlayers() }, [liveTick])
+ *
+ * In practice, prefer useLiveSync (src/hooks/use-live-sync.ts) over calling
+ * this directly -- it wraps this same signal with a guaranteed poll backstop,
+ * which this hook alone (plus this provider's own 90s fallback) does not
+ * reliably provide. See MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91.
  */
 export function useLiveVersion(tables: LiveTable[]): number {
   const ctx = React.useContext(LiveDataContext)
   if (!ctx) throw new Error("useLiveVersion must be used within LiveDataProvider")
   return tables.reduce((sum, t) => sum + ctx.versions[t], 0)
-}
-
-/** True once the shared channel has actually subscribed -- for an optional
- *  "Live" indicator. Not required for pages to function correctly. */
-export function useLiveConnectionStatus(): boolean {
-  const ctx = React.useContext(LiveDataContext)
-  if (!ctx) throw new Error("useLiveConnectionStatus must be used within LiveDataProvider")
-  return ctx.isLive
 }

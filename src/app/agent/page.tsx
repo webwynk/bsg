@@ -19,7 +19,8 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentDashboard() {
@@ -46,7 +47,6 @@ export default function AgentDashboard() {
   const [currentPage, setCurrentPage] = React.useState(1)
   const itemsPerPage = 5
 
-  const isLive = useLiveConnectionStatus()
   // Issue #15: page-load error surfaced to the user instead of silently
   // leaving balance/KPIs/players stale on a backend failure.
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -86,16 +86,19 @@ export default function AgentDashboard() {
     })
   }, [dashboardRequest])
 
-  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in agent/layout.tsx) and changes the instant this agent's balance,
-  // a player's bet, or a coin transfer changes, plus once every 90s as a
-  // fallback. Fires once on mount (the initial load) and again on every
-  // subsequent change.
-  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
-  React.useEffect(() => {
-    fetchDashboardData()
-  }, [liveTick, fetchDashboardData])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in agent/layout.tsx --
+  // still usually well under a second when Realtime is actually delivering)
+  // but adds a guaranteed 3s poll backstop instead of the old 90s one --
+  // Realtime's own "SUBSCRIBED"/connected status was proven able to stay
+  // true for an entire session while every event silently failed a
+  // server-side authorization check, with zero client-visible signal. See
+  // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91. Tier 'fast' (3s) since
+  // this is the agent's own cashier home, showing live stake/payout activity
+  // for their own players. Fires once on mount (the initial load) and again
+  // on every subsequent change.
+  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchDashboardData, 'fast')
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
@@ -178,12 +181,7 @@ export default function AgentDashboard() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>

@@ -20,7 +20,8 @@ import { TrendingUp, Coins, Calendar as CalendarIcon, RefreshCw, Search, X, Acti
 import { formatCurrency } from '@/lib/utils'
 import { pickedDayKey } from '@/lib/date-range'
 import { getAgentProfitReportAction } from './actions'
-import { useLiveVersion, useLiveConnectionStatus } from '@/components/live-data-provider'
+import { useLiveSync } from '@/hooks/use-live-sync'
+import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentProfitPage() {
@@ -47,7 +48,6 @@ export default function AgentProfitPage() {
 
   const [isLoading, setIsLoading] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const isLive = useLiveConnectionStatus()
 
   // Stable refs — avoids useCallback dep on filter state (interval leak fix)
   const datePresetRef = React.useRef<'today' | '7days' | '30days' | 'lifetime'>('today')
@@ -110,17 +110,20 @@ export default function AgentProfitPage() {
     loadProfitReport() // filter/page change: isLoading already false by now
   }, [datePreset, filterDate, searchQuery, currentPage, loadProfitReport])
 
-  // Issue #91 Phase 5: replaces the old 60s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in agent/layout.tsx) and changes the instant a bet or player row
-  // changes for this agent's roster, plus once every 90s as a fallback.
-  // Fires once on mount (the initial load) and again on every subsequent
-  // change -- separate from the filter/page-change effect above, which
-  // handles its own re-fetch independently.
-  const liveTick = useLiveVersion(['profiles', 'bets'])
-  React.useEffect(() => {
-    loadProfitReport()
-  }, [liveTick, loadProfitReport])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in agent/layout.tsx --
+  // still usually well under a second when Realtime is actually delivering)
+  // but adds a guaranteed 3s poll backstop instead of the old 90s one --
+  // Realtime's own "SUBSCRIBED"/connected status was proven able to stay
+  // true for an entire session while every event silently failed a
+  // server-side authorization check, with zero client-visible signal. See
+  // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91. Tier 'fast' (3s) since
+  // agents watch this for live P&L as their players play. Fires once on
+  // mount (the initial load) and again on every subsequent change --
+  // separate from the filter/page-change effect above, which handles its
+  // own re-fetch independently.
+  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'bets'], loadProfitReport, 'fast')
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
@@ -161,12 +164,7 @@ export default function AgentProfitPage() {
         </div>
 
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="w-full sm:w-auto h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border">
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>

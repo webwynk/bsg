@@ -34,7 +34,8 @@ import { ErrorBanner } from "@/components/error-banner"
 import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
-import { useLiveVersion, useLiveConnectionStatus } from "@/components/live-data-provider"
+import { useLiveSync } from "@/hooks/use-live-sync"
+import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
 import { getAgentDetailAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
@@ -73,7 +74,6 @@ export default function AgentDetailPage({ params }: Props) {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const isLive = useLiveConnectionStatus()
   // Guards loadAgentDetails against out-of-order responses -- this page has
   // 3 independent triggers into it (live sync, filter/scope change, manual
   // refresh), the most of any page audited.
@@ -327,25 +327,25 @@ export default function AgentDetailPage({ params }: Props) {
     loadAgentDetails({ reloadHistory: false })
   }, [filterDate, statsScope, loadAgentDetails])
 
-  // Issue #91 Phase 3: replaces the old 90s setInterval poll. liveTick comes
-  // from the single shared Realtime connection (LiveDataProvider, mounted
-  // once in superadmin/layout.tsx) and changes the instant a bet, balance,
-  // or player row changes for this agent's roster -- usually well under a
-  // second -- plus once every 90s as a fallback in case the live connection
-  // ever silently drops. This effect fires once on mount (the initial load)
-  // and again every time liveTick changes thereafter.
-  //
-  // Unlike the old 90s poll, this now cascades into a full history reload
-  // (reloadHistory: true) on every tick, not just balances/player list. The
-  // original design deliberately skipped history on the silent tick to limit
-  // poll cost -- but that cost concern mostly disappears once refetches only
-  // fire on a real event instead of a blind clock, so this now matches
-  // agent/players' Phase 2 behavior for full consistency between the agent
-  // and superadmin views of the same player.
-  const liveTick = useLiveVersion(['profiles', 'bets', 'coin_ledger'])
-  React.useEffect(() => {
-    loadAgentDetails({ reloadHistory: true })
-  }, [liveTick, loadAgentDetails])
+  // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
+  // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
+  // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
+  // -- still usually well under a second when Realtime is actually
+  // delivering) but adds a guaranteed 3s poll backstop instead of the old
+  // 90s one. Realtime's own "SUBSCRIBED"/connected status was proven able to
+  // stay true for an entire session while every event silently failed a
+  // server-side authorization check, with zero client-visible signal -- this
+  // is the exact page that was live-tested when that was found. See
+  // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91 for the full evidence.
+  // Tier 'fast' (3s, not the 10s 'normal' tier) since this page shows live
+  // gameplay outcomes for an agent's own players, not a heavy full-table-scan
+  // summary. Cascades into a full history reload (reloadHistory: true) on
+  // every fire, matching agent/players' equivalent behavior.
+  const { lastSyncedAt, tierMs } = useLiveSync(
+    ['profiles', 'bets', 'coin_ledger'],
+    () => loadAgentDetails({ reloadHistory: true }),
+    'fast'
+  )
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
@@ -467,12 +467,7 @@ export default function AgentDetailPage({ params }: Props) {
 
         {/* High-Contrast Quick Action Controls & Refresh Bar */}
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 w-full sm:w-auto">
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-xl border ${
-            isLive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-secondary/40 text-muted-foreground border-border/60'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/60'}`} />
-            {isLive ? 'Live Sync' : 'Connecting…'}
-          </span>
+          <LiveSyncBadge lastSyncedAt={lastSyncedAt} tierMs={tierMs} />
           <Button onClick={handleManualRefresh} disabled={isRefreshing} variant="outline" size="sm" className="h-8 sm:h-10 px-2.5 sm:px-3 text-[11px] sm:text-xs font-bold cursor-pointer rounded-xl border-border shrink-0">
             <RefreshCw className={`mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
