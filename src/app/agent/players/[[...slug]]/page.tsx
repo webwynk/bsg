@@ -686,7 +686,10 @@ export default function PlayersPage() {
               {/* Selected Player Header Card (ULTRA COMPACT) */}
               <Card className="border-border/80 bg-card p-3 sm:p-3.5 rounded-2xl shadow-md space-y-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  {/* Player Avatar, Name & Live Sync Status */}
+                  {/* Player Avatar, Name & Online/Offline Status (Issue #92:
+                      this is the player's own session activity from
+                      active_sessions, not the dashboard's Realtime status --
+                      was mislabeled "Real-Time Sync Active" before) */}
                   <div className="flex items-center space-x-2.5 min-w-0">
                     <button
                       onClick={() => setShowMobileDetail(false)}
@@ -718,7 +721,7 @@ export default function PlayersPage() {
                         {selectedPlayer.is_online && selectedPlayer.is_active ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
-                            Real-Time Sync Active
+                            Player Online
                           </span>
                         ) : (
                           <span className="inline-flex items-center text-red-400/80 font-bold text-[9px]">

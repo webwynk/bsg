@@ -928,7 +928,10 @@ export default function AgentDetailPage({ params }: Props) {
               </div>
 
               <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
-                {/* Header Bar with Live Sync Indicator */}
+                {/* Header Bar with Player Online/Offline Status (Issue #92:
+                    this is the player's own session activity from
+                    active_sessions, not the dashboard's Realtime status --
+                    was mislabeled "Real-Time Sync Active" before) */}
                 <div className="p-3 sm:p-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-secondary/10">
                   <div className="flex items-center space-x-2.5">
                     <button
@@ -963,7 +966,7 @@ export default function AgentDetailPage({ params }: Props) {
                         {selectedPlayer.is_online && selectedPlayer.is_active ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-ping" />
-                            Real-Time Sync Active
+                            Player Online
                           </span>
                         ) : (
                           <span className="inline-flex items-center text-red-400/80 font-bold text-[9px]">
