@@ -112,9 +112,12 @@ export default function SuperAdminLiveGamePage() {
   // can't statically prove which branch runs. Spinner control now lives
   // only in handleManualRefresh, the one place it's actually used.
   const drawsRequest = useRequestGeneration()
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const loadDraws = useCallback(() => {
     const token = drawsRequest.nextGeneration()
-    getLatestGameDrawsAction().then((res) => {
+    return getLatestGameDrawsAction().then((res) => {
       if (!drawsRequest.isCurrent(token)) return
       setIsLoading(false)
       setIsRefreshing(false)
@@ -133,9 +136,13 @@ export default function SuperAdminLiveGamePage() {
     })
   }, [drawsRequest])
 
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // loadDraws directly -- a direct call bypassed the in-flight guard
+  // entirely, the same gap confirmed live to leave a Refresh button stuck
+  // spinning elsewhere in the dashboard.
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadDraws()
+    refresh()
   }
 
   // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
@@ -152,7 +159,7 @@ export default function SuperAdminLiveGamePage() {
   // changes from those tables that isn't already implied by a rounds change
   // (a bet on the still-open active round doesn't affect anything rendered
   // here until that round's own row changes).
-  const { lastSyncedAt, tierMs } = useLiveSync(['rounds'], loadDraws, 'fast')
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['rounds'], loadDraws, 'fast')
 
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {

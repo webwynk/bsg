@@ -80,9 +80,12 @@ export default function SuperAdminDashboard() {
   // right before the JSX return.
   const [lastLogFilters, setLastLogFilters] = React.useState<[typeof logCategory, string]>([logCategory, logSearchQuery])
 
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const fetchMetrics = React.useCallback(() => {
     const token = metricsRequest.nextGeneration()
-    Promise.all([
+    return Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
       getAuditLogsAction()
@@ -123,9 +126,14 @@ export default function SuperAdminDashboard() {
     })
   }, [metricsRequest])
 
-  const handleManualRefresh = async () => {
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // fetchMetrics directly -- a direct call bypassed the in-flight guard
+  // entirely, confirmed live to leave this button stuck spinning 24+
+  // seconds straight (this page's 3-action Promise.all is heavy enough to
+  // regularly approach the 10s poll interval).
+  const handleManualRefresh = () => {
     setIsRefreshing(true)
-    fetchMetrics() // cleared by fetchMetrics' own completion above
+    refresh() // cleared by fetchMetrics' own completion above
   }
 
   const handleApplyRtp = async (targetVal?: number) => {
@@ -160,17 +168,31 @@ export default function SuperAdminDashboard() {
   // since Issue #91's original design) -- the audit log list on this page
   // still only refreshes on this same poll or a manual refresh, never on its
   // own real-time events.
-  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchMetrics, 'normal')
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchMetrics, 'normal')
 
   // Separate, faster poll dedicated to the RTP-lock countdown -- 60s (the
   // metrics poll above) is far too coarse to reliably catch an 11-second
   // window. Deliberately lightweight (getActiveRoundTimingAction only calls
   // get_current_round(), not the heavier draws/bets query fetchMetrics uses).
+  //
+  // Issue #93 bug fix: this poll had NO guard at all against a previous
+  // tick's fetch still being in flight -- unlike every other poll in the
+  // dashboard, not even useRequestGeneration. Low severity (only drives a
+  // UI lock/countdown display, not financial data), but the same missing-
+  // protection pattern confirmed elsewhere to cause real problems under the
+  // same production latency. inFlight is a plain closure variable, not a
+  // ref -- this effect's own closure already lives exactly as long as the
+  // interval it guards, so there's nothing extra a ref would provide here.
   React.useEffect(() => {
     let cancelled = false
+    let inFlight = false
     const poll = () => {
+      if (inFlight) return
+      inFlight = true
       getActiveRoundTimingAction().then(res => {
         if (!cancelled) setRoundSecondsInto(res.seconds_into)
+      }).finally(() => {
+        inFlight = false
       })
     }
     poll()

@@ -142,12 +142,15 @@ export default function CoinsIssuedPage() {
   }, [])
 
   const ledgerRequest = useRequestGeneration()
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const loadData = React.useCallback((isInitial: boolean = false) => {
     if (isInitial) setIsLoading(true)
     const { startDate, endDate } = computeDateRange()
     const token = ledgerRequest.nextGeneration()
 
-    getAgentCoinLedgerAction({
+    return getAgentCoinLedgerAction({
       agentId: selectedAgentIdRef.current,
       direction: selectedTypeRef.current,
       startDate,
@@ -265,14 +268,21 @@ export default function CoinsIssuedPage() {
   // elsewhere). A ref, same pattern as isInitialMountRef above, tracks this
   // correctly regardless of what triggered the fetch.
   const hasLoadedOnceRef = React.useRef(false)
-  const { lastSyncedAt, tierMs } = useLiveSync(['coin_ledger'], () => {
-    loadData(!hasLoadedOnceRef.current)
+  // Issue #93 bug fix: this wrapper now returns loadData's own promise --
+  // needed for useLiveSync's in-flight guard to actually track it (a
+  // fetchFn whose return value is discarded looks identical to one that
+  // returns void, so the guard can't tell it's still busy). Without this,
+  // a direct call to loadData bypassed the guard entirely, confirmed live
+  // to leave this page's Refresh button stuck spinning 16+ seconds straight.
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['coin_ledger'], () => {
+    const p = loadData(!hasLoadedOnceRef.current)
     hasLoadedOnceRef.current = true
+    return p
   }, 'normal')
 
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadData(false) // cleared by loadData's own completion above
+    refresh() // cleared by loadData's own completion above
   }
 
   const handleResetFilters = () => {

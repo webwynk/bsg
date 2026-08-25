@@ -62,9 +62,12 @@ export default function AgentsPage() {
   const itemsPerPage = 10
 
   const agentsRequest = useRequestGeneration()
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const loadAgents = React.useCallback(() => {
     const token = agentsRequest.nextGeneration()
-    getAgentsAction().then((res) => {
+    return getAgentsAction().then((res) => {
       if (!agentsRequest.isCurrent(token)) return
       setIsLoadingAgents(false)
       setIsRefreshing(false)
@@ -92,11 +95,15 @@ export default function AgentsPage() {
   // an agent directory/summary view, not a live-gameplay-outcome page.
   // Matches getAgentsAction's actual query scope (profiles only),
   // re-verified by reading the live action body.
-  const { lastSyncedAt, tierMs } = useLiveSync(['profiles'], loadAgents, 'normal')
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles'], loadAgents, 'normal')
 
-  const handleManualRefresh = async () => {
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // loadAgents directly -- a direct call bypassed the in-flight guard
+  // entirely, the same gap confirmed live to leave a Refresh button stuck
+  // spinning elsewhere in the dashboard.
+  const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadAgents() // manual: cleared by loadAgents' own completion above
+    refresh() // manual: cleared by loadAgents' own completion above
   }
 
   const handleCreateAgent = async (e: React.FormEvent<HTMLFormElement>) => {
