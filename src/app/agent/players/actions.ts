@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createUserClient, createAdminClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type AgentTransferResult } from '@/lib/rpc'
-import { CASHIER_KINDS, isCredit, ledgerKindLabel, toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
+import { toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
-import { resolveAgentId } from '@/app/superadmin/agents/actions'
+import { resolveAgentId } from '@/app/superadmin/agents/resolve-agent-id'
+import { istDateTime, resolvePlayerId, assertOwnership } from './players-shared'
+import { runPlayerDetailHistory } from './player-history-logic'
 
 /**
  * Player management for the agent back office.
@@ -20,47 +22,6 @@ import { resolveAgentId } from '@/app/superadmin/agents/actions'
  *   reads and for Auth admin operations that have already been authorised here.
  */
 
-
-function istDateTime(value: string): string {
-  return new Date(value).toLocaleString('en-US', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
-}
-
-/** Resolves a username or UUID to a profile id, scoped to what the caller may see. */
-async function resolvePlayerId(identifier: string): Promise<string | null> {
-  if (!identifier) return null
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
-  if (isUuid) return identifier
-  const { data } = await createAdminClient().from('profiles').select('id').ilike('username', identifier).maybeSingle()
-  return data?.id ?? null
-}
-
-/**
- * Confirms the caller may act on this player.
- * Superadmin may act on anyone; an agent only on their own players.
- */
-async function assertOwnership(
-  caller: { id: string; role: string },
-  playerId: string
-): Promise<
-  | { ok: true; player: { id: string; username: string; agent_id: string | null; auto_locked_at: string | null } }
-  | { ok: false; error: string }
-> {
-  const { data, error } = await createAdminClient()
-    .from('profiles')
-    .select('id, username, role, agent_id, auto_locked_at')
-    .eq('id', playerId)
-    .single()
-
-  if (error || !data) return { ok: false, error: 'Player account not found.' }
-  if (data.role !== 'player') return { ok: false, error: 'That account is not a player.' }
-  if (caller.role === 'agent' && data.agent_id !== caller.id) {
-    return { ok: false, error: 'Unauthorized: that player belongs to another agent.' }
-  }
-  return { ok: true, player: { id: data.id, username: data.username, agent_id: data.agent_id, auto_locked_at: data.auto_locked_at } }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LIST
@@ -79,18 +40,26 @@ export interface PlayerRow {
   auto_locked_at: string | null
 }
 
-export async function getPlayersAction(
+/**
+ * Issue #93: core player-list logic, private to this file (never exported --
+ * a 'use server' file may only export async functions that are themselves
+ * safe to expose as Server Actions, and this one skips requireAuth() by
+ * design, trusting the caller argument). Used by both
+ * getPlayersWithHistoryAction below and, previously, a since-removed
+ * standalone getPlayersAction -- kept as its own function rather than inlined
+ * so the two failure-shape branches (auth failure vs. agent-not-found) stay
+ * readable.
+ */
+async function runPlayersList(
+  caller: { id: string; role: string },
   targetAgentId?: string
 ): Promise<{ players: PlayerRow[]; error: string | null }> {
-  const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) return { players: [], error: auth.error }
-
   // Cross-tenant guard: only a superadmin may look at someone else's roster.
   // targetAgentId may arrive as a username or an already-resolved UUID --
   // resolveAgentId (Issue #64, mirrors Issue #8's fix) handles both, so this
-  // action stays correct for any future caller, not just today's zero-arg one.
-  let agentId = auth.user.id
-  if (auth.user.role === 'superadmin' && targetAgentId) {
+  // stays correct for any future caller, not just today's zero-arg one.
+  let agentId = caller.id
+  if (caller.role === 'superadmin' && targetAgentId) {
     const resolved = await resolveAgentId(targetAgentId)
     if (!resolved) return { players: [], error: 'Agent not found.' }
     agentId = resolved
@@ -134,6 +103,56 @@ export async function getPlayersAction(
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { players: [], error: `Could not load players: ${message}` }
   }
+}
+
+/**
+ * Issue #93: combines the player list + the CURRENTLY selected player's
+ * history into one requireAuth() call instead of two -- used for the
+ * page's periodic 3-second live-sync poll and manual refresh, where the
+ * selected player (if any) is already known up front. selectedPlayerId is
+ * optional because the page has no player selected on first load (no
+ * /players/<username> slug in the URL). Switching to a DIFFERENT player
+ * (a manual click) is a separate, on-demand event, not tied to this poll --
+ * that path uses the standalone getPlayerDetailHistoryAction below, which
+ * fetches only history without re-fetching the whole roster.
+ */
+export async function getPlayersWithHistoryAction(
+  targetAgentId?: string,
+  selectedPlayerId?: string
+): Promise<{
+  players: PlayerRow[]
+  error: string | null
+  history: { game_plays: PlayerGamePlay[]; coin_movements: PlayerCoinMovement[]; error: string | null }
+}> {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  const emptyHistory = { game_plays: [] as PlayerGamePlay[], coin_movements: [] as PlayerCoinMovement[], error: null }
+  if (auth.error || !auth.user) return { players: [], error: auth.error, history: emptyHistory }
+
+  const [list, history] = await Promise.all([
+    runPlayersList(auth.user, targetAgentId),
+    selectedPlayerId ? runPlayerDetailHistory(auth.user, selectedPlayerId) : Promise.resolve(emptyHistory),
+  ])
+
+  return { players: list.players, error: list.error, history }
+}
+
+/**
+ * Issue #93: thin requireAuth() wrapper, kept as its own lightweight action
+ * (not folded into getPlayersWithHistoryAction or
+ * superadmin/agents/actions.ts's getAgentDetailBundleAction) for the
+ * on-demand case both player-detail pages have: the user clicks a DIFFERENT
+ * player, or the page auto-selects the first player on initial load, neither
+ * of which should also re-fetch the whole roster/agent-detail/profit report
+ * just to get one player's history.
+ */
+export async function getPlayerDetailHistoryAction(playerIdentifier: string): Promise<{
+  game_plays: PlayerGamePlay[]
+  coin_movements: PlayerCoinMovement[]
+  error: string | null
+}> {
+  const auth = await requireAuth(['agent', 'superadmin'])
+  if (auth.error || !auth.user) return { game_plays: [], coin_movements: [], error: auth.error }
+  return runPlayerDetailHistory(auth.user, playerIdentifier)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -555,106 +574,3 @@ export interface PlayerCoinMovement {
   created_at_iso: string
 }
 
-export async function getPlayerDetailHistoryAction(playerIdentifier: string): Promise<{
-  game_plays: PlayerGamePlay[]
-  coin_movements: PlayerCoinMovement[]
-  error: string | null
-}> {
-  const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) return { game_plays: [], coin_movements: [], error: auth.error }
-
-  try {
-    const playerId = await resolvePlayerId(playerIdentifier)
-    if (!playerId) return { game_plays: [], coin_movements: [], error: 'Player not found.' }
-
-    const owned = await assertOwnership(auth.user, playerId)
-    if (!owned.ok) return { game_plays: [], coin_movements: [], error: owned.error }
-
-    const db = createAdminClient()
-
-    // A real foreign key now exists, so a single embedded select is safe.
-    // v1 needed a two-step fetch-and-merge because the join silently dropped
-    // rows; the payout no longer has to be recomputed client-side either —
-    // settle_round() writes the authoritative figures.
-    const [betsRes, ledgerRes] = await Promise.all([
-      db.from('bets')
-        .select(`id, round_id, single_bets, double_bets, triple_bets,
-                 total_stake, total_payout, is_settled, created_at,
-                 rounds!inner ( round_number, red, green, black )`)
-        .eq('user_id', playerId)
-        .order('created_at', { ascending: false })
-        .limit(100),
-      // Cashier kinds only -- gameplay (stake/stake_refund/payout) is already
-      // covered above by the bets query, one row per round with the actual
-      // WON/LOST outcome, which is strictly more useful than the raw
-      // stake/payout ledger split. This "Coins History" list exists to show
-      // agent<->player cashier transfers specifically.
-      db.from('coin_ledger')
-        .select('id, kind, amount, balance_after, created_at')
-        .eq('user_id', playerId)
-        .in('kind', CASHIER_KINDS as unknown as string[])
-        .order('created_at', { ascending: false })
-        .limit(200),
-    ])
-    if (betsRes.error) throw new Error(`bets: ${betsRes.error.message}`)
-    if (ledgerRes.error) throw new Error(`ledger: ${ledgerRes.error.message}`)
-
-    const game_plays: PlayerGamePlay[] = (betsRes.data ?? []).map(b => {
-      const round = (b as unknown as { rounds: { round_number: number; red: number | null; green: number | null; black: number | null } }).rounds
-      const single = (b.single_bets ?? {}) as Record<string, number>
-      const dbl    = (b.double_bets ?? {}) as Record<string, number>
-      const triple = (b.triple_bets ?? {}) as Record<string, number>
-
-      const modes: string[] = []
-      if (Object.keys(single).length) modes.push('SINGLE')
-      if (Object.keys(dbl).length)    modes.push('DOUBLE')
-      if (Object.keys(triple).length) modes.push('TRIPLE')
-
-      const parts: string[] = []
-      if (Object.keys(single).length) parts.push(`Single: ${Object.keys(single).join(',')}`)
-      if (Object.keys(dbl).length)    parts.push(`Double: ${Object.keys(dbl).join(',')}`)
-      if (Object.keys(triple).length) parts.push(`Triple: ${Object.keys(triple).join(',')}`)
-
-      const drawn = round.red !== null && round.green !== null && round.black !== null
-      const payout = Number(b.total_payout ?? 0)
-
-      return {
-        // Full round UUID as Hand ID — displayed in full in the dashboard
-        // detail popup per explicit user requirement.
-        hand_id: String(b.round_id),
-        round_number: Number(round.round_number),
-        mode: modes.join(' + ') || 'TRIPLE CHANCE',
-        selections: parts.join(' | ') || 'Multi-board bet',
-        result: drawn ? `${round.red} . ${round.green} . ${round.black}` : '—',
-        total_stake: Number(b.total_stake ?? 0),
-        total_payout: payout,
-        outcome: payout > 0 ? 'WON' : 'LOST',
-        is_settled: Boolean(b.is_settled),
-        created_at: istDateTime(b.created_at),
-        created_at_iso: b.created_at,
-        single_bets: single,
-        double_bets: dbl,
-        triple_bets: triple,
-        red: round.red,
-        green: round.green,
-        black: round.black,
-      }
-    })
-
-    const coin_movements: PlayerCoinMovement[] = (ledgerRes.data ?? []).map(row => ({
-      id: row.id,
-      kind: row.kind as LedgerKind,
-      label: ledgerKindLabel(row.kind),
-      direction: isCredit(Number(row.amount)) ? 'deposit' : 'withdraw',
-      amount: Math.abs(Number(row.amount)),
-      balance_after: Number(row.balance_after),
-      created_at: istDateTime(row.created_at),
-      created_at_iso: row.created_at,
-    }))
-
-    return { game_plays, coin_movements, error: null }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return { game_plays: [], coin_movements: [], error: `Could not load history: ${message}` }
-  }
-}

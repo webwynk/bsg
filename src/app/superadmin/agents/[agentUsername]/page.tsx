@@ -37,9 +37,8 @@ import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
-import { getAgentDetailAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
+import { getAgentDetailBundleAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
-import { getAgentProfitReportAction } from '@/app/agent/profit/actions'
 
 interface Props {
   params: React.Usable<{ agentUsername: string }>
@@ -230,6 +229,25 @@ export default function AgentDetailPage({ params }: Props) {
   // the identical fix on agent/players/[[...slug]]/page.tsx.
   const historyRequest = useRequestGeneration()
 
+  // Issue #93: extracted out of loadPlayerHistory so the SAME apply logic
+  // (loadedHistoryPlayerIdRef bookkeeping, no pagination/skeleton reset for a
+  // same-player background refresh) also covers history that arrives bundled
+  // inside loadAgentDetails's getAgentDetailBundleAction response, not just
+  // history fetched by loadPlayerHistory's own standalone call.
+  const applyHistoryResult = React.useCallback((playerId: string, res: {
+    game_plays: PlayerGamePlay[]
+    coin_movements: PlayerCoinMovement[]
+    error: string | null
+  }) => {
+    loadedHistoryPlayerIdRef.current = playerId
+    setIsLoadingHistory(false)
+    setLoadError(res.error)
+    if (!res.error) {
+      setGamePlays(res.game_plays)
+      setPointsHistory(res.coin_movements)
+    }
+  }, [])
+
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
     if (isSwitchingPlayer) {
@@ -240,19 +258,13 @@ export default function AgentDetailPage({ params }: Props) {
     const token = historyRequest.nextGeneration()
     getPlayerDetailHistoryAction(playerId).then((res) => {
       if (!historyRequest.isCurrent(token)) return
-      loadedHistoryPlayerIdRef.current = playerId
-      setIsLoadingHistory(false)
-      setLoadError(res.error)
-      if (!res.error) {
-        setGamePlays(res.game_plays)
-        setPointsHistory(res.coin_movements)
-      }
+      applyHistoryResult(playerId, res)
     }).catch((e) => {
       if (!historyRequest.isCurrent(token)) return
       setIsLoadingHistory(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load player history.')
     })
-  }, [historyRequest])
+  }, [historyRequest, applyHistoryResult])
 
   // Housekeeping #87 fix: no longer takes a "show the refresh spinner" flag
   // -- that branch was never true from any of the 3 effect-triggered call
@@ -263,18 +275,32 @@ export default function AgentDetailPage({ params }: Props) {
   const loadAgentDetails = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
     const token = agentDetailsRequest.nextGeneration()
-    Promise.all([
-      getAgentDetailAction(agentUsername),
-      getAgentProfitReportAction({
-        targetAgentId: resolvedAgentIdRef.current || agentUsername,
+    const targetId = selectedPlayerIdRef.current
+    // Issue #93: agent detail + profit report + (when relevant) the already-
+    // selected player's history now come back from ONE combined action/
+    // requireAuth() call instead of 2-3 separate ones. History is only asked
+    // for when the caller wants a reload AND a player is already selected --
+    // same condition the old separate loadPlayerHistory(updated.id) call
+    // below used to gate on, preserving the original "a filter/scope-only
+    // change never refetches history" behavior.
+    const historyTargetId = reloadHistory ? targetId ?? undefined : undefined
+    // Shares historyRequest's generation counter with loadPlayerHistory (the
+    // manual-click path) so a newer manual player switch always wins over a
+    // slower, now-stale bundle response, regardless of which resolves first.
+    const historyToken = historyTargetId ? historyRequest.nextGeneration() : null
+
+    getAgentDetailBundleAction(
+      agentUsername,
+      {
         datePreset: statsScopeRef.current,
         // Issue #90 fix: filterDateRef is already the resolved IST day key.
-        filterDate: filterDateRef.current
-      })
-    ]).then(([res, resProf]) => {
+        filterDate: filterDateRef.current,
+      },
+      historyTargetId
+    ).then((res) => {
       if (!agentDetailsRequest.isCurrent(token)) return
       setIsRefreshing(false)
-      const errors = [res.error, resProf.error].filter(Boolean)
+      const errors = [res.error, res.profit.error, historyTargetId ? res.history.error : null].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (res.agent) setAgentInfo(res.agent)
       // Store the resolved UUID so other actions (transfer, toggle, password) can use it.
@@ -285,34 +311,33 @@ export default function AgentDetailPage({ params }: Props) {
       if (res.agent?.id) resolvedAgentIdRef.current = res.agent.id
       if (!res.error && res.players) {
         setPlayers(res.players)
-        const targetId = selectedPlayerIdRef.current
         if (targetId) {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
-            // Only reload history when the caller asks for it -- the
-            // filter/scope-change effect below deliberately passes false
-            // (a date/scope change shouldn't refetch raw history, only
-            // recompute the profit report for the new filter); the live-sync
-            // effect and manual refresh both pass true.
-            if (reloadHistory) loadPlayerHistory(updated.id)
+            if (historyTargetId && historyToken !== null && historyRequest.isCurrent(historyToken)) {
+              applyHistoryResult(updated.id, res.history)
+            }
           }
         } else if (res.players.length > 0) {
+          // First load, nothing selected yet -- which player is "first" isn't
+          // known until this response comes back, so this one-time case still
+          // needs its own follow-up fetch rather than being bundled above.
           selectedPlayerIdRef.current = res.players[0].id
           setSelectedPlayer(res.players[0])
           loadPlayerHistory(res.players[0].id)
         }
       }
-      if (!resProf.error) {
-        setProfitSummary(resProf.summary)
-        setProfitPlayers(resProf.players)
+      if (!res.profit.error) {
+        setProfitSummary(res.profit.summary)
+        setProfitPlayers(res.profit.players)
       }
     }).catch((e) => {
       if (!agentDetailsRequest.isCurrent(token)) return
       setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load agent details.')
     })
-  }, [agentUsername, loadPlayerHistory, agentDetailsRequest])
+  }, [agentUsername, loadPlayerHistory, applyHistoryResult, agentDetailsRequest, historyRequest])
 
   // Keep filter refs in sync so stable loadAgentDetails always reads latest values
   React.useEffect(() => {

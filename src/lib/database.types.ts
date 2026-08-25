@@ -433,6 +433,10 @@ export type Database = {
         Args: Record<string, unknown>
         Returns: Json
       }
+      staff_auth_check: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
       staff_session_login: {
         Args: Record<string, unknown>
         Returns: Json

@@ -92,9 +92,28 @@ export type StaffSessionLoginResult =
   | { allowed: true }
   | { allowed: false; reason: 'account_blocked' | 'session_active_elsewhere' }
 
-/** Return shape of staff_session_touch -- called from requireAuth on every
- * dashboard action to confirm this is still the claimed device. */
+/** Return shape of staff_session_touch -- called independently from
+ * src/proxy.ts's own navigation-level single-device gate. No longer called
+ * from requireAuth(), which uses staff_auth_check instead (Issue #93). */
 export type StaffSessionTouchResult = { valid: boolean }
+
+/** Return shape of staff_auth_check -- called from requireAuth() on every
+ * dashboard action. Combines the profile fetch + is_active check +
+ * single-device session-token validation (agent/superadmin only) into one
+ * round-trip (Issue #93). session_valid is true for players (not subject to
+ * single-device enforcement) and meaningless when profile_found is false. */
+export type StaffAuthCheckResult =
+  | { profile_found: false }
+  | {
+      profile_found: true
+      id: string
+      username: string
+      role: 'superadmin' | 'agent' | 'player'
+      coin_balance: number
+      is_active: boolean
+      agent_id: string | null
+      session_valid: boolean
+    }
 
 export interface PlayLimits {
   single: { min: number; max: number }

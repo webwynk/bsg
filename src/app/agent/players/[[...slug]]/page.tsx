@@ -35,7 +35,7 @@ import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
 import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
-import { createPlayerAction, getPlayersAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
+import { createPlayerAction, getPlayersWithHistoryAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
 
 import {
   Table,
@@ -211,6 +211,25 @@ export default function PlayersPage() {
   // stale response could win the race and show the wrong player's history.
   const historyRequest = useRequestGeneration()
 
+  // Issue #93: extracted out of loadPlayerHistory so the SAME apply logic
+  // (loadedHistoryPlayerIdRef bookkeeping, no pagination/skeleton reset for a
+  // same-player background refresh) also covers history that arrives bundled
+  // inside loadPlayers's getPlayersWithHistoryAction response, not just
+  // history fetched by loadPlayerHistory's own standalone call.
+  const applyHistoryResult = React.useCallback((playerId: string, res: {
+    game_plays: PlayerGamePlay[]
+    coin_movements: PlayerCoinMovement[]
+    error: string | null
+  }) => {
+    loadedHistoryPlayerIdRef.current = playerId
+    setIsLoadingHistory(false)
+    setLoadError(res.error)
+    if (!res.error) {
+      setGamePlays(res.game_plays)
+      setPointsHistory(res.coin_movements)
+    }
+  }, [])
+
   const loadPlayerHistory = React.useCallback((playerId: string) => {
     const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
     if (isSwitchingPlayer) {
@@ -221,19 +240,13 @@ export default function PlayersPage() {
     const token = historyRequest.nextGeneration()
     getPlayerDetailHistoryAction(playerId).then((res) => {
       if (!historyRequest.isCurrent(token)) return
-      loadedHistoryPlayerIdRef.current = playerId
-      setIsLoadingHistory(false)
-      setLoadError(res.error)
-      if (!res.error) {
-        setGamePlays(res.game_plays)
-        setPointsHistory(res.coin_movements)
-      }
+      applyHistoryResult(playerId, res)
     }).catch((e) => {
       if (!historyRequest.isCurrent(token)) return
       setIsLoadingHistory(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load player history.')
     })
-  }, [historyRequest])
+  }, [historyRequest, applyHistoryResult])
 
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   // Same guard for the player-list fetch -- can be triggered by a live
@@ -249,10 +262,25 @@ export default function PlayersPage() {
   // decision, the mount effect below no longer shows the spinner (matching
   // every other page's initial-load behavior) -- the 6 other call sites all
   // explicitly set it themselves now, preserving their exact prior behavior.
+  //
+  // Issue #93: player list + the CURRENTLY selected player's history now
+  // come back from ONE combined action/requireAuth() call instead of two,
+  // for the steady-state case where a player is already selected. The
+  // first-load URL-slug match and the no-selection-yet auto-select-first
+  // case both still need their own follow-up loadPlayerHistory call below --
+  // which player that ends up being isn't known until this response
+  // arrives, so it can't be requested up front in the same round trip.
   const loadPlayers = React.useCallback((opts?: { reloadHistory?: boolean }) => {
     const reloadHistory = opts?.reloadHistory ?? false
     const token = playersRequest.nextGeneration()
-    getPlayersAction().then((res) => {
+    const targetId = selectedPlayerIdRef.current
+    const historyTargetId = (reloadHistory && targetId) ? targetId : undefined
+    // Shares historyRequest's generation counter with loadPlayerHistory (the
+    // manual-click path) so a newer manual player switch always wins over a
+    // slower, now-stale bundled response, regardless of which resolves first.
+    const historyToken = historyTargetId ? historyRequest.nextGeneration() : null
+
+    getPlayersWithHistoryAction(undefined, historyTargetId).then((res) => {
       if (!playersRequest.isCurrent(token)) return
       setIsRefreshing(false)
       setIsLoadingPlayers(false)
@@ -269,12 +297,13 @@ export default function PlayersPage() {
             return
           }
         }
-        const targetId = selectedPlayerIdRef.current
         if (targetId) {
           const updated = res.players.find(p => p.id === targetId)
           if (updated) {
             setSelectedPlayer(updated)
-            if (reloadHistory) loadPlayerHistory(updated.id)
+            if (historyTargetId && historyToken !== null && historyRequest.isCurrent(historyToken)) {
+              applyHistoryResult(updated.id, res.history)
+            }
           }
         } else if (res.players.length > 0) {
           selectedPlayerIdRef.current = res.players[0].id
@@ -288,7 +317,7 @@ export default function PlayersPage() {
       setIsLoadingPlayers(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load players.')
     })
-  }, [loadPlayerHistory, urlSlug, playersRequest])
+  }, [loadPlayerHistory, applyHistoryResult, urlSlug, playersRequest, historyRequest])
 
   // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
   // effect (mirrors the same fix on superadmin/agents/[agentUsername], the

@@ -7,6 +7,11 @@ import { asRpc, type AdminIssueResult, type SetAgentActiveResult } from '@/lib/r
 import { logAuditEventAction } from '../actions'
 import { isCredit, toWholeCoins, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
+import { resolveAgentId } from './resolve-agent-id'
+import { runAgentProfitReport, EMPTY_PROFIT_REPORT } from '@/app/agent/profit/profit-report-logic'
+import { runPlayerDetailHistory } from '@/app/agent/players/player-history-logic'
+import type { ProfitReportParams, ProfitReport } from '@/app/agent/profit/actions'
+import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 
 /**
  * Agent administration — v2.
@@ -28,16 +33,6 @@ function istDateTime(value: string): string {
     timeZone: 'Asia/Kolkata',
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
-}
-
-export async function resolveAgentId(identifier: string): Promise<string | null> {
-  if (!identifier || identifier === 'all') return null
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
-  if (isUuid) return identifier
-  const { data } = await createAdminClient()
-    .from('profiles').select('id').eq('role', 'agent')
-    .ilike('username', identifier).maybeSingle()
-  return data?.id ?? null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,14 +89,17 @@ export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: st
 // ─────────────────────────────────────────────────────────────────────────────
 // DETAIL
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getAgentDetailAction(agentIdentifier: string) {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { agent: null, players: [], error: auth.error }
-
+/**
+ * Issue #93: core agent-detail logic, private to this file (never exported
+ * -- a 'use server' file may only export async functions that are themselves
+ * safe to expose as Server Actions, and this one takes an already-resolved
+ * agentId and does no authorization of its own). Takes agentId pre-resolved
+ * rather than an identifier so getAgentDetailBundleAction below can resolve
+ * it once and reuse it for the profit report too, instead of two separate
+ * resolveAgentId round-trips for the same identifier.
+ */
+async function runAgentDetail(agentId: string) {
   try {
-    const agentId = await resolveAgentId(agentIdentifier)
-    if (!agentId) return { agent: null, players: [], error: 'Agent not found.' }
-
     const db = createAdminClient()
     const [agentRes, playersRes] = await Promise.all([
       db.from('profiles')
@@ -149,12 +147,53 @@ export async function getAgentDetailAction(agentIdentifier: string) {
         is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
         auto_locked_at: p.auto_locked_at,
       })),
-      error: null,
+      error: null as string | null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { agent: null, players: [], error: `Could not load agent: ${message}` }
   }
+}
+
+/**
+ * Issue #93: combines the agent-detail lookup, the profit report, and
+ * (optionally) the selected player's history into ONE requireAuth() call --
+ * replaces the superadmin agent-detail page's previous 2-3 separate actions
+ * (getAgentDetailAction + getAgentProfitReportAction +
+ * getPlayerDetailHistoryAction), which fired independently every 3-second
+ * live-sync poll, each paying its own auth round-trip. agentIdentifier is
+ * resolved once here and reused for both the detail lookup and the profit
+ * report, instead of each resolving it separately.
+ */
+export async function getAgentDetailBundleAction(
+  agentIdentifier: string,
+  profitParams: Omit<ProfitReportParams, 'targetAgentId'>,
+  selectedPlayerId?: string
+): Promise<{
+  agent: Awaited<ReturnType<typeof runAgentDetail>>['agent']
+  players: Awaited<ReturnType<typeof runAgentDetail>>['players']
+  error: string | null
+  profit: ProfitReport
+  history: { game_plays: PlayerGamePlay[]; coin_movements: PlayerCoinMovement[]; error: string | null }
+}> {
+  const emptyHistory = { game_plays: [] as PlayerGamePlay[], coin_movements: [] as PlayerCoinMovement[], error: null }
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) {
+    return { agent: null, players: [], error: auth.error, profit: EMPTY_PROFIT_REPORT, history: emptyHistory }
+  }
+
+  const agentId = await resolveAgentId(agentIdentifier)
+  if (!agentId) {
+    return { agent: null, players: [], error: 'Agent not found.', profit: EMPTY_PROFIT_REPORT, history: emptyHistory }
+  }
+
+  const [detail, profit, history] = await Promise.all([
+    runAgentDetail(agentId),
+    runAgentProfitReport(auth.user, { ...profitParams, targetAgentId: agentId }),
+    selectedPlayerId ? runPlayerDetailHistory(auth.user, selectedPlayerId) : Promise.resolve(emptyHistory),
+  ])
+
+  return { agent: detail.agent, players: detail.players, error: detail.error, profit, history }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
