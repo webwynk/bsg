@@ -33,6 +33,15 @@ export interface LiveSyncStatus {
    *  or actually stale (e.g. a suspended/frozen background tab), rather
    *  than assuming freshness forever once a badge starts as "live". */
   tierMs: number
+  /** Issue #93 bug fix: triggers an immediate refresh, going through the
+   *  exact same in-flight guard as the automatic poll/Realtime triggers (see
+   *  runFetch below) -- callers should use this for a manual "Refresh"
+   *  button instead of calling their own fetch function directly. A direct
+   *  call bypasses the guard entirely, which is how the two pages that
+   *  first exposed this bug still ended up with occasional overlapping
+   *  requests (a manual click racing an already-in-flight poll tick) even
+   *  after the poll itself stopped piling up on its own. */
+  refresh: () => void
 }
 
 /**
@@ -179,5 +188,5 @@ export function useLiveSync(
     }
   }, [tierMs, runFetch])
 
-  return React.useMemo(() => ({ lastSyncedAt, tierMs }), [lastSyncedAt, tierMs])
+  return React.useMemo(() => ({ lastSyncedAt, tierMs, refresh: runFetch }), [lastSyncedAt, tierMs, runFetch])
 }

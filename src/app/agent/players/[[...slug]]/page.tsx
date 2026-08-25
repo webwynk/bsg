@@ -357,15 +357,21 @@ export default function PlayersPage() {
   // Issue #91 for the full evidence. Tier 'fast' (3s) since this page shows
   // live gameplay outcomes for this agent's own players. No separate
   // mount-only effect is needed -- useLiveSync fires once on mount too.
-  const { lastSyncedAt, tierMs } = useLiveSync(
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(
     ['profiles', 'bets', 'coin_ledger'],
     () => loadPlayers({ reloadHistory: true }),
     'fast'
   )
 
-  const handleManualRefresh = async () => {
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // loadPlayers directly -- a direct call bypassed the in-flight guard
+  // entirely, letting a manual click still overlap with an already-in-flight
+  // poll tick (confirmed live on the superadmin-portal equivalent of this
+  // page: this alone was enough to leave the button stuck spinning for
+  // 8-11s even after the poll itself stopped piling up).
+  const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadPlayers({ reloadHistory: true })
+    refresh()
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {

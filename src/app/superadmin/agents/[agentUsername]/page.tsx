@@ -391,15 +391,20 @@ export default function AgentDetailPage({ params }: Props) {
   // gameplay outcomes for an agent's own players, not a heavy full-table-scan
   // summary. Cascades into a full history reload (reloadHistory: true) on
   // every fire, matching agent/players' equivalent behavior.
-  const { lastSyncedAt, tierMs } = useLiveSync(
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(
     ['profiles', 'bets', 'coin_ledger'],
     () => loadAgentDetails({ reloadHistory: true }),
     'fast'
   )
 
-  const handleManualRefresh = async () => {
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // loadAgentDetails directly -- a direct call bypassed the in-flight guard
+  // entirely, letting a manual click still overlap with an already-in-flight
+  // poll tick (confirmed live: this alone was enough to leave the button
+  // stuck spinning for 8-11s even after the poll itself stopped piling up).
+  const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadAgentDetails({ reloadHistory: true })
+    refresh()
   }
 
   const handleSelectPlayer = (player: typeof players[0]) => {
