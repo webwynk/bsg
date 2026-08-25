@@ -52,9 +52,12 @@ export default function AgentDashboard() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const dashboardRequest = useRequestGeneration()
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const fetchDashboardData = React.useCallback(() => {
     const token = dashboardRequest.nextGeneration()
-    getAgentDashboardDataAction().then((resDash) => {
+    return getAgentDashboardDataAction().then((resDash) => {
       if (!dashboardRequest.isCurrent(token)) return
       setIsLoadingDashboard(false)
       setIsRefreshing(false)
@@ -98,13 +101,16 @@ export default function AgentDashboard() {
   // this is the agent's own cashier home, showing live stake/payout activity
   // for their own players. Fires once on mount (the initial load) and again
   // on every subsequent change.
-  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchDashboardData, 'fast')
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchDashboardData, 'fast')
 
-  const handleManualRefresh = async () => {
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // fetchDashboardData directly -- a direct call bypassed the in-flight
+  // guard entirely, the same gap confirmed live to leave a Refresh button
+  // stuck spinning for 8-11s on two other pages.
+  const handleManualRefresh = () => {
     setIsRefreshing(true)
-    fetchDashboardData() // manual: no skeleton, just spinner on button -- now
-    // cleared by fetchDashboardData's own completion, not a fixed timeout
-    // that could resolve before or after the real request actually finishes.
+    refresh() // manual: no skeleton, just spinner on button -- cleared by
+    // fetchDashboardData's own completion, not a fixed timeout.
   }
 
   const handleQuickTransfer = async (type: 'deposit' | 'withdraw') => {

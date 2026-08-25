@@ -67,9 +67,12 @@ export default function AgentProfitPage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const profitRequest = useRequestGeneration()
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const loadProfitReport = React.useCallback(() => {
     const token = profitRequest.nextGeneration()
-    getAgentProfitReportAction({
+    return getAgentProfitReportAction({
       datePreset: datePresetRef.current,
       // Issue #90 fix: send the exact day the user clicked (read back from the
       // picker's own local y/m/d, no timezone conversion) instead of an ISO
@@ -123,11 +126,15 @@ export default function AgentProfitPage() {
   // mount (the initial load) and again on every subsequent change --
   // separate from the filter/page-change effect above, which handles its
   // own re-fetch independently.
-  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'bets'], loadProfitReport, 'fast')
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'bets'], loadProfitReport, 'fast')
 
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // loadProfitReport directly -- a direct call bypassed the in-flight guard
+  // entirely, the same gap confirmed live to leave a Refresh button stuck
+  // spinning for 8-11s on two other pages.
   const handleManualRefresh = () => {
     setIsRefreshing(true)
-    loadProfitReport() // manual: cleared by loadProfitReport's own completion
+    refresh() // manual: cleared by loadProfitReport's own completion
   }
 
   const handleResetFilters = () => {

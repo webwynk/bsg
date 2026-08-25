@@ -51,9 +51,12 @@ export default function HistoryPage() {
   const itemsPerPage = 10
 
   const historyRequest = useRequestGeneration()
+  // Returned (not fire-and-forget) so useLiveSync can await it and skip
+  // starting an overlapping poll tick while this one is still in flight --
+  // see the in-flight guard in use-live-sync.ts (Issue #93).
   const loadHistory = React.useCallback(() => {
     const token = historyRequest.nextGeneration()
-    getAgentTransactionHistoryAction().then((res) => {
+    return getAgentTransactionHistoryAction().then((res) => {
       if (!historyRequest.isCurrent(token)) return
       setIsLoading(false)
       setIsRefreshing(false)
@@ -70,11 +73,6 @@ export default function HistoryPage() {
     })
   }, [historyRequest])
 
-  const handleManualRefresh = () => {
-    setIsRefreshing(true)
-    loadHistory() // manual: cleared by loadHistory's own completion above
-  }
-
   // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
   // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
   // connection from LiveDataProvider, mounted once in agent/layout.tsx --
@@ -88,7 +86,16 @@ export default function HistoryPage() {
   // coin_ledger (the transfer history itself) and profiles
   // (getAgentTransactionHistoryAction also reads this agent's own
   // coin_balance from there).
-  const { lastSyncedAt, tierMs } = useLiveSync(['profiles', 'coin_ledger'], loadHistory, 'normal')
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'coin_ledger'], loadHistory, 'normal')
+
+  // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
+  // loadHistory directly -- a direct call bypassed the in-flight guard
+  // entirely, the same gap confirmed live to leave a Refresh button stuck
+  // spinning for 8-11s on two other pages.
+  const handleManualRefresh = () => {
+    setIsRefreshing(true)
+    refresh() // manual: cleared by loadHistory's own completion above
+  }
 
   const handleResetFilters = () => {
     setSearchQuery('')

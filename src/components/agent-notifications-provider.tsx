@@ -71,11 +71,38 @@ export function AgentNotificationsProvider({ children }: { children: React.React
   const [loading, setLoading] = React.useState(true)
   const [lastSyncedAt, setLastSyncedAt] = React.useState<number | null>(null)
 
+  // Issue #93 bug fix: this provider previously had NO ordering guard at
+  // all -- unlike every page-level fetch in the dashboard (all of which use
+  // useRequestGeneration), a response here always unconditionally overwrote
+  // `notifications`, so two requests resolving out of order (a real
+  // possibility: refresh() is called independently by the Realtime
+  // subscription, the poll, tab-refocus, and every manual action below)
+  // could let an older response silently clobber a newer one -- stale
+  // account-lockout data, shown with no visible sign anything was wrong.
+  // generationRef adds the same ordering guard every other route already
+  // has. inFlightRef adds the same protection just given to useLiveSync's
+  // own poll (see use-live-sync.ts): this provider's poll fires on the same
+  // fixed schedule regardless of whether a previous refresh() call has
+  // resolved, so if a round-trip ever runs long enough to approach
+  // FALLBACK_POLL_MS, ticks could pile up faster than they resolve -- the
+  // exact failure mode confirmed live to leave a Refresh button stuck
+  // spinning elsewhere in the dashboard.
+  const generationRef = React.useRef(0)
+  const inFlightRef = React.useRef(false)
+
   const refresh = React.useCallback(async () => {
-    const res = await getAgentNotificationsAction()
-    if (!res.error) setNotifications(res.notifications)
-    setLoading(false)
-    setLastSyncedAt(Date.now())
+    if (inFlightRef.current) return
+    inFlightRef.current = true
+    const token = ++generationRef.current
+    try {
+      const res = await getAgentNotificationsAction()
+      if (token !== generationRef.current) return // superseded by a newer call
+      if (!res.error) setNotifications(res.notifications)
+      setLoading(false)
+      setLastSyncedAt(Date.now())
+    } finally {
+      inFlightRef.current = false
+    }
   }, [])
 
   React.useEffect(() => {
