@@ -102,11 +102,20 @@ export function GamePlayDetailDialog({
       // the printable content onto <body> directly, outside that clipping
       // ancestor, and capture the clone instead -- the visible popup itself
       // is never resized or altered.
+      // Positioned at (0,0) -- normal, in-viewport coordinates, not pushed
+      // off-screen -- and hidden purely by stacking order (a very negative
+      // z-index, underneath the page's own opaque content). An earlier
+      // version of this fix used `left: -99999px` to move it off-screen
+      // instead; that produced a canvas far larger than intended, since it
+      // made html2canvas measure a capture region spanning the full
+      // ~100,000px distance back to the visible page.
       detachedClone = printableRef.current.cloneNode(true) as HTMLDivElement
       detachedClone.style.position = 'fixed'
       detachedClone.style.top = '0'
-      detachedClone.style.left = '-99999px'
+      detachedClone.style.left = '0'
       detachedClone.style.margin = '0'
+      detachedClone.style.zIndex = '-2147483648'
+      detachedClone.style.pointerEvents = 'none'
       document.body.appendChild(detachedClone)
 
       // Render fixed 1050px desktop layout on ALL devices (mobile, tablet, desktop).
