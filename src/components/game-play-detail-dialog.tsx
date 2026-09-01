@@ -116,6 +116,17 @@ export function GamePlayDetailDialog({
       detachedClone.style.margin = '0'
       detachedClone.style.zIndex = '-2147483648'
       detachedClone.style.pointerEvents = 'none'
+      // Own, guaranteed-unique marker -- cloneNode(true) copies data-printable
+      // from the live element too, so while the dialog is open there are TWO
+      // elements carrying that attribute at once (the original, still-visible
+      // content, and this hidden copy). onclone below used to query by
+      // data-printable and grab whichever matched first -- confirmed live via
+      // instrumentation that it was silently grabbing the ORIGINAL (still
+      // on-screen) element, not this one, so the 1050px width was never
+      // actually applied to what's being captured. This marker exists only on
+      // the detached clone, never on the live content, so the query below can
+      // never be ambiguous regardless of how many dialogs/copies coexist.
+      detachedClone.setAttribute('data-pdf-capture-target', 'true')
       document.body.appendChild(detachedClone)
 
       // Render fixed 1050px desktop layout on ALL devices (mobile, tablet, desktop).
@@ -129,7 +140,7 @@ export function GamePlayDetailDialog({
         windowWidth: 1200,
         backgroundColor: '#ffffff',
         onclone: (clonedDoc) => {
-          const el = clonedDoc.querySelector('[data-printable="true"]') as HTMLElement
+          const el = clonedDoc.querySelector('[data-pdf-capture-target="true"]') as HTMLElement
           if (el) {
             el.style.width = '1050px'
             el.style.minWidth = '1050px'
