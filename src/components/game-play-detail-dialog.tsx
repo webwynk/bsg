@@ -25,11 +25,12 @@ const PDF_CONTENT_WIDTH = PDF_PAGE_WIDTH - PDF_MARGIN * 2
 // 1:1 square box -- columns per row derived from the fixed page width, not
 // hardcoded, so changing PDF_PAGE_WIDTH or PDF_BOX_SIZE later automatically
 // recomputes how many fit per row instead of needing a manual update.
-// Size and gap matched directly against the live on-screen popup's actual
-// rendered box (measured via getBoundingClientRect(), not guessed from its
-// CSS: ~56x52px, 6px gap) rather than an arbitrary round number.
-const PDF_BOX_SIZE = 54
-const PDF_BOX_GAP = 6
+// Sized for a denser grid within the fixed 800px page (15 cols/row) --
+// the on-screen popup itself can show more columns on a wide desktop
+// browser (its dialog stretches past 1000px there), which a fixed-width
+// PDF page can't match without shrinking numbers past legibility.
+const PDF_BOX_SIZE = 44
+const PDF_BOX_GAP = 4
 const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_SIZE + PDF_BOX_GAP)))
 const PDF_BOX_NUMBER_H = Math.round(PDF_BOX_SIZE * 0.6)
 const PDF_BOX_STAKE_H = PDF_BOX_SIZE - PDF_BOX_NUMBER_H
@@ -230,15 +231,31 @@ export function GamePlayDetailDialog({
       pdf.setDrawColor('#e2e8f0')
       pdf.roundedRect(PDF_MARGIN, y, PDF_CONTENT_WIDTH, PDF_IDENTITY_H, 8, 8, 'FD')
 
+      // Avatar circle -- same style as the on-screen popup (light indigo
+      // fill, indigo initial letter), dropped in the first native-drawing
+      // pass as "no clean jsPDF equivalent" -- jsPDF's circle() primitive
+      // handles it directly, that assumption was wrong.
+      const avatarR = 12
+      const avatarCx = PDF_MARGIN + 16 + avatarR
+      const avatarCy = y + 18
+      pdf.setFillColor('#eef2ff')
+      pdf.setDrawColor('#c7d2fe')
+      pdf.circle(avatarCx, avatarCy, avatarR, 'FD')
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(12)
+      pdf.setTextColor('#6366f1')
+      pdf.text((playerFullName[0] || 'P').toUpperCase(), avatarCx, avatarCy + 4, { align: 'center' })
+
+      const nameX = avatarCx + avatarR + 10
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(15)
       pdf.setTextColor('#0f172a')
-      pdf.text(playerFullName, PDF_MARGIN + 16, y + 26)
+      pdf.text(playerFullName, nameX, y + 22)
       const nameW = pdf.getTextWidth(playerFullName)
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(11)
       pdf.setTextColor('#94a3b8')
-      pdf.text(`@${playerUsername}`, PDF_MARGIN + 16 + nameW + 8, y + 26)
+      pdf.text(`@${playerUsername}`, nameX + nameW + 8, y + 22)
 
       let badgeX = PDF_MARGIN + 16
       badgeX += pdfBadge(pdf, badgeX, y + 38, 'Triple Chance', '#ffffff', '#e2e8f0', '#475569') + 8
