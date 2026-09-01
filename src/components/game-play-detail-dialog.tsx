@@ -85,14 +85,37 @@ export function GamePlayDetailDialog({
   async function handleDownloadPdf() {
     if (!printableRef.current || isDownloading) return
     setIsDownloading(true)
+    let detachedClone: HTMLDivElement | null = null
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas-pro'),
         import('jspdf'),
       ])
 
-      // Render fixed 1050px desktop layout on ALL devices (mobile, tablet, desktop)
-      const canvas = await html2canvas(printableRef.current, {
+      // DialogContent sets overflow-y-auto (so tall content scrolls on small
+      // screens) but never sets overflow-x. Per the CSS spec, a browser can't
+      // leave one axis 'visible' while the other scrolls, so it silently
+      // coerces overflow-x to 'auto' too -- clipping anything wider than the
+      // popup's own on-screen box. That's exactly what was happening to the
+      // desktop-forced 1050px layout below once html2canvas captured it in
+      // place, cutting off the right edge of the downloaded PDF. Fix: clone
+      // the printable content onto <body> directly, outside that clipping
+      // ancestor, and capture the clone instead -- the visible popup itself
+      // is never resized or altered.
+      detachedClone = printableRef.current.cloneNode(true) as HTMLDivElement
+      detachedClone.style.position = 'fixed'
+      detachedClone.style.top = '0'
+      detachedClone.style.left = '-99999px'
+      detachedClone.style.margin = '0'
+      document.body.appendChild(detachedClone)
+
+      // Render fixed 1050px desktop layout on ALL devices (mobile, tablet, desktop).
+      // windowWidth is still needed here even though the clone above already
+      // escaped the clipping ancestor -- it makes html2canvas's own virtual
+      // render window wide enough for this content's sm:/lg: Tailwind
+      // breakpoints to evaluate as desktop, regardless of the real device's
+      // actual screen width.
+      const canvas = await html2canvas(detachedClone, {
         scale: 2,
         windowWidth: 1200,
         backgroundColor: '#ffffff',
@@ -120,6 +143,7 @@ export function GamePlayDetailDialog({
     } catch (e) {
       console.error('PDF generation failed:', e)
     } finally {
+      if (detachedClone) document.body.removeChild(detachedClone)
       setIsDownloading(false)
     }
   }
