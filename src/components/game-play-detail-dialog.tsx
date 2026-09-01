@@ -175,7 +175,7 @@ export function GamePlayDetailDialog({
       // Win/Status columns). Passing the orientation that actually matches
       // this page's real shape avoids the swap entirely.
       const orientation = pageHeight >= PDF_PAGE_WIDTH ? 'portrait' : 'landscape'
-      const pdf = new jsPDF({ orientation, unit: 'px', format: [PDF_PAGE_WIDTH, pageHeight] }) as unknown as JsPDF
+      const pdf = new jsPDF({ orientation, unit: 'px', format: [PDF_PAGE_WIDTH, pageHeight] })
 
       // Background + top accent bar
       pdfBox(pdf, 0, 0, PDF_PAGE_WIDTH, pageHeight, '#ffffff')
