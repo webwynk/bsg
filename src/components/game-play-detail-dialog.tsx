@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import type { jsPDF as JsPDF } from 'jspdf'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,74 @@ import {
 import { Button } from "@/components/ui/button"
 import { Download, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+
+/** Fixed page-layout constants for the PDF receipt (all in px, matching the
+ * jsPDF document's own `unit: 'px'`). Nothing here reads from the DOM or the
+ * real device -- every value is drawn at these exact coordinates every time,
+ * so there is no rendering step left that a browser/screen size can affect.
+ * See MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #95 for why the previous
+ * screenshot-based approach (html2canvas) was replaced with this. */
+const PDF_PAGE_WIDTH = 1050
+const PDF_MARGIN = 40
+const PDF_CONTENT_WIDTH = PDF_PAGE_WIDTH - PDF_MARGIN * 2
+const PDF_BOX_W = 64
+const PDF_BOX_H = 40
+const PDF_BOX_GAP = 8
+const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_W + PDF_BOX_GAP)))
+const PDF_ACCENT_BAR_H = 6
+const PDF_TOP_MARGIN = 24
+const PDF_IDENTITY_H = 92
+const PDF_BLOCK_GAP = 16
+const PDF_KPI_H = 84
+const PDF_SECTION_HEADER_H = 26
+const PDF_ROW_GAP = 8
+const PDF_SECTION_GAP = 28
+const PDF_BOTTOM_MARGIN = 32
+const PDF_EMPTY_SECTION_H = 20
+
+interface PdfPickSection {
+  title: string
+  entries: Array<[string, number]>
+  pad: number
+  isWinning: (num: string) => boolean
+  emptyText: string
+}
+
+/** Height a single picks section (SINGLE/DOUBLE/TRIPLE) will take up, given
+ * how many bets it has. The exact same function drives both the total-page-
+ * height calculation and the actual drawing pass below, so the two can never
+ * disagree with each other. */
+function pdfSectionBodyHeight(entryCount: number): number {
+  if (entryCount === 0) return PDF_EMPTY_SECTION_H
+  const rows = Math.ceil(entryCount / PDF_COLUMNS)
+  return rows * PDF_BOX_H + (rows - 1) * PDF_ROW_GAP
+}
+
+function pdfTotalHeight(sections: PdfPickSection[]): number {
+  let h = PDF_ACCENT_BAR_H + PDF_TOP_MARGIN + PDF_IDENTITY_H + PDF_BLOCK_GAP + PDF_KPI_H + PDF_BLOCK_GAP
+  for (const section of sections) {
+    h += PDF_SECTION_HEADER_H + pdfSectionBodyHeight(section.entries.length) + PDF_SECTION_GAP
+  }
+  return h + PDF_BOTTOM_MARGIN
+}
+
+function pdfBox(pdf: JsPDF, x: number, y: number, w: number, h: number, fill: string) {
+  pdf.setFillColor(fill)
+  pdf.rect(x, y, w, h, 'F')
+}
+
+function pdfBadge(pdf: JsPDF, x: number, y: number, label: string, fill: string, border: string, textColor: string): number {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  const textWidth = pdf.getTextWidth(label)
+  const w = textWidth + 16
+  pdf.setFillColor(fill)
+  pdf.setDrawColor(border)
+  pdf.roundedRect(x, y, w, 18, 4, 4, 'FD')
+  pdf.setTextColor(textColor)
+  pdf.text(label, x + w / 2, y + 12, { align: 'center' })
+  return w
+}
 
 /** Matches PlayerGamePlay (agent/players/actions.ts) -- kept as a narrower,
  * local shape so this component doesn't import a page-owned type and can be
@@ -37,8 +106,11 @@ export interface GamePlaySpin {
  * 8-field summary already shown in the table row, and the Single/Double/
  * Triple picks breakdown with the winning pick highlighted.
  *
- * Offers "Download PDF": a screenshot of the printable content below,
- * captured with html2canvas-pro and embedded into a jsPDF document.
+ * Offers "Download PDF": drawn directly with jsPDF (text/rects, no DOM
+ * screenshot) at a fixed width, with height computed from how many bets
+ * each section has -- identical output on every device, since nothing here
+ * depends on the real browser's rendering. See MASTER_AUDIT_AND_REMEDIATION_PLAN.md
+ * Issue #95 for why an earlier html2canvas-based version was replaced.
  */
 export function GamePlayDetailDialog({
   spin,
@@ -53,7 +125,6 @@ export function GamePlayDetailDialog({
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const [isDownloading, setIsDownloading] = React.useState(false)
-  const printableRef = React.useRef<HTMLDivElement>(null)
 
   const singleEntries = Object.entries(spin.single_bets || {}).sort(
     ([a], [b]) => Number(a) - Number(b) || a.localeCompare(b)
@@ -83,87 +154,187 @@ export function GamePlayDetailDialog({
   const d3 = blackDigit ?? fallbackDigits?.[2] ?? '-'
 
   async function handleDownloadPdf() {
-    if (!printableRef.current || isDownloading) return
+    if (isDownloading) return
     setIsDownloading(true)
-    let detachedClone: HTMLDivElement | null = null
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas-pro'),
-        import('jspdf'),
-      ])
+      const { default: jsPDF } = await import('jspdf')
 
-      // DialogContent sets overflow-y-auto (so tall content scrolls on small
-      // screens) but never sets overflow-x. Per the CSS spec, a browser can't
-      // leave one axis 'visible' while the other scrolls, so it silently
-      // coerces overflow-x to 'auto' too -- clipping anything wider than the
-      // popup's own on-screen box. That's exactly what was happening to the
-      // desktop-forced 1050px layout below once html2canvas captured it in
-      // place, cutting off the right edge of the downloaded PDF. Fix: clone
-      // the printable content onto <body> directly, outside that clipping
-      // ancestor, and capture the clone instead -- the visible popup itself
-      // is never resized or altered.
-      // Positioned at (0,0) -- normal, in-viewport coordinates, not pushed
-      // off-screen -- and hidden purely by stacking order (a very negative
-      // z-index, underneath the page's own opaque content). An earlier
-      // version of this fix used `left: -99999px` to move it off-screen
-      // instead; that produced a canvas far larger than intended, since it
-      // made html2canvas measure a capture region spanning the full
-      // ~100,000px distance back to the visible page.
-      detachedClone = printableRef.current.cloneNode(true) as HTMLDivElement
-      detachedClone.style.position = 'fixed'
-      detachedClone.style.top = '0'
-      detachedClone.style.left = '0'
-      detachedClone.style.margin = '0'
-      detachedClone.style.zIndex = '-2147483648'
-      detachedClone.style.pointerEvents = 'none'
-      // Own, guaranteed-unique marker -- cloneNode(true) copies data-printable
-      // from the live element too, so while the dialog is open there are TWO
-      // elements carrying that attribute at once (the original, still-visible
-      // content, and this hidden copy). onclone below used to query by
-      // data-printable and grab whichever matched first -- confirmed live via
-      // instrumentation that it was silently grabbing the ORIGINAL (still
-      // on-screen) element, not this one, so the 1050px width was never
-      // actually applied to what's being captured. This marker exists only on
-      // the detached clone, never on the live content, so the query below can
-      // never be ambiguous regardless of how many dialogs/copies coexist.
-      detachedClone.setAttribute('data-pdf-capture-target', 'true')
-      document.body.appendChild(detachedClone)
+      const sections: PdfPickSection[] = [
+        { title: 'SINGLE', entries: singleEntries, pad: 1, isWinning: (num) => spin.black !== null && num === spin.black.toString(), emptyText: 'No Single bets placed.' },
+        { title: 'DOUBLE', entries: doubleEntries, pad: 2, isWinning: (num) => targetDouble !== null && num.padStart(2, '0') === targetDouble, emptyText: 'No Double bets placed.' },
+        { title: 'TRIPLE', entries: tripleEntries, pad: 3, isWinning: (num) => targetTriple !== null && num.padStart(3, '0') === targetTriple, emptyText: 'No Triple bets placed.' },
+      ]
 
-      // Render fixed 1050px desktop layout on ALL devices (mobile, tablet, desktop).
-      // windowWidth is still needed here even though the clone above already
-      // escaped the clipping ancestor -- it makes html2canvas's own virtual
-      // render window wide enough for this content's sm:/lg: Tailwind
-      // breakpoints to evaluate as desktop, regardless of the real device's
-      // actual screen width.
-      const canvas = await html2canvas(detachedClone, {
-        scale: 2,
-        windowWidth: 1200,
-        backgroundColor: '#ffffff',
-        onclone: (clonedDoc) => {
-          const el = clonedDoc.querySelector('[data-pdf-capture-target="true"]') as HTMLElement
-          if (el) {
-            el.style.width = '1050px'
-            el.style.minWidth = '1050px'
-            el.style.maxWidth = '1050px'
-          }
-        },
-      })
+      const pageHeight = pdfTotalHeight(sections)
+      // jsPDF silently SWAPS a custom [width, height] format's two values
+      // whenever they don't match the requested orientation -- confirmed
+      // directly (a hardcoded 'portrait' with a short hand's page, where
+      // height ends up less than PDF_PAGE_WIDTH, was flipped into a page
+      // that's actually only as wide as the intended height, cutting off
+      // anything positioned using the real PDF_PAGE_WIDTH, like the Total
+      // Win/Status columns). Passing the orientation that actually matches
+      // this page's real shape avoids the swap entirely.
+      const orientation = pageHeight >= PDF_PAGE_WIDTH ? 'portrait' : 'landscape'
+      const pdf = new jsPDF({ orientation, unit: 'px', format: [PDF_PAGE_WIDTH, pageHeight] }) as unknown as JsPDF
 
-      // High-quality JPEG compression (drops file size from ~6MB to ~300KB-400KB)
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      // Background + top accent bar
+      pdfBox(pdf, 0, 0, PDF_PAGE_WIDTH, pageHeight, '#ffffff')
+      pdfBox(pdf, 0, 0, PDF_PAGE_WIDTH, PDF_ACCENT_BAR_H, '#6366f1')
 
-      // Set logical desktop page dimensions (1050px width)
-      const pdfWidth = 1050
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [pdfWidth, pdfHeight] })
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight)
+      let y = PDF_ACCENT_BAR_H + PDF_TOP_MARGIN
+
+      // --- Identity block ---
+      pdf.setFillColor('#f8fafc')
+      pdf.setDrawColor('#e2e8f0')
+      pdf.roundedRect(PDF_MARGIN, y, PDF_CONTENT_WIDTH, PDF_IDENTITY_H, 8, 8, 'FD')
+
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(15)
+      pdf.setTextColor('#0f172a')
+      pdf.text(playerFullName, PDF_MARGIN + 16, y + 26)
+      const nameW = pdf.getTextWidth(playerFullName)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(11)
+      pdf.setTextColor('#94a3b8')
+      pdf.text(`@${playerUsername}`, PDF_MARGIN + 16 + nameW + 8, y + 26)
+
+      let badgeX = PDF_MARGIN + 16
+      badgeX += pdfBadge(pdf, badgeX, y + 38, 'Triple Chance', '#ffffff', '#e2e8f0', '#475569') + 8
+      badgeX += pdfBadge(pdf, badgeX, y + 38, spin.mode, '#eef2ff', '#c7d2fe', '#4f46e5') + 8
+      pdfBadge(pdf, badgeX, y + 38, spin.created_at, '#ffffff', '#e2e8f0', '#64748b')
+
+      pdf.setDrawColor('#e2e8f0')
+      pdf.line(PDF_MARGIN + 16, y + 68, PDF_MARGIN + PDF_CONTENT_WIDTH - 16, y + 68)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(8)
+      pdf.setTextColor('#94a3b8')
+      pdf.text('HAND ID:', PDF_MARGIN + 16, y + 84)
+      pdf.setFont('courier', 'bold')
+      pdf.setFontSize(10)
+      pdf.setTextColor('#334155')
+      pdf.text(spin.hand_id, PDF_MARGIN + 16 + pdf.getTextWidth('HAND ID:') + 8, y + 84)
+
+      y += PDF_IDENTITY_H + PDF_BLOCK_GAP
+
+      // --- KPI band: Result / Total Bet / Total Win / Status ---
+      pdf.setFillColor('#f8fafc')
+      pdf.setDrawColor('#e2e8f0')
+      pdf.roundedRect(PDF_MARGIN, y, PDF_CONTENT_WIDTH, PDF_KPI_H, 8, 8, 'FD')
+      const colW = PDF_CONTENT_WIDTH / 4
+      for (let i = 1; i < 4; i++) {
+        pdf.setDrawColor('#e2e8f0')
+        pdf.line(PDF_MARGIN + colW * i, y + 12, PDF_MARGIN + colW * i, y + PDF_KPI_H - 12)
+      }
+
+      const kpiLabel = (text: string, colIndex: number) => {
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(9)
+        pdf.setTextColor('#64748b')
+        pdf.text(text, PDF_MARGIN + colW * colIndex + colW / 2, y + 22, { align: 'center' })
+      }
+
+      // Col 0: Result digits
+      kpiLabel('RESULT', 0)
+      const digits: Array<[string, string]> = [[d1, '#dc2626'], [d2, '#059669'], [d3, '#0f172a']]
+      const digitBoxSize = 24
+      const digitGap = 6
+      const digitsTotalW = digitBoxSize * 3 + digitGap * 2
+      let digitX = PDF_MARGIN + colW * 0 + colW / 2 - digitsTotalW / 2
+      for (const [digit, color] of digits) {
+        pdf.setFillColor(color)
+        pdf.roundedRect(digitX, y + 34, digitBoxSize, digitBoxSize, 4, 4, 'F')
+        pdf.setFont('courier', 'bold')
+        pdf.setFontSize(12)
+        pdf.setTextColor('#ffffff')
+        pdf.text(digit, digitX + digitBoxSize / 2, y + 34 + digitBoxSize / 2 + 4, { align: 'center' })
+        digitX += digitBoxSize + digitGap
+      }
+
+      // Col 1: Total Bet
+      kpiLabel('TOTAL BET', 1)
+      pdf.setFont('courier', 'bold')
+      pdf.setFontSize(14)
+      pdf.setTextColor('#0f172a')
+      pdf.text(formatCurrency(spin.total_stake), PDF_MARGIN + colW * 1 + colW / 2, y + 50, { align: 'center' })
+
+      // Col 2: Total Win
+      kpiLabel('TOTAL WIN', 2)
+      pdf.setFont('courier', 'bold')
+      pdf.setFontSize(14)
+      pdf.setTextColor(spin.total_payout > 0 ? '#059669' : '#94a3b8')
+      pdf.text(spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-', PDF_MARGIN + colW * 2 + colW / 2, y + 50, { align: 'center' })
+
+      // Col 3: Status pill
+      kpiLabel('STATUS', 3)
+      const won = spin.outcome === 'WON'
+      const statusLabel = spin.outcome
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      const statusW = pdf.getTextWidth(statusLabel) + 24
+      const statusX = PDF_MARGIN + colW * 3 + colW / 2 - statusW / 2
+      pdf.setFillColor(won ? '#ecfdf5' : '#fef2f2')
+      pdf.setDrawColor(won ? '#6ee7b7' : '#fca5a5')
+      pdf.roundedRect(statusX, y + 38, statusW, 20, 10, 10, 'FD')
+      pdf.setTextColor(won ? '#047857' : '#b91c1c')
+      pdf.text(statusLabel, statusX + statusW / 2, y + 38 + 14, { align: 'center' })
+
+      y += PDF_KPI_H + PDF_BLOCK_GAP
+
+      // --- Picks sections ---
+      for (const section of sections) {
+        pdf.setFillColor('#6366f1')
+        pdf.rect(PDF_MARGIN, y + 4, 3, 14, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(12)
+        pdf.setTextColor('#1e293b')
+        pdf.text(section.title, PDF_MARGIN + 10, y + 15)
+        const titleW = pdf.getTextWidth(section.title)
+        const countLabel = `${section.entries.length} ${section.entries.length === 1 ? 'bet' : 'bets'}`
+        pdfBadge(pdf, PDF_MARGIN + 10 + titleW + 10, y + 3, countLabel, '#eef2ff', '#c7d2fe', '#4338ca')
+
+        y += PDF_SECTION_HEADER_H
+
+        if (section.entries.length === 0) {
+          pdf.setFont('helvetica', 'italic')
+          pdf.setFontSize(10)
+          pdf.setTextColor('#94a3b8')
+          pdf.text(section.emptyText, PDF_MARGIN + 4, y + 12)
+        } else {
+          section.entries.forEach(([num, val], i) => {
+            const col = i % PDF_COLUMNS
+            const row = Math.floor(i / PDF_COLUMNS)
+            const boxX = PDF_MARGIN + col * (PDF_BOX_W + PDF_BOX_GAP)
+            const boxY = y + row * (PDF_BOX_H + PDF_ROW_GAP)
+            const winning = section.isWinning(num)
+            const display = num.padStart(section.pad, '0')
+            const numH = 24
+
+            pdf.setDrawColor(winning ? '#10b981' : '#e2e8f0')
+            pdf.rect(boxX, boxY, PDF_BOX_W, PDF_BOX_H)
+            pdf.setFillColor(winning ? '#d1fae5' : '#f8fafc')
+            pdf.rect(boxX, boxY, PDF_BOX_W, numH, 'F')
+            pdf.setFont('courier', 'bold')
+            pdf.setFontSize(11)
+            pdf.setTextColor(winning ? '#047857' : '#0f172a')
+            pdf.text(display, boxX + PDF_BOX_W / 2, boxY + numH / 2 + 4, { align: 'center' })
+
+            pdf.setFillColor(winning ? '#10b981' : '#ef4444')
+            pdf.rect(boxX, boxY + numH, PDF_BOX_W, PDF_BOX_H - numH, 'F')
+            pdf.setFont('courier', 'bold')
+            pdf.setFontSize(9)
+            pdf.setTextColor('#ffffff')
+            pdf.text(formatCurrency(val), boxX + PDF_BOX_W / 2, boxY + numH + (PDF_BOX_H - numH) / 2 + 3, { align: 'center' })
+          })
+        }
+
+        y += pdfSectionBodyHeight(section.entries.length) + PDF_SECTION_GAP
+      }
 
       const safeHandId = spin.hand_id.replace(/[^a-zA-Z0-9]/g, '')
       pdf.save(`hand-${safeHandId}-${playerUsername}.pdf`)
     } catch (e) {
       console.error('PDF generation failed:', e)
     } finally {
-      if (detachedClone) document.body.removeChild(detachedClone)
       setIsDownloading(false)
     }
   }
@@ -194,8 +365,6 @@ export function GamePlayDetailDialog({
         </div>
 
         <div
-          ref={printableRef}
-          data-printable="true"
           className="px-4 sm:px-5 py-3 space-y-3"
           style={{ background: '#ffffff' }}
         >
