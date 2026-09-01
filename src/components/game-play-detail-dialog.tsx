@@ -25,8 +25,11 @@ const PDF_CONTENT_WIDTH = PDF_PAGE_WIDTH - PDF_MARGIN * 2
 // 1:1 square box -- columns per row derived from the fixed page width, not
 // hardcoded, so changing PDF_PAGE_WIDTH or PDF_BOX_SIZE later automatically
 // recomputes how many fit per row instead of needing a manual update.
-const PDF_BOX_SIZE = 64
-const PDF_BOX_GAP = 8
+// Size and gap matched directly against the live on-screen popup's actual
+// rendered box (measured via getBoundingClientRect(), not guessed from its
+// CSS: ~56x52px, 6px gap) rather than an arbitrary round number.
+const PDF_BOX_SIZE = 54
+const PDF_BOX_GAP = 6
 const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_SIZE + PDF_BOX_GAP)))
 const PDF_BOX_NUMBER_H = Math.round(PDF_BOX_SIZE * 0.6)
 const PDF_BOX_STAKE_H = PDF_BOX_SIZE - PDF_BOX_NUMBER_H
