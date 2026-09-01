@@ -19,13 +19,17 @@ import { formatCurrency } from "@/lib/utils"
  * so there is no rendering step left that a browser/screen size can affect.
  * See MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #95 for why the previous
  * screenshot-based approach (html2canvas) was replaced with this. */
-const PDF_PAGE_WIDTH = 1050
+const PDF_PAGE_WIDTH = 800
 const PDF_MARGIN = 40
 const PDF_CONTENT_WIDTH = PDF_PAGE_WIDTH - PDF_MARGIN * 2
-const PDF_BOX_W = 64
-const PDF_BOX_H = 40
+// 1:1 square box -- columns per row derived from the fixed page width, not
+// hardcoded, so changing PDF_PAGE_WIDTH or PDF_BOX_SIZE later automatically
+// recomputes how many fit per row instead of needing a manual update.
+const PDF_BOX_SIZE = 64
 const PDF_BOX_GAP = 8
-const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_W + PDF_BOX_GAP)))
+const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_SIZE + PDF_BOX_GAP)))
+const PDF_BOX_NUMBER_H = Math.round(PDF_BOX_SIZE * 0.6)
+const PDF_BOX_STAKE_H = PDF_BOX_SIZE - PDF_BOX_NUMBER_H
 const PDF_ACCENT_BAR_H = 6
 const PDF_TOP_MARGIN = 24
 const PDF_IDENTITY_H = 92
@@ -52,7 +56,7 @@ interface PdfPickSection {
 function pdfSectionBodyHeight(entryCount: number): number {
   if (entryCount === 0) return PDF_EMPTY_SECTION_H
   const rows = Math.ceil(entryCount / PDF_COLUMNS)
-  return rows * PDF_BOX_H + (rows - 1) * PDF_ROW_GAP
+  return rows * PDF_BOX_SIZE + (rows - 1) * PDF_ROW_GAP
 }
 
 function pdfTotalHeight(sections: PdfPickSection[]): number {
@@ -66,6 +70,41 @@ function pdfTotalHeight(sections: PdfPickSection[]): number {
 function pdfBox(pdf: JsPDF, x: number, y: number, w: number, h: number, fill: string) {
   pdf.setFillColor(fill)
   pdf.rect(x, y, w, h, 'F')
+}
+
+/** One number box in a picks grid -- genuinely rounded corners with a
+ * two-tone fill (number on top, stake pill on bottom), not just a sharp
+ * rect. jsPDF has no "round only these corners" fill primitive, so this
+ * clips subsequent fills to a rounded-rect path (confirmed working via an
+ * isolated visual test before relying on it here) rather than drawing two
+ * separately-rounded shapes that would overlap incorrectly. */
+function pdfPickBox(pdf: JsPDF, x: number, y: number, display: string, stakeLabel: string, winning: boolean) {
+  const numFill = winning ? '#d1fae5' : '#f8fafc'
+  const stakeFill = winning ? '#10b981' : '#ef4444'
+  const numText = winning ? '#047857' : '#0f172a'
+  const border = winning ? '#10b981' : '#e2e8f0'
+
+  pdf.saveGraphicsState()
+  pdf.roundedRect(x, y, PDF_BOX_SIZE, PDF_BOX_SIZE, 8, 8, null)
+  pdf.clip()
+  pdf.setFillColor(numFill)
+  pdf.rect(x, y, PDF_BOX_SIZE, PDF_BOX_NUMBER_H, 'F')
+  pdf.setFillColor(stakeFill)
+  pdf.rect(x, y + PDF_BOX_NUMBER_H, PDF_BOX_SIZE, PDF_BOX_STAKE_H, 'F')
+  pdf.restoreGraphicsState()
+
+  pdf.setDrawColor(border)
+  pdf.roundedRect(x, y, PDF_BOX_SIZE, PDF_BOX_SIZE, 8, 8, 'D')
+
+  pdf.setFont('courier', 'bold')
+  pdf.setFontSize(14)
+  pdf.setTextColor(numText)
+  pdf.text(display, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H / 2 + 5, { align: 'center' })
+
+  pdf.setFont('courier', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor('#ffffff')
+  pdf.text(stakeLabel, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H + PDF_BOX_STAKE_H / 2 + 3, { align: 'center' })
 }
 
 function pdfBadge(pdf: JsPDF, x: number, y: number, label: string, fill: string, border: string, textColor: string): number {
@@ -303,27 +342,12 @@ export function GamePlayDetailDialog({
           section.entries.forEach(([num, val], i) => {
             const col = i % PDF_COLUMNS
             const row = Math.floor(i / PDF_COLUMNS)
-            const boxX = PDF_MARGIN + col * (PDF_BOX_W + PDF_BOX_GAP)
-            const boxY = y + row * (PDF_BOX_H + PDF_ROW_GAP)
+            const boxX = PDF_MARGIN + col * (PDF_BOX_SIZE + PDF_BOX_GAP)
+            const boxY = y + row * (PDF_BOX_SIZE + PDF_ROW_GAP)
             const winning = section.isWinning(num)
             const display = num.padStart(section.pad, '0')
-            const numH = 24
 
-            pdf.setDrawColor(winning ? '#10b981' : '#e2e8f0')
-            pdf.rect(boxX, boxY, PDF_BOX_W, PDF_BOX_H)
-            pdf.setFillColor(winning ? '#d1fae5' : '#f8fafc')
-            pdf.rect(boxX, boxY, PDF_BOX_W, numH, 'F')
-            pdf.setFont('courier', 'bold')
-            pdf.setFontSize(11)
-            pdf.setTextColor(winning ? '#047857' : '#0f172a')
-            pdf.text(display, boxX + PDF_BOX_W / 2, boxY + numH / 2 + 4, { align: 'center' })
-
-            pdf.setFillColor(winning ? '#10b981' : '#ef4444')
-            pdf.rect(boxX, boxY + numH, PDF_BOX_W, PDF_BOX_H - numH, 'F')
-            pdf.setFont('courier', 'bold')
-            pdf.setFontSize(9)
-            pdf.setTextColor('#ffffff')
-            pdf.text(formatCurrency(val), boxX + PDF_BOX_W / 2, boxY + numH + (PDF_BOX_H - numH) / 2 + 3, { align: 'center' })
+            pdfPickBox(pdf, boxX, boxY, display, formatCurrency(val), winning)
           })
         }
 
