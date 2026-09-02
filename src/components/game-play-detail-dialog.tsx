@@ -101,14 +101,19 @@ function pdfPickBox(pdf: JsPDF, x: number, y: number, display: string, stakeLabe
   pdf.roundedRect(x, y, PDF_BOX_SIZE, PDF_BOX_SIZE, 8, 8, 'D')
 
   pdf.setFont('courier', 'bold')
-  pdf.setFontSize(14)
+  pdf.setFontSize(16)
   pdf.setTextColor(numText)
-  pdf.text(display, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H / 2 + 5, { align: 'center' })
+  pdf.text(display, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H / 2 + 5.5, { align: 'center' })
 
+  let stakeFontSize = 12
   pdf.setFont('courier', 'bold')
-  pdf.setFontSize(9)
+  pdf.setFontSize(stakeFontSize)
+  if (pdf.getTextWidth(stakeLabel) > PDF_BOX_SIZE - 6) {
+    stakeFontSize = 10
+    pdf.setFontSize(stakeFontSize)
+  }
   pdf.setTextColor('#ffffff')
-  pdf.text(stakeLabel, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H + PDF_BOX_STAKE_H / 2 + 3, { align: 'center' })
+  pdf.text(stakeLabel, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H + PDF_BOX_STAKE_H / 2 + 4, { align: 'center' })
 }
 
 function pdfBadge(
