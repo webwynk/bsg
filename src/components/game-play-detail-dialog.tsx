@@ -22,25 +22,22 @@ import { formatCurrency } from "@/lib/utils"
 const PDF_PAGE_WIDTH = 800
 const PDF_MARGIN = 40
 const PDF_CONTENT_WIDTH = PDF_PAGE_WIDTH - PDF_MARGIN * 2
-// 1:1 square box -- columns per row derived from the fixed page width, not
-// hardcoded, so changing PDF_PAGE_WIDTH or PDF_BOX_SIZE later automatically
-// recomputes how many fit per row instead of needing a manual update.
-// Sized for a denser grid within the fixed 800px page (15 cols/row) --
-// the on-screen popup itself can show more columns on a wide desktop
-// browser (its dialog stretches past 1000px there), which a fixed-width
-// PDF page can't match without shrinking numbers past legibility.
-const PDF_BOX_SIZE = 44
-const PDF_BOX_GAP = 4
-const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_SIZE + PDF_BOX_GAP)))
-const PDF_BOX_NUMBER_H = Math.round(PDF_BOX_SIZE * 0.6)
-const PDF_BOX_STAKE_H = PDF_BOX_SIZE - PDF_BOX_NUMBER_H
+// Sized as wide rectangular cards (54×48px with 8px rounded corners) matching
+// the on-screen popup's card proportions and typography.
+const PDF_BOX_W = 54
+const PDF_BOX_H = 48
+const PDF_BOX_GAP = 6
+const PDF_ROW_GAP = 6
+const PDF_COLUMNS = Math.max(1, Math.floor((PDF_CONTENT_WIDTH + PDF_BOX_GAP) / (PDF_BOX_W + PDF_BOX_GAP)))
+const PDF_GRID_OFFSET_X = Math.round((PDF_CONTENT_WIDTH - (PDF_COLUMNS * PDF_BOX_W + (PDF_COLUMNS - 1) * PDF_BOX_GAP)) / 2)
+const PDF_BOX_NUMBER_H = 28
+const PDF_BOX_STAKE_H = 20
 const PDF_ACCENT_BAR_H = 6
 const PDF_TOP_MARGIN = 24
 const PDF_IDENTITY_H = 76
 const PDF_BLOCK_GAP = 16
 const PDF_KPI_H = 68
 const PDF_SECTION_HEADER_H = 26
-const PDF_ROW_GAP = 8
 const PDF_SECTION_GAP = 28
 const PDF_BOTTOM_MARGIN = 32
 const PDF_EMPTY_SECTION_H = 20
@@ -60,7 +57,7 @@ interface PdfPickSection {
 function pdfSectionBodyHeight(entryCount: number): number {
   if (entryCount === 0) return PDF_EMPTY_SECTION_H
   const rows = Math.ceil(entryCount / PDF_COLUMNS)
-  return rows * PDF_BOX_SIZE + (rows - 1) * PDF_ROW_GAP
+  return rows * PDF_BOX_H + (rows - 1) * PDF_ROW_GAP
 }
 
 function pdfTotalHeight(sections: PdfPickSection[]): number {
@@ -76,12 +73,9 @@ function pdfBox(pdf: JsPDF, x: number, y: number, w: number, h: number, fill: st
   pdf.rect(x, y, w, h, 'F')
 }
 
-/** One number box in a picks grid -- genuinely rounded corners with a
- * two-tone fill (number on top, stake pill on bottom), not just a sharp
- * rect. jsPDF has no "round only these corners" fill primitive, so this
- * clips subsequent fills to a rounded-rect path (confirmed working via an
- * isolated visual test before relying on it here) rather than drawing two
- * separately-rounded shapes that would overlap incorrectly. */
+/** One number box in a picks grid -- wide rectangular card with genuinely
+ * rounded corners (8px radius) and two-tone fill (number on top, stake pill
+ * on bottom) matching the live popup. */
 function pdfPickBox(pdf: JsPDF, x: number, y: number, display: string, stakeLabel: string, winning: boolean) {
   const numFill = winning ? '#d1fae5' : '#f8fafc'
   const stakeFill = winning ? '#10b981' : '#ef4444'
@@ -89,31 +83,32 @@ function pdfPickBox(pdf: JsPDF, x: number, y: number, display: string, stakeLabe
   const border = winning ? '#10b981' : '#e2e8f0'
 
   pdf.saveGraphicsState()
-  pdf.roundedRect(x, y, PDF_BOX_SIZE, PDF_BOX_SIZE, 8, 8, null)
+  pdf.roundedRect(x, y, PDF_BOX_W, PDF_BOX_H, 8, 8, null)
   pdf.clip()
   pdf.setFillColor(numFill)
-  pdf.rect(x, y, PDF_BOX_SIZE, PDF_BOX_NUMBER_H, 'F')
+  pdf.rect(x, y, PDF_BOX_W, PDF_BOX_NUMBER_H, 'F')
   pdf.setFillColor(stakeFill)
-  pdf.rect(x, y + PDF_BOX_NUMBER_H, PDF_BOX_SIZE, PDF_BOX_STAKE_H, 'F')
+  pdf.rect(x, y + PDF_BOX_NUMBER_H, PDF_BOX_W, PDF_BOX_STAKE_H, 'F')
   pdf.restoreGraphicsState()
 
   pdf.setDrawColor(border)
-  pdf.roundedRect(x, y, PDF_BOX_SIZE, PDF_BOX_SIZE, 8, 8, 'D')
+  pdf.setLineWidth(winning ? 1.5 : 1)
+  pdf.roundedRect(x, y, PDF_BOX_W, PDF_BOX_H, 8, 8, 'D')
 
   pdf.setFont('courier', 'bold')
   pdf.setFontSize(16)
   pdf.setTextColor(numText)
-  pdf.text(display, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H / 2 + 5.5, { align: 'center' })
+  pdf.text(display, x + PDF_BOX_W / 2, y + PDF_BOX_NUMBER_H / 2 + 5.5, { align: 'center' })
 
   let stakeFontSize = 12
   pdf.setFont('courier', 'bold')
   pdf.setFontSize(stakeFontSize)
-  if (pdf.getTextWidth(stakeLabel) > PDF_BOX_SIZE - 6) {
+  if (pdf.getTextWidth(stakeLabel) > PDF_BOX_W - 6) {
     stakeFontSize = 10
     pdf.setFontSize(stakeFontSize)
   }
   pdf.setTextColor('#ffffff')
-  pdf.text(stakeLabel, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H + PDF_BOX_STAKE_H / 2 + 4, { align: 'center' })
+  pdf.text(stakeLabel, x + PDF_BOX_W / 2, y + PDF_BOX_NUMBER_H + PDF_BOX_STAKE_H / 2 + 4, { align: 'center' })
 }
 
 function pdfBadge(
@@ -409,8 +404,8 @@ export function GamePlayDetailDialog({
           section.entries.forEach(([num, val], i) => {
             const col = i % PDF_COLUMNS
             const row = Math.floor(i / PDF_COLUMNS)
-            const boxX = PDF_MARGIN + col * (PDF_BOX_SIZE + PDF_BOX_GAP)
-            const boxY = y + row * (PDF_BOX_SIZE + PDF_ROW_GAP)
+            const boxX = PDF_MARGIN + PDF_GRID_OFFSET_X + col * (PDF_BOX_W + PDF_BOX_GAP)
+            const boxY = y + row * (PDF_BOX_H + PDF_ROW_GAP)
             const winning = section.isWinning(num)
             const display = num.padStart(section.pad, '0')
 
