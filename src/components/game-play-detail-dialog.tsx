@@ -38,7 +38,7 @@ const PDF_ACCENT_BAR_H = 6
 const PDF_TOP_MARGIN = 24
 const PDF_IDENTITY_H = 76
 const PDF_BLOCK_GAP = 16
-const PDF_KPI_H = 88
+const PDF_KPI_H = 68
 const PDF_SECTION_HEADER_H = 26
 const PDF_ROW_GAP = 8
 const PDF_SECTION_GAP = 28
@@ -299,21 +299,21 @@ export function GamePlayDetailDialog({
 
       y += PDF_IDENTITY_H + PDF_BLOCK_GAP
 
-      // --- KPI band: Result / Total Bet / Total Win / Status ---
+      // --- KPI band: Result / Total Bet / Total Win / Status (compact 68px card) ---
       pdf.setFillColor('#f8fafc')
       pdf.setDrawColor('#e2e8f0')
       pdf.roundedRect(PDF_MARGIN, y, PDF_CONTENT_WIDTH, PDF_KPI_H, 8, 8, 'FD')
       const colW = PDF_CONTENT_WIDTH / 4
       for (let i = 1; i < 4; i++) {
         pdf.setDrawColor('#e2e8f0')
-        pdf.line(PDF_MARGIN + colW * i, y + 12, PDF_MARGIN + colW * i, y + PDF_KPI_H - 12)
+        pdf.line(PDF_MARGIN + colW * i, y + 8, PDF_MARGIN + colW * i, y + PDF_KPI_H - 8)
       }
 
       const kpiLabel = (text: string, colIndex: number) => {
         pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(12) // +3px from 9
+        pdf.setFontSize(11)
         pdf.setTextColor('#64748b')
-        pdf.text(text, PDF_MARGIN + colW * colIndex + colW / 2, y + 24, { align: 'center' })
+        pdf.text(text, PDF_MARGIN + colW * colIndex + colW / 2, y + 18, { align: 'center' })
       }
 
       // Col 0: Result digits with '-' hyphens (matching popup)
@@ -325,48 +325,48 @@ export function GamePlayDetailDialog({
       let digitX = PDF_MARGIN + colW * 0 + colW / 2 - digitsTotalW / 2
       digits.forEach(([digit, color], index) => {
         pdf.setFillColor(color)
-        pdf.roundedRect(digitX, y + 36, digitBoxSize, digitBoxSize, 4, 4, 'F')
+        pdf.roundedRect(digitX, y + 28, digitBoxSize, digitBoxSize, 4, 4, 'F')
         pdf.setFont('courier', 'bold')
-        pdf.setFontSize(15) // +3px from 12
+        pdf.setFontSize(16) // enlarged from 15
         pdf.setTextColor('#ffffff')
-        pdf.text(digit, digitX + digitBoxSize / 2, y + 36 + digitBoxSize / 2 + 5, { align: 'center' })
+        pdf.text(digit, digitX + digitBoxSize / 2, y + 28 + digitBoxSize / 2 + 5.5, { align: 'center' })
         digitX += digitBoxSize
 
         if (index < 2) {
           pdf.setFont('courier', 'bold')
-          pdf.setFontSize(15)
+          pdf.setFontSize(16)
           pdf.setTextColor('#94a3b8')
-          pdf.text('-', digitX + hyphenW / 2, y + 36 + digitBoxSize / 2 + 5, { align: 'center' })
+          pdf.text('-', digitX + hyphenW / 2, y + 28 + digitBoxSize / 2 + 5.5, { align: 'center' })
           digitX += hyphenW
         }
       })
 
-      // Col 1: Total Bet
+      // Col 1: Total Bet (enlarged 20pt bold Courier)
       kpiLabel('TOTAL BET', 1)
       pdf.setFont('courier', 'bold')
-      pdf.setFontSize(17) // +3px from 14
+      pdf.setFontSize(20) // enlarged from 17
       pdf.setTextColor('#0f172a')
-      pdf.text(formatCurrency(spin.total_stake), PDF_MARGIN + colW * 1 + colW / 2, y + 54, { align: 'center' })
+      pdf.text(formatCurrency(spin.total_stake), PDF_MARGIN + colW * 1 + colW / 2, y + 49, { align: 'center' })
 
-      // Col 2: Total Win
+      // Col 2: Total Win (enlarged 20pt bold Courier)
       kpiLabel('TOTAL WIN', 2)
       pdf.setFont('courier', 'bold')
-      pdf.setFontSize(17) // +3px from 14
+      pdf.setFontSize(20) // enlarged from 17
       pdf.setTextColor(spin.total_payout > 0 ? '#059669' : '#94a3b8')
-      pdf.text(spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-', PDF_MARGIN + colW * 2 + colW / 2, y + 54, { align: 'center' })
+      pdf.text(spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-', PDF_MARGIN + colW * 2 + colW / 2, y + 49, { align: 'center' })
 
-      // Col 3: Status pill with status dot (matching popup)
+      // Col 3: Status pill with status dot (matching popup, enlarged 14pt)
       kpiLabel('STATUS', 3)
       const won = spin.outcome === 'WON'
       const statusLabel = spin.outcome
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(13) // +3px from 10
+      pdf.setFontSize(14) // enlarged from 13
       const statusTextW = pdf.getTextWidth(statusLabel)
       const dotR = 3
       const statusW = statusTextW + 36
       const statusH = 24
       const statusX = PDF_MARGIN + colW * 3 + colW / 2 - statusW / 2
-      const statusY = y + 37
+      const statusY = y + 29
       pdf.setFillColor(won ? '#ecfdf5' : '#fef2f2')
       pdf.setDrawColor(won ? '#6ee7b7' : '#fca5a5')
       pdf.roundedRect(statusX, statusY, statusW, statusH, 12, 12, 'FD')
