@@ -36,9 +36,9 @@ const PDF_BOX_NUMBER_H = Math.round(PDF_BOX_SIZE * 0.6)
 const PDF_BOX_STAKE_H = PDF_BOX_SIZE - PDF_BOX_NUMBER_H
 const PDF_ACCENT_BAR_H = 6
 const PDF_TOP_MARGIN = 24
-const PDF_IDENTITY_H = 92
+const PDF_IDENTITY_H = 76
 const PDF_BLOCK_GAP = 16
-const PDF_KPI_H = 84
+const PDF_KPI_H = 88
 const PDF_SECTION_HEADER_H = 26
 const PDF_ROW_GAP = 8
 const PDF_SECTION_GAP = 28
@@ -111,16 +111,26 @@ function pdfPickBox(pdf: JsPDF, x: number, y: number, display: string, stakeLabe
   pdf.text(stakeLabel, x + PDF_BOX_SIZE / 2, y + PDF_BOX_NUMBER_H + PDF_BOX_STAKE_H / 2 + 3, { align: 'center' })
 }
 
-function pdfBadge(pdf: JsPDF, x: number, y: number, label: string, fill: string, border: string, textColor: string): number {
+function pdfBadge(
+  pdf: JsPDF,
+  x: number,
+  y: number,
+  label: string,
+  fill: string,
+  border: string,
+  textColor: string,
+  h = 18,
+  fontSize = 9
+): number {
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9)
+  pdf.setFontSize(fontSize)
   const textWidth = pdf.getTextWidth(label)
   const w = textWidth + 16
   pdf.setFillColor(fill)
   pdf.setDrawColor(border)
-  pdf.roundedRect(x, y, w, 18, 4, 4, 'FD')
+  pdf.roundedRect(x, y, w, h, 4, 4, 'FD')
   pdf.setTextColor(textColor)
-  pdf.text(label, x + w / 2, y + 12, { align: 'center' })
+  pdf.text(label, x + w / 2, y + h / 2 + 3.5, { align: 'center' })
   return w
 }
 
@@ -226,52 +236,66 @@ export function GamePlayDetailDialog({
 
       let y = PDF_ACCENT_BAR_H + PDF_TOP_MARGIN
 
-      // --- Identity block ---
+      // --- Identity block (compact 2-row layout matching the live popup) ---
       pdf.setFillColor('#f8fafc')
       pdf.setDrawColor('#e2e8f0')
       pdf.roundedRect(PDF_MARGIN, y, PDF_CONTENT_WIDTH, PDF_IDENTITY_H, 8, 8, 'FD')
 
-      // Avatar circle -- same style as the on-screen popup (light indigo
-      // fill, indigo initial letter), dropped in the first native-drawing
-      // pass as "no clean jsPDF equivalent" -- jsPDF's circle() primitive
-      // handles it directly, that assumption was wrong.
-      const avatarR = 12
-      const avatarCx = PDF_MARGIN + 16 + avatarR
-      const avatarCy = y + 18
+      // Row 1: Left side (Avatar + Name + Username)
+      const avatarR = 14
+      const avatarCx = PDF_MARGIN + 14 + avatarR
+      const avatarCy = y + 12 + avatarR
       pdf.setFillColor('#eef2ff')
       pdf.setDrawColor('#c7d2fe')
       pdf.circle(avatarCx, avatarCy, avatarR, 'FD')
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(12)
+      pdf.setFontSize(15) // +3px from 12
       pdf.setTextColor('#6366f1')
-      pdf.text((playerFullName[0] || 'P').toUpperCase(), avatarCx, avatarCy + 4, { align: 'center' })
+      pdf.text((playerFullName[0] || 'P').toUpperCase(), avatarCx, avatarCy + 5, { align: 'center' })
 
       const nameX = avatarCx + avatarR + 10
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(15)
+      pdf.setFontSize(18) // +3px from 15
       pdf.setTextColor('#0f172a')
-      pdf.text(playerFullName, nameX, y + 22)
+      pdf.text(playerFullName, nameX, y + 31)
       const nameW = pdf.getTextWidth(playerFullName)
+
       pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(11)
+      pdf.setFontSize(14) // +3px from 11
       pdf.setTextColor('#94a3b8')
-      pdf.text(`@${playerUsername}`, nameX + nameW + 8, y + 22)
+      pdf.text(`@${playerUsername}`, nameX + nameW + 8, y + 31)
 
-      let badgeX = PDF_MARGIN + 16
-      badgeX += pdfBadge(pdf, badgeX, y + 38, 'Triple Chance', '#ffffff', '#e2e8f0', '#475569') + 8
-      badgeX += pdfBadge(pdf, badgeX, y + 38, spin.mode, '#eef2ff', '#c7d2fe', '#4f46e5') + 8
-      pdfBadge(pdf, badgeX, y + 38, spin.created_at, '#ffffff', '#e2e8f0', '#64748b')
-
-      pdf.setDrawColor('#e2e8f0')
-      pdf.line(PDF_MARGIN + 16, y + 68, PDF_MARGIN + PDF_CONTENT_WIDTH - 16, y + 68)
+      // Row 1: Right side (Badges: Game, Mode, Created At)
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(8)
+      pdf.setFontSize(12) // +3px from 9
+      const badge1W = pdf.getTextWidth('Triple Chance') + 16
+      const badge2W = pdf.getTextWidth(spin.mode) + 16
+      const badge3W = pdf.getTextWidth(spin.created_at) + 16
+      const badgeGap = 6
+      const totalBadgesW = badge1W + badge2W + badge3W + badgeGap * 2
+      const rightEdge = PDF_MARGIN + PDF_CONTENT_WIDTH - 14
+      let badgeX = rightEdge - totalBadgesW
+      const badgeY = y + 15
+
+      pdfBadge(pdf, badgeX, badgeY, 'Triple Chance', '#ffffff', '#e2e8f0', '#475569', 22, 12)
+      badgeX += badge1W + badgeGap
+      pdfBadge(pdf, badgeX, badgeY, spin.mode, '#eef2ff', '#c7d2fe', '#4f46e5', 22, 12)
+      badgeX += badge2W + badgeGap
+      pdfBadge(pdf, badgeX, badgeY, spin.created_at, '#ffffff', '#e2e8f0', '#64748b', 22, 12)
+
+      // Divider line
+      pdf.setDrawColor('#e2e8f0')
+      pdf.line(PDF_MARGIN + 14, y + 46, PDF_MARGIN + PDF_CONTENT_WIDTH - 14, y + 46)
+
+      // Row 2: Hand ID
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(11) // +3px from 8
       pdf.setTextColor('#94a3b8')
-      pdf.text('HAND ID:', PDF_MARGIN + 16, y + 84)
+      pdf.text('HAND ID:', PDF_MARGIN + 14, y + 62)
       pdf.setFont('courier', 'bold')
-      pdf.setFontSize(10)
+      pdf.setFontSize(13) // +3px from 10
       pdf.setTextColor('#334155')
-      pdf.text(spin.hand_id, PDF_MARGIN + 16 + pdf.getTextWidth('HAND ID:') + 8, y + 84)
+      pdf.text(spin.hand_id, PDF_MARGIN + 14 + pdf.getTextWidth('HAND ID:') + 8, y + 62)
 
       y += PDF_IDENTITY_H + PDF_BLOCK_GAP
 
@@ -287,55 +311,73 @@ export function GamePlayDetailDialog({
 
       const kpiLabel = (text: string, colIndex: number) => {
         pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(9)
+        pdf.setFontSize(12) // +3px from 9
         pdf.setTextColor('#64748b')
-        pdf.text(text, PDF_MARGIN + colW * colIndex + colW / 2, y + 22, { align: 'center' })
+        pdf.text(text, PDF_MARGIN + colW * colIndex + colW / 2, y + 24, { align: 'center' })
       }
 
-      // Col 0: Result digits
+      // Col 0: Result digits with '-' hyphens (matching popup)
       kpiLabel('RESULT', 0)
       const digits: Array<[string, string]> = [[d1, '#dc2626'], [d2, '#059669'], [d3, '#0f172a']]
-      const digitBoxSize = 24
-      const digitGap = 6
-      const digitsTotalW = digitBoxSize * 3 + digitGap * 2
+      const digitBoxSize = 26
+      const hyphenW = 12
+      const digitsTotalW = digitBoxSize * 3 + hyphenW * 2
       let digitX = PDF_MARGIN + colW * 0 + colW / 2 - digitsTotalW / 2
-      for (const [digit, color] of digits) {
+      digits.forEach(([digit, color], index) => {
         pdf.setFillColor(color)
-        pdf.roundedRect(digitX, y + 34, digitBoxSize, digitBoxSize, 4, 4, 'F')
+        pdf.roundedRect(digitX, y + 36, digitBoxSize, digitBoxSize, 4, 4, 'F')
         pdf.setFont('courier', 'bold')
-        pdf.setFontSize(12)
+        pdf.setFontSize(15) // +3px from 12
         pdf.setTextColor('#ffffff')
-        pdf.text(digit, digitX + digitBoxSize / 2, y + 34 + digitBoxSize / 2 + 4, { align: 'center' })
-        digitX += digitBoxSize + digitGap
-      }
+        pdf.text(digit, digitX + digitBoxSize / 2, y + 36 + digitBoxSize / 2 + 5, { align: 'center' })
+        digitX += digitBoxSize
+
+        if (index < 2) {
+          pdf.setFont('courier', 'bold')
+          pdf.setFontSize(15)
+          pdf.setTextColor('#94a3b8')
+          pdf.text('-', digitX + hyphenW / 2, y + 36 + digitBoxSize / 2 + 5, { align: 'center' })
+          digitX += hyphenW
+        }
+      })
 
       // Col 1: Total Bet
       kpiLabel('TOTAL BET', 1)
       pdf.setFont('courier', 'bold')
-      pdf.setFontSize(14)
+      pdf.setFontSize(17) // +3px from 14
       pdf.setTextColor('#0f172a')
-      pdf.text(formatCurrency(spin.total_stake), PDF_MARGIN + colW * 1 + colW / 2, y + 50, { align: 'center' })
+      pdf.text(formatCurrency(spin.total_stake), PDF_MARGIN + colW * 1 + colW / 2, y + 54, { align: 'center' })
 
       // Col 2: Total Win
       kpiLabel('TOTAL WIN', 2)
       pdf.setFont('courier', 'bold')
-      pdf.setFontSize(14)
+      pdf.setFontSize(17) // +3px from 14
       pdf.setTextColor(spin.total_payout > 0 ? '#059669' : '#94a3b8')
-      pdf.text(spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-', PDF_MARGIN + colW * 2 + colW / 2, y + 50, { align: 'center' })
+      pdf.text(spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-', PDF_MARGIN + colW * 2 + colW / 2, y + 54, { align: 'center' })
 
-      // Col 3: Status pill
+      // Col 3: Status pill with status dot (matching popup)
       kpiLabel('STATUS', 3)
       const won = spin.outcome === 'WON'
       const statusLabel = spin.outcome
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(10)
-      const statusW = pdf.getTextWidth(statusLabel) + 24
+      pdf.setFontSize(13) // +3px from 10
+      const statusTextW = pdf.getTextWidth(statusLabel)
+      const dotR = 3
+      const statusW = statusTextW + 36
+      const statusH = 24
       const statusX = PDF_MARGIN + colW * 3 + colW / 2 - statusW / 2
+      const statusY = y + 37
       pdf.setFillColor(won ? '#ecfdf5' : '#fef2f2')
       pdf.setDrawColor(won ? '#6ee7b7' : '#fca5a5')
-      pdf.roundedRect(statusX, y + 38, statusW, 20, 10, 10, 'FD')
+      pdf.roundedRect(statusX, statusY, statusW, statusH, 12, 12, 'FD')
+
+      const dotCx = statusX + 12
+      const dotCy = statusY + statusH / 2
+      pdf.setFillColor(won ? '#10b981' : '#ef4444')
+      pdf.circle(dotCx, dotCy, dotR, 'F')
+
       pdf.setTextColor(won ? '#047857' : '#b91c1c')
-      pdf.text(statusLabel, statusX + statusW / 2, y + 38 + 14, { align: 'center' })
+      pdf.text(statusLabel, statusX + 12 + dotR + 6 + statusTextW / 2, statusY + statusH / 2 + 5, { align: 'center' })
 
       y += PDF_KPI_H + PDF_BLOCK_GAP
 
