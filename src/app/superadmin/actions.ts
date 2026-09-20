@@ -238,7 +238,13 @@ export async function updateRtpAction(rtpPercentage: number) {
     if (error) throw new Error(error.message)
 
     await logAuditEventAction('system', `Global RTP target set to ${rtpPercentage}%`)
+    // Issue #97 fix (dead-code/stale-path sweep): the editable RTP widget
+    // itself moved to /superadmin/live-game, but this call was never
+    // updated to match -- it kept revalidating only its old home. /superadmin
+    // still has a stake too (the read-only "Global RTP Target" KPI tile), so
+    // both paths are revalidated now, not just one.
     revalidatePath('/superadmin')
+    revalidatePath('/superadmin/live-game')
     return { success: true, rtp: rtpPercentage, error: null }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -289,7 +295,14 @@ export async function updateBonusMultiplierAction(bonusMultiplier: number) {
 
     const label = bonusMultiplier === 1 ? 'N (no bonus)' : `${bonusMultiplier}X`
     await logAuditEventAction('system', `Bonus multiplier set to ${label} — takes effect next round`)
-    revalidatePath('/superadmin')
+    // Issue #97 fix (dead-code/stale-path sweep): this widget lives at
+    // /superadmin/live-game only -- nothing on /superadmin reads
+    // bonus_multiplier anymore, so revalidating '/superadmin' (its path from
+    // before the Issue #97 move) was stale/pointless. Never actually caused
+    // a visible bug in this app (both pages are "use client" and refresh
+    // their own state via polling regardless of Next's route cache), but it
+    // didn't do what it claimed to either.
+    revalidatePath('/superadmin/live-game')
     return { success: true, bonusMultiplier, error: null }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'

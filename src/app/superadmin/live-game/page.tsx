@@ -434,6 +434,7 @@ export default function SuperAdminLiveGamePage() {
                       min={50}
                       step={0.5}
                       disabled={roundConfigLocked}
+                      formatValue={(v) => `${v}%`}
                       className="w-full cursor-pointer disabled:opacity-50"
                     />
                     <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
@@ -774,7 +775,14 @@ export default function SuperAdminLiveGamePage() {
                 </span>
                 <span className="text-[10px] text-muted-foreground font-mono">Live Feed</span>
               </div>
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+              {/* Fix (dead-code sweep): scrollbar-thin had no matching CSS
+                  anywhere in the project (Tailwind v4 core ships no
+                  scrollbar utilities, and no plugin is installed) -- it was
+                  a no-op, silently falling back to the browser's default
+                  scrollbar. table-scroll is this project's actual, real thin
+                  horizontal-scrollbar style (see globals.css), also used by
+                  the RTP Configuration preset chips above. */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 table-scroll">
                 {latestDraws.map(draw => {
                   const drawTime = draw.created_at ? new Date(draw.created_at).getTime() : nowTime
                   const diffSecs = Math.max(0, Math.floor((nowTime - drawTime) / 1000))
