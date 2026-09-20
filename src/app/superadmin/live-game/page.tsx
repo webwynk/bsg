@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { getLatestGameDrawsAction, getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction } from '../actions'
+import { getLatestGameDrawsAction, getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction, applyBonusToCurrentRoundAction } from '../actions'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
@@ -123,6 +123,25 @@ export default function SuperAdminLiveGamePage() {
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
 
+  // "This Round" boost (Issue #99) -- separate from the "Next Round" dial
+  // above; boosts the round ALREADY IN PROGRESS instead of queuing one for
+  // the next round. currentRoundBonus/currentRoundDrawn reflect the round
+  // genuinely running right now (read directly from the rounds table,
+  // bypassing the player-facing null-until-drawn gate -- see
+  // getActiveRoundTimingAction's own doc comment). Locks 15 seconds before
+  // the draw (draw fires at second 90, so seconds_into >= 75) as a UI safety
+  // buffer against click/network latency -- this is NOT what makes it safe;
+  // apply_bonus_to_current_round() itself unconditionally refuses once the
+  // round is actually drawn, regardless of this lock. currentRoundDrawn is
+  // included in the lock so the button disables itself immediately once a
+  // draw happens, even if it happens to land before the 75s mark somehow.
+  const [currentRoundBonus, setCurrentRoundBonus] = useState<number | null>(null)
+  const [currentRoundDrawn, setCurrentRoundDrawn] = useState(false)
+  const [isSavingCurrentRoundBonus, setIsSavingCurrentRoundBonus] = useState(false)
+  const [currentRoundBonusMessage, setCurrentRoundBonusMessage] = useState<string | null>(null)
+  const [currentRoundBonusIsError, setCurrentRoundBonusIsError] = useState(false)
+  const currentRoundLocked = currentRoundDrawn || (roundSecondsInto !== null && roundSecondsInto >= 75)
+
   // Table search & filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'WON' | 'LOST' | 'NO BETS'>('ALL')
@@ -224,6 +243,26 @@ export default function SuperAdminLiveGamePage() {
     }
   }
 
+  // Issue #99: boosts the round ALREADY IN PROGRESS. Success/failure both
+  // shown (unlike the "Next Round" dial, this one can genuinely fail --
+  // "already_drawn" -- so the admin needs to see why a click didn't work,
+  // not just silently see nothing happen).
+  const handleApplyBonusToCurrentRound = async (mult: 1 | 2 | 3 | 4) => {
+    setIsSavingCurrentRoundBonus(true)
+    setCurrentRoundBonusMessage(null)
+    const res = await applyBonusToCurrentRoundAction(mult)
+    setIsSavingCurrentRoundBonus(false)
+    if (res.success) {
+      setCurrentRoundBonus(res.bonus_multiplier)
+      setCurrentRoundBonusIsError(false)
+      setCurrentRoundBonusMessage(`Round #${res.round_number} boosted to ${mult === 1 ? 'N (no bonus)' : mult + 'X'} — live now`)
+    } else {
+      setCurrentRoundBonusIsError(true)
+      setCurrentRoundBonusMessage(res.error ?? 'Could not apply bonus.')
+    }
+    setTimeout(() => setCurrentRoundBonusMessage(null), 3500)
+  }
+
   // Dedicated poll for the RTP/Bonus round-lock countdown -- the 3s
   // useLiveSync poll below refreshes draws/config values, but the lock needs
   // seconds_into on a reliable cadence independent of realtime push timing.
@@ -240,7 +279,12 @@ export default function SuperAdminLiveGamePage() {
       if (inFlight) return
       inFlight = true
       getActiveRoundTimingAction().then(res => {
-        if (!cancelled) setRoundSecondsInto(res.seconds_into)
+        if (cancelled) return
+        setRoundSecondsInto(res.seconds_into)
+        // Issue #99: also tracks the CURRENT round's own real bonus state,
+        // same poll, no extra round-trip.
+        setCurrentRoundBonus(res.current_round_bonus_multiplier)
+        setCurrentRoundDrawn(res.current_round_drawn)
       }).finally(() => {
         inFlight = false
       })
@@ -509,49 +553,116 @@ export default function SuperAdminLiveGamePage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-foreground leading-tight">Bonus Multiplier</h3>
-                    <p className="text-[10px] text-muted-foreground">Promotional payout boost — applies to the next round.</p>
+                    {/* Issue #99: smart summary -- shows what's genuinely
+                        active right now (the current round's own boost) if
+                        one is set, otherwise what's queued for the next
+                        round. Never reads from a single source blindly. */}
+                    <p className="text-[10px] text-muted-foreground">
+                      {currentRoundBonus !== null && currentRoundBonus !== 1
+                        ? 'Live now — this round is boosted.'
+                        : 'Promotional payout boost.'}
+                    </p>
                   </div>
                 </div>
                 <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                  {bonusMultiplier === 1 ? 'N' : `${bonusMultiplier}X`}
+                  {currentRoundBonus !== null && currentRoundBonus !== 1
+                    ? `${currentRoundBonus}X`
+                    : (bonusMultiplier === 1 ? 'N' : `${bonusMultiplier}X`)}
                 </span>
               </div>
 
               {isLoading ? (
                 <div className="space-y-3 p-2 animate-pulse">
                   <div className="h-8 bg-secondary/60 rounded w-full" />
+                  <div className="h-8 bg-secondary/60 rounded w-full" />
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {bonusMultiplierSuccess && (
-                    <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
-                      <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
-                      <span>{bonusMultiplierSuccess}</span>
-                    </div>
-                  )}
+                  {/* This Round (Issue #99) -- boosts the round ALREADY IN
+                      PROGRESS, separate from the Next Round dial below.
+                      Kept as its own clearly-labeled section rather than
+                      merged into one toggle-driven control, since one click
+                      producing two different guarantees with two different
+                      lock windows is harder to reason about safely. */}
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      This Round
+                    </span>
 
-                  {roundConfigLocked && (
-                    <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
-                      <Clock className="h-3.5 w-3.5 shrink-0" />
-                      <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
-                    </div>
-                  )}
+                    {currentRoundBonusMessage && (
+                      <div className={`p-2 text-xs font-bold rounded-lg border flex items-center space-x-1.5 ${
+                        currentRoundBonusIsError
+                          ? 'bg-danger-bg text-danger-text border-red-500/20'
+                          : 'bg-success-bg text-success-text border-emerald-500/20'
+                      }`}>
+                        {!currentRoundBonusIsError && <Check className="h-3.5 w-3.5 shrink-0" />}
+                        <span>{currentRoundBonusMessage}</span>
+                      </div>
+                    )}
 
-                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                    {([1, 2, 3, 4] as const).map((mult) => (
-                      <button
-                        key={mult}
-                        onClick={() => handleApplyBonusMultiplier(mult)}
-                        disabled={isSavingBonusMultiplier || roundConfigLocked}
-                        className={`flex-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                          bonusMultiplier === mult
-                            ? 'bg-primary text-primary-foreground font-black shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        {mult === 1 ? 'N' : `${mult}X`}
-                      </button>
-                    ))}
+                    {currentRoundLocked && !currentRoundBonusMessage && (
+                      <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>{currentRoundDrawn ? 'This round has already been drawn.' : 'Locked — draw is close. Try again next round.'}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                      {([1, 2, 3, 4] as const).map((mult) => (
+                        <button
+                          key={mult}
+                          onClick={() => handleApplyBonusToCurrentRound(mult)}
+                          disabled={isSavingCurrentRoundBonus || currentRoundLocked}
+                          className={`flex-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                            currentRoundBonus === mult
+                              ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {mult === 1 ? 'N' : `${mult}X`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Next Round (existing dial) -- unchanged behavior, just
+                      now explicitly labeled since "This Round" exists
+                      alongside it. Still auto-resets to N once consumed. */}
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      Next Round
+                    </span>
+
+                    {bonusMultiplierSuccess && (
+                      <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                        <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
+                        <span>{bonusMultiplierSuccess}</span>
+                      </div>
+                    )}
+
+                    {roundConfigLocked && (
+                      <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                      {([1, 2, 3, 4] as const).map((mult) => (
+                        <button
+                          key={mult}
+                          onClick={() => handleApplyBonusMultiplier(mult)}
+                          disabled={isSavingBonusMultiplier || roundConfigLocked}
+                          className={`flex-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                            bonusMultiplier === mult
+                              ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {mult === 1 ? 'N' : `${mult}X`}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

@@ -311,10 +311,11 @@ export async function updateBonusMultiplierAction(bonusMultiplier: number) {
 }
 
 // Lightweight, poll-friendly round-timing check — used to lock both the RTP
-// Configuration widget and the Bonus Multiplier widget in the closing
-// seconds of a round. Deliberately separate from getLatestGameDrawsAction
-// (which also fetches 20 rounds of nested bet history) since this needs to
-// be polled every couple of seconds and that one does not.
+// Configuration widget and the "Next Round" side of the Bonus Multiplier
+// widget in the closing seconds of a round. Deliberately separate from
+// getLatestGameDrawsAction (which also fetches 20 rounds of nested bet
+// history) since this needs to be polled every couple of seconds and that
+// one does not.
 //
 // Returns seconds_into (not just seconds_remaining) so the caller can derive
 // the SAME 0-90 countdown the player-facing app displays
@@ -324,37 +325,126 @@ export async function updateBonusMultiplierAction(bonusMultiplier: number) {
 // clock than what players (and now, these widgets) actually watch.
 //
 // This lock is a UX/discipline convenience only, not a correctness
-// requirement for either widget -- a change submitted at any point still
-// only ever affects the next round (each round pins its own rtp_percentage
-// AND bonus_multiplier at creation time, see get_current_round/tick_rounds),
-// so a stale or failed poll here fails open (unlocked) rather than risking
-// either widget getting stuck disabled.
+// requirement for the "Next Round" dial -- a change submitted at any point
+// still only ever affects the next round (each round pins its own
+// rtp_percentage AND bonus_multiplier at creation time, see
+// get_current_round/tick_rounds), so a stale or failed poll here fails open
+// (unlocked) rather than risking the widget getting stuck disabled.
 //
 // The old (pre-Issue #89) payout multiplier no longer has a widget of its
 // own to lock (permanent x9/x90/x900, removed from the dashboard entirely).
+//
+// Issue #99 addition: also returns the CURRENT round's own, real
+// bonus_multiplier/drawn state -- a direct `rounds` table read (privileged,
+// service-role access), not through get_current_round()'s jsonb response,
+// because that response deliberately hides bonus_multiplier until the round
+// is drawn (a player-fairness rule, not something the admin's own dashboard
+// should be bound by). This is what lets the "This Round" boost button
+// group show what's genuinely active right now, and lets it self-disable
+// the instant that round is drawn -- unlike the "Next Round" dial's lock
+// above, THIS lock (current_round_drawn) IS a correctness signal, not just
+// a courtesy: apply_bonus_to_current_round() itself refuses once drawn, so
+// the UI reflecting that accurately avoids a confusing "why did my click
+// fail" moment, it doesn't create the safety guarantee.
 export async function getActiveRoundTimingAction(): Promise<{
   seconds_remaining: number | null
   seconds_into: number | null
   round_number: number | null
+  current_round_bonus_multiplier: number | null
+  current_round_drawn: boolean
   error: string | null
 }> {
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { seconds_remaining: null, seconds_into: null, round_number: null, error: auth.error }
+  if (auth.error) {
+    return {
+      seconds_remaining: null, seconds_into: null, round_number: null,
+      current_round_bonus_multiplier: null, current_round_drawn: false, error: auth.error,
+    }
+  }
 
   try {
     const db = createAdminClient()
     const { data: rawCur, error } = await db.rpc('get_current_round')
     if (error) throw new Error(error.message)
     const cur = asRpc<CurrentRound | null>(rawCur)
+
+    let currentRoundBonusMultiplier: number | null = null
+    let currentRoundDrawn = false
+    if (cur) {
+      const { data: roundRow, error: roundError } = await db
+        .from('rounds').select('bonus_multiplier, red').eq('id', cur.round_id).single()
+      if (roundError) throw new Error(roundError.message)
+      currentRoundBonusMultiplier = Number(roundRow.bonus_multiplier)
+      currentRoundDrawn = roundRow.red !== null
+    }
+
     return {
       seconds_remaining: cur ? Number(cur.seconds_remaining) : null,
       seconds_into: cur ? Number(cur.seconds_into) : null,
       round_number: cur ? Number(cur.round_number) : null,
+      current_round_bonus_multiplier: currentRoundBonusMultiplier,
+      current_round_drawn: currentRoundDrawn,
       error: null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    return { seconds_remaining: null, seconds_into: null, round_number: null, error: `Could not read round timing: ${message}` }
+    return {
+      seconds_remaining: null, seconds_into: null, round_number: null,
+      current_round_bonus_multiplier: null, current_round_drawn: false,
+      error: `Could not read round timing: ${message}`,
+    }
+  }
+}
+
+// Issue #99: boosts the round ALREADY IN PROGRESS, not the next one. Deliberately
+// does NOT touch game_config -- writes directly to the current round's own
+// bonus_multiplier via the database function, which finds "whichever round is
+// current" itself (never trusts a client-supplied round id) and refuses
+// unconditionally once that round has been drawn. Kept off game_config on
+// purpose: an earlier design draft had this also update game_config so the
+// dashboard could "reflect" it, but that would let the boost silently leak
+// into the NEXT round too (game_config's own auto-reset only fires when a
+// new round is created, well after this one is already boosted directly).
+export async function applyBonusToCurrentRoundAction(bonus: number): Promise<{
+  success: boolean
+  round_number: number | null
+  bonus_multiplier: number | null
+  error: string | null
+}> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) {
+    return { success: false, round_number: null, bonus_multiplier: null, error: auth.error ?? 'Unauthorized' }
+  }
+
+  if (![1, 2, 3, 4].includes(bonus)) {
+    return { success: false, round_number: null, bonus_multiplier: null, error: 'Bonus multiplier must be 1 (N), 2, 3, or 4.' }
+  }
+
+  try {
+    const db = createAdminClient()
+    const { data: raw, error } = await db.rpc('apply_bonus_to_current_round', { p_bonus: bonus })
+    if (error) throw new Error(error.message)
+    const result = asRpc<{ success: boolean; round_number?: number; bonus_multiplier?: number; error?: string }>(raw)
+
+    if (!result.success) {
+      const messages: Record<string, string> = {
+        already_drawn: 'Too late — this round has already been drawn. Try again next round.',
+        round_not_found: 'No active round found right now.',
+        invalid_bonus: 'Bonus multiplier must be 1 (N), 2, 3, or 4.',
+      }
+      return {
+        success: false, round_number: result.round_number ?? null, bonus_multiplier: null,
+        error: messages[result.error ?? ''] ?? `Could not apply bonus: ${result.error}`,
+      }
+    }
+
+    const label = bonus === 1 ? 'N (no bonus)' : `${bonus}X`
+    await logAuditEventAction('system', `Bonus multiplier set to ${label} for the CURRENT round (#${result.round_number}) — takes effect immediately`)
+    revalidatePath('/superadmin/live-game')
+    return { success: true, round_number: result.round_number ?? null, bonus_multiplier: result.bonus_multiplier ?? null, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, round_number: null, bonus_multiplier: null, error: `Could not apply bonus: ${message}` }
   }
 }
 

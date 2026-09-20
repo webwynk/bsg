@@ -363,6 +363,10 @@ export type Database = {
         Args: Record<string, unknown>
         Returns: Json
       }
+      apply_bonus_to_current_round: {
+        Args: Record<string, unknown>
+        Returns: Json
+      }
       apply_coin_movement: {
         Args: Record<string, unknown>
         Returns: Json
