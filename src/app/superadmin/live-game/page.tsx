@@ -380,7 +380,16 @@ export default function SuperAdminLiveGamePage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-foreground leading-tight">RTP Configuration</h3>
-                    <p className="text-[10px] text-muted-foreground">Adjust payout rates across slots & games.</p>
+                    {/* Redesign (Issue #98): live yield-rating label replaces the
+                        old static "Adjust payout rates..." subtitle -- same
+                        tier thresholds/copy that used to live in the standalone
+                        "Yield Rating & Margin" box below, now doing double duty
+                        as the subtitle instead of its own dedicated row. */}
+                    <p className={`text-[10px] font-bold ${
+                      rtpValue < 92 ? 'text-amber-500' : rtpValue <= 96.5 ? 'text-success-text' : rtpValue < 100 ? 'text-blue-400' : 'text-emerald-400'
+                    }`}>
+                      {rtpValue < 92 ? 'Aggressive Yield' : rtpValue <= 96.5 ? 'Balanced (Recommended)' : rtpValue < 100 ? 'Player Friendly' : '100% Full Return'}
+                    </p>
                   </div>
                 </div>
                 <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
@@ -389,32 +398,29 @@ export default function SuperAdminLiveGamePage() {
               </div>
 
               {isLoading ? (
-                <div className="space-y-3 p-2 animate-pulse">
+                <div className="space-y-2 p-2 animate-pulse">
                   <div className="h-4 bg-secondary/80 rounded w-full" />
-                  <div className="h-8 bg-secondary/60 rounded w-full" />
+                  <div className="h-6 bg-secondary/60 rounded w-full" />
                 </div>
               ) : (
-                <div className="space-y-3.5">
+                <div className="space-y-2.5">
                   {rtpSuccess && (
-                    <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                    <div className="p-1.5 text-[11px] font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
                       <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
                       <span>{rtpSuccess}</span>
                     </div>
                   )}
 
                   {roundConfigLocked && (
-                    <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                    <div className="p-1.5 text-[11px] font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
                       <Clock className="h-3.5 w-3.5 shrink-0" />
                       <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
                     </div>
                   )}
 
-                  {/* Slider Controls */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-[10px] font-mono font-bold">
-                      <span className="text-muted-foreground">Adjust Target RTP</span>
-                      <span className="text-amber-500 font-black">{rtpValue}%</span>
-                    </div>
+                  {/* Slider -- live value already shown in the header badge
+                      above, so no separate "Adjust Target RTP: X%" row here. */}
+                  <div className="space-y-1">
                     <Slider
                       value={[rtpValue]}
                       onValueChange={(val) => {
@@ -431,95 +437,61 @@ export default function SuperAdminLiveGamePage() {
                       className="w-full cursor-pointer disabled:opacity-50"
                     />
                     <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
-                      <span>50% (Max House Margin)</span>
-                      <span>100% (Zero House Margin)</span>
+                      <span>50%</span>
+                      <span>100%</span>
                     </div>
                   </div>
 
-                  {/* Preset Quick Pills */}
+                  {/* Preset chips -- single scrollable row (table-scroll, the
+                      project's existing thin-scrollbar style, also used by
+                      the Recent Draw Stream carousel below) instead of a
+                      wrapping 2-row grid; short "%"-only labels instead of
+                      the old verbose "90% Aggressive" text. Same values,
+                      same onClick, same active/disabled logic as before. */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto table-scroll pb-1">
+                    {[90, 92.5, 95, 96.5, 98, 100].map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => handleApplyRtp(val)}
+                        disabled={isSavingRtp || roundConfigLocked}
+                        className={`shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
+                          rtpValue === val
+                            ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                            : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
+                        }`}
+                      >
+                        {val}%
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Return/Edge ratio -- single thin bar replaces the old
+                      boxed "Yield Rating & Margin" section (badge + bar + 2
+                      Est. Payout/Profit tiles); the rating badge moved into
+                      the header subtitle above, and the 2 payout/profit
+                      tiles were dropped as low-value repetition of the same
+                      percentage already shown here and in the header. */}
                   <div className="space-y-1">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                      Quick Presets
-                    </span>
-                    <div className="flex items-center flex-wrap gap-1.5">
-                      {[
-                        { val: 90, label: '90% Aggressive' },
-                        { val: 92.5, label: '92.5% Medium' },
-                        { val: 95, label: '95% Balanced' },
-                        { val: 96.5, label: '96.5% Standard' },
-                        { val: 98, label: '98% High Payout' },
-                        { val: 100, label: '100% Full Return (0% House Edge)' }
-                      ].map((preset) => (
-                        <button
-                          key={preset.val}
-                          onClick={() => handleApplyRtp(preset.val)}
-                          disabled={isSavingRtp || roundConfigLocked}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
-                            rtpValue === preset.val
-                              ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                              : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
+                    <div className="flex justify-between text-[9px] font-mono font-bold">
+                      <span className="text-emerald-400">Return {rtpValue}%</span>
+                      <span className="text-amber-400">Edge {(100 - rtpValue).toFixed(1)}%</span>
                     </div>
-                  </div>
-
-                  {/* Live House Edge & Payout Yield Breakdown Box */}
-                  <div className="p-3 rounded-xl bg-secondary/30 border border-border/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Yield Rating & Margin
-                      </span>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
-                        rtpValue < 92
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : rtpValue <= 96.5
-                          ? 'bg-success-bg text-success-text border border-emerald-500/30'
-                          : rtpValue < 100
-                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      }`}>
-                        {rtpValue < 92 ? '🔥 Aggressive Yield' : rtpValue <= 96.5 ? '⚖️ Balanced (Recommended)' : rtpValue < 100 ? '💎 Player Friendly' : '🎁 100% Full Return (Zero House Edge)'}
-                      </span>
-                    </div>
-
-                    {/* Visual Ratio Progress Bar */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] font-mono font-bold">
-                        <span className="text-emerald-400">Player Return: {rtpValue}%</span>
-                        <span className="text-amber-400">House Edge: {(100 - rtpValue).toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full h-2 rounded-full bg-amber-500/20 overflow-hidden flex">
-                        <div
-                          className="h-full bg-emerald-500 transition-all duration-300 rounded-l-full"
-                          style={{ width: `${rtpValue}%` }}
-                        />
-                        <div
-                          className="h-full bg-amber-500 transition-all duration-300 rounded-r-full"
-                          style={{ width: `${(100 - rtpValue).toFixed(1)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Simulated 1,000 Wager Turnover */}
-                    <div className="grid grid-cols-2 gap-2 pt-1 text-center text-[10px] font-mono">
-                      <div className="p-1.5 rounded-lg bg-card border border-border/40">
-                        <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. Player Payout (1k Coins)</span>
-                        <span className="font-black text-emerald-400 text-xs">{(1000 * (rtpValue / 100)).toFixed(0)} Coins</span>
-                      </div>
-                      <div className="p-1.5 rounded-lg bg-card border border-border/40">
-                        <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. House Profit (1k Coins)</span>
-                        <span className="font-black text-amber-400 text-xs">{(1000 * ((100 - rtpValue) / 100)).toFixed(0)} Coins</span>
-                      </div>
+                    <div className="w-full h-1.5 rounded-full bg-amber-500/20 overflow-hidden flex">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-300 rounded-l-full"
+                        style={{ width: `${rtpValue}%` }}
+                      />
+                      <div
+                        className="h-full bg-amber-500 transition-all duration-300 rounded-r-full"
+                        style={{ width: `${(100 - rtpValue).toFixed(1)}%` }}
+                      />
                     </div>
                   </div>
 
                   <Button
                     onClick={() => handleApplyRtp()}
                     disabled={isSavingRtp || roundConfigLocked}
-                    className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full h-8 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                     {isSavingRtp ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Configuration'}
