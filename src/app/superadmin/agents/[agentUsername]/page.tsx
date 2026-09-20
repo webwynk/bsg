@@ -1226,7 +1226,17 @@ export default function AgentDetailPage({ params }: Props) {
 
                                 {/* Card Sub-header */}
                                 <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                                  <span className="font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{spin.mode}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{spin.mode}</span>
+                                    {/* Issue #100: this round's own pinned bonus multiplier. */}
+                                    <span className={`font-mono font-black px-1.5 py-0.5 rounded ${
+                                      spin.bonus_multiplier === 1
+                                        ? 'text-muted-foreground bg-secondary/40'
+                                        : 'text-amber-400 bg-amber-500/10'
+                                    }`}>
+                                      {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
+                                    </span>
+                                  </div>
                                   <span className="font-mono">{spin.created_at}</span>
                                 </div>
 
@@ -1265,6 +1275,7 @@ export default function AgentDetailPage({ params }: Props) {
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[120px]">Mode</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
                                 <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win Result</TableHead>
+                                <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[60px]">Bonus</TableHead>
                                 <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Bet</TableHead>
                                 <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win</TableHead>
                                 <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[70px]">Status</TableHead>
@@ -1295,6 +1306,16 @@ export default function AgentDetailPage({ params }: Props) {
                                   <TableCell className="text-center p-2.5">
                                     <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
                                       {spin.result.toString().padStart(3, '0')}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-center p-2.5">
+                                    {/* Issue #100: this round's own pinned bonus multiplier. */}
+                                    <span className={`font-mono font-black text-[10px] rounded-md px-1.5 py-0.5 inline-block ${
+                                      spin.bonus_multiplier === 1
+                                        ? 'text-muted-foreground bg-secondary/40'
+                                        : 'text-amber-400 bg-amber-500/10'
+                                    }`}>
+                                      {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">

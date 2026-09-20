@@ -40,7 +40,7 @@ export async function runPlayerDetailHistory(
       db.from('bets')
         .select(`id, round_id, single_bets, double_bets, triple_bets,
                  total_stake, total_payout, is_settled, created_at,
-                 rounds!inner ( round_number, red, green, black )`)
+                 rounds!inner ( round_number, red, green, black, bonus_multiplier )`)
         .eq('user_id', playerId)
         .order('created_at', { ascending: false })
         .limit(100),
@@ -60,7 +60,7 @@ export async function runPlayerDetailHistory(
     if (ledgerRes.error) throw new Error(`ledger: ${ledgerRes.error.message}`)
 
     const game_plays: PlayerGamePlay[] = (betsRes.data ?? []).map(b => {
-      const round = (b as unknown as { rounds: { round_number: number; red: number | null; green: number | null; black: number | null } }).rounds
+      const round = (b as unknown as { rounds: { round_number: number; red: number | null; green: number | null; black: number | null; bonus_multiplier: number } }).rounds
       const single = (b.single_bets ?? {}) as Record<string, number>
       const dbl    = (b.double_bets ?? {}) as Record<string, number>
       const triple = (b.triple_bets ?? {}) as Record<string, number>
@@ -98,6 +98,8 @@ export async function runPlayerDetailHistory(
         red: round.red,
         green: round.green,
         black: round.black,
+        // Issue #100: this round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X).
+        bonus_multiplier: Number(round.bonus_multiplier),
       }
     })
 

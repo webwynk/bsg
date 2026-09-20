@@ -561,6 +561,8 @@ export interface PlayerGamePlay {
   red: number | null
   green: number | null
   black: number | null
+  // Issue #100: this round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X).
+  bonus_multiplier: number
 }
 
 export interface PlayerCoinMovement {

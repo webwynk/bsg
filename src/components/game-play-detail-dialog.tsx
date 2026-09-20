@@ -36,7 +36,12 @@ const PDF_ACCENT_BAR_H = 6
 const PDF_TOP_MARGIN = 24
 const PDF_IDENTITY_H = 76
 const PDF_BLOCK_GAP = 16
-const PDF_KPI_H = 68
+// Issue #100: +18px from the original 68, to make room for the bonus badge
+// drawn below the Result digit boxes. pdfTotalHeight() and the section
+// cursor-advance (`y += PDF_KPI_H + ...` below) both reference this same
+// constant, so the whole page layout cascades correctly -- no second
+// hardcoded height to keep in sync.
+const PDF_KPI_H = 86
 const PDF_SECTION_HEADER_H = 26
 const PDF_SECTION_GAP = 28
 const PDF_BOTTOM_MARGIN = 32
@@ -152,6 +157,8 @@ export interface GamePlaySpin {
   red: number | null
   green: number | null
   black: number | null
+  // Issue #100: this round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X).
+  bonus_multiplier: number
 }
 
 /**
@@ -341,6 +348,21 @@ export function GamePlayDetailDialog({
         }
       })
 
+      // Issue #100: bonus badge, centered under the digit row, in the space
+      // PDF_KPI_H was enlarged (+18px) to make room for.
+      const bonusLabel = spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9)
+      const bonusBadgeW = pdf.getTextWidth(bonusLabel) + 16
+      const bonusBadgeX = PDF_MARGIN + colW * 0 + colW / 2 - bonusBadgeW / 2
+      pdfBadge(
+        pdf, bonusBadgeX, y + 60, bonusLabel,
+        spin.bonus_multiplier === 1 ? '#ffffff' : '#fffbeb',
+        spin.bonus_multiplier === 1 ? '#e2e8f0' : '#fde68a',
+        spin.bonus_multiplier === 1 ? '#64748b' : '#b45309',
+        16, 9
+      )
+
       // Col 1: Total Bet (enlarged 20pt bold Courier)
       kpiLabel('TOTAL BET', 1)
       pdf.setFont('courier', 'bold')
@@ -524,6 +546,20 @@ export function GamePlayDetailDialog({
                   {d3}
                 </span>
               </div>
+              {/* Issue #100: this round's own pinned bonus multiplier. Placed
+                  inside the Result cell (not as a 5th grid sibling) since the
+                  KPI ribbon above is a fixed grid-cols-4 -- a 5th column
+                  would break that layout. */}
+              <span
+                className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black tracking-wide"
+                style={
+                  spin.bonus_multiplier === 1
+                    ? { background: '#ffffff', color: '#64748b', border: '1px solid #e2e8f0' }
+                    : { background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }
+                }
+              >
+                {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
+              </span>
             </div>
 
             {/* 2. Total Bet */}

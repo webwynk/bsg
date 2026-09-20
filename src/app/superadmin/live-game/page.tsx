@@ -48,6 +48,8 @@ interface GameDraw {
   outcome: 'WON' | 'LOST' | 'NO BETS'
   created_at: string
   player_bets: PlayerBet[]
+  // Issue #100: this round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X).
+  bonus_multiplier: number
 }
 
 interface ActiveRound {
@@ -1002,6 +1004,7 @@ export default function SuperAdminLiveGamePage() {
                   <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
                     <th className="py-2.5 px-3">Timestamp</th>
                     <th className="py-2.5 px-3">Hand ID</th>
+                    <th className="py-2.5 px-3">Bonus</th>
                     <th className="py-2.5 px-3">Digits (R • G • B)</th>
                     <th className="py-2.5 px-3">Wagered</th>
                     <th className="py-2.5 px-3 text-right">Net Payout</th>
@@ -1010,7 +1013,7 @@ export default function SuperAdminLiveGamePage() {
                 <tbody className="divide-y divide-border/40">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs font-sans">
+                      <td colSpan={6} className="py-8 text-center text-muted-foreground text-xs font-sans">
                         <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                         Loading game draws...
                       </td>
@@ -1056,6 +1059,16 @@ export default function SuperAdminLiveGamePage() {
                             </span>
                           </td>
                           <td className="py-2.5 px-3">
+                            {/* Issue #100: this round's own pinned bonus multiplier. */}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
+                              draw.bonus_multiplier === 1
+                                ? 'text-muted-foreground bg-secondary/40 border border-border/60'
+                                : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+                            }`}>
+                              {draw.bonus_multiplier === 1 ? 'N' : `${draw.bonus_multiplier}X`}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">
                             <div className="flex items-center space-x-1.5 font-bold text-xs">
                               <span className="text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">{draw.red}</span>
                               <span className="text-muted-foreground/40">•</span>
@@ -1071,7 +1084,7 @@ export default function SuperAdminLiveGamePage() {
                         </tr>,
                         isExpanded && draw.player_bets && draw.player_bets.length > 0 && (
                           <tr key={`${draw.round_id}-expanded`} className="bg-secondary/20 border-b border-border/40">
-                            <td colSpan={5} className="p-3">
+                            <td colSpan={6} className="p-3">
                               <div className="bg-background/90 rounded-xl p-3 border border-border/60 space-y-2">
                                 <div className="text-[11px] font-bold text-primary flex items-center justify-between border-b border-border/40 pb-1.5">
                                   <span>Participating Player Breakdown ({draw.player_bets.length} Players)</span>
@@ -1097,7 +1110,7 @@ export default function SuperAdminLiveGamePage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs font-sans">
+                      <td colSpan={6} className="py-8 text-center text-muted-foreground text-xs font-sans">
                         No game draws match your filter criteria.
                       </td>
                     </tr>
@@ -1155,7 +1168,15 @@ export default function SuperAdminLiveGamePage() {
                       </div>
 
                       <div className="flex items-center justify-between text-[11px]">
-                        <div className="flex items-center space-x-1 font-mono font-bold">
+                        <div className="flex items-center space-x-1.5 font-mono font-bold">
+                          {/* Issue #100: this round's own pinned bonus multiplier. */}
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-black shrink-0 ${
+                            draw.bonus_multiplier === 1
+                              ? 'text-muted-foreground bg-secondary/40 border border-border/60'
+                              : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+                          }`}>
+                            {draw.bonus_multiplier === 1 ? 'N' : `${draw.bonus_multiplier}X`}
+                          </span>
                           <span className="text-red-400">{draw.red}</span>
                           <span className="text-muted-foreground/40">•</span>
                           <span className="text-emerald-400">{draw.green}</span>

@@ -465,6 +465,8 @@ export interface DrawRow {
   outcome: 'WON' | 'LOST' | 'NO BETS'
   created_at: string
   player_bets: Array<{ username: string; total_stake: number; total_payout: number }>
+  // Issue #100: this round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X).
+  bonus_multiplier: number
 }
 
 export async function getLatestGameDrawsAction(): Promise<{
@@ -492,7 +494,7 @@ export async function getLatestGameDrawsAction(): Promise<{
     const roundsRes = await db
       .from('rounds')
       .select(`id, round_number, red, green, black, total_stake, total_payout,
-               scheduled_at, drawn_at,
+               scheduled_at, drawn_at, bonus_multiplier,
                bets ( total_stake, total_payout, profiles:user_id ( username ) )`)
       .not('red', 'is', null)
       .order('round_number', { ascending: false })
@@ -528,6 +530,7 @@ export async function getLatestGameDrawsAction(): Promise<{
         outcome: player_bets.length === 0 ? 'NO BETS' : payout > 0 ? 'WON' : 'LOST',
         created_at: r.drawn_at ?? r.scheduled_at,
         player_bets,
+        bonus_multiplier: Number(r.bonus_multiplier),
       }
     })
 
