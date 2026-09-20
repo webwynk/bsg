@@ -161,6 +161,7 @@ export type Database = {
           bet_cutoff_second: number
           settle_batch_size: number
           staff_session_grace_sec: number
+          bonus_multiplier: number
         }
         Insert: {
           id?: string
@@ -171,6 +172,7 @@ export type Database = {
           bet_cutoff_second?: number
           settle_batch_size?: number
           staff_session_grace_sec?: number
+          bonus_multiplier?: number
         }
         Update: {
           id?: string
@@ -181,6 +183,7 @@ export type Database = {
           bet_cutoff_second?: number
           settle_batch_size?: number
           staff_session_grace_sec?: number
+          bonus_multiplier?: number
         }
         Relationships: []
       }
@@ -313,6 +316,7 @@ export type Database = {
           settled_at: string | null
           created_at: string
           rtp_percentage: number
+          bonus_multiplier: number
         }
         Insert: {
           id?: string
@@ -328,6 +332,7 @@ export type Database = {
           settled_at?: string | null
           created_at?: string
           rtp_percentage?: number
+          bonus_multiplier?: number
         }
         Update: {
           id?: string
@@ -343,6 +348,7 @@ export type Database = {
           settled_at?: string | null
           created_at?: string
           rtp_percentage?: number
+          bonus_multiplier?: number
         }
         Relationships: []
       }

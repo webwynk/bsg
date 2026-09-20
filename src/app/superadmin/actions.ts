@@ -246,28 +246,79 @@ export async function updateRtpAction(rtpPercentage: number) {
   }
 }
 
-// Lightweight, poll-friendly round-timing check — used only to lock the RTP
-// Configuration widget in the closing seconds of a round. Deliberately
-// separate from getLatestGameDrawsAction (which also fetches 20 rounds of
-// nested bet history) since this needs to be polled every couple of seconds
-// and that one does not.
+// ─────────────────────────────────────────────────────────────────────────────
+// BONUS MULTIPLIER CONFIGURATION (Issue #96)
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin-selectable promotional payout multiplier: 1 = "N" (no bonus, default),
+// 2/3/4 = 2X/3X/4X. Pinned onto each round at creation exactly like
+// rtp_percentage (see 20260920120000_pin_bonus_multiplier_to_round.sql) --
+// settle_round reads only the round's own pinned copy, so a change made here
+// can never affect a round already in progress. Mirrors getRtpAction's/
+// updateRtpAction's exact auth/error/audit-log contract.
+export async function getBonusMultiplierAction(): Promise<{ bonusMultiplier: number; error: string | null }> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { bonusMultiplier: 1, error: auth.error }
+
+  try {
+    const { data, error } = await createAdminClient()
+      .from('game_config').select('bonus_multiplier').eq('id', 'global').single()
+    if (error) throw new Error(error.message)
+    return { bonusMultiplier: Number(data.bonus_multiplier), error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { bonusMultiplier: 1, error: `Could not read bonus multiplier: ${message}` }
+  }
+}
+
+export async function updateBonusMultiplierAction(bonusMultiplier: number) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) return { success: false, error: auth.error ?? 'Unauthorized' }
+
+  // The database enforces this too (CHECK on game_config); validating here
+  // just produces a friendlier message.
+  if (![1, 2, 3, 4].includes(bonusMultiplier)) {
+    return { success: false, error: 'Bonus multiplier must be 1 (N), 2, 3, or 4.' }
+  }
+
+  try {
+    const { error } = await createAdminClient()
+      .from('game_config')
+      .update({ bonus_multiplier: bonusMultiplier, updated_at: new Date().toISOString() })
+      .eq('id', 'global')
+    if (error) throw new Error(error.message)
+
+    const label = bonusMultiplier === 1 ? 'N (no bonus)' : `${bonusMultiplier}X`
+    await logAuditEventAction('system', `Bonus multiplier set to ${label} — takes effect next round`)
+    revalidatePath('/superadmin')
+    return { success: true, bonusMultiplier, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, error: `Could not update bonus multiplier: ${message}` }
+  }
+}
+
+// Lightweight, poll-friendly round-timing check — used to lock both the RTP
+// Configuration widget and the Bonus Multiplier widget in the closing
+// seconds of a round. Deliberately separate from getLatestGameDrawsAction
+// (which also fetches 20 rounds of nested bet history) since this needs to
+// be polled every couple of seconds and that one does not.
 //
 // Returns seconds_into (not just seconds_remaining) so the caller can derive
 // the SAME 0-90 countdown the player-facing app displays
 // (bsg_app/lib/providers/game_provider.dart's _cycleToCountdown: roughly
 // `90 - seconds_into`, clamped to 0). seconds_remaining alone counts down
 // over the full 103-second server cycle, which is a different, later-ending
-// clock than what players (and now, this widget) actually watch.
+// clock than what players (and now, these widgets) actually watch.
 //
 // This lock is a UX/discipline convenience only, not a correctness
-// requirement -- a change submitted at any point still only ever affects the
-// next round (each round pins its own rtp_percentage at creation time, see
-// draw_round), so a stale or failed poll here fails open (unlocked) rather
-// than risking the widget getting stuck disabled.
+// requirement for either widget -- a change submitted at any point still
+// only ever affects the next round (each round pins its own rtp_percentage
+// AND bonus_multiplier at creation time, see get_current_round/tick_rounds),
+// so a stale or failed poll here fails open (unlocked) rather than risking
+// either widget getting stuck disabled.
 //
-// The payout multiplier no longer has a widget of its own to lock (permanent
-// x9/x90/x900, removed from the dashboard entirely) -- this function now
-// serves RTP Configuration only.
+// The old (pre-Issue #89) payout multiplier no longer has a widget of its
+// own to lock (permanent x9/x90/x900, removed from the dashboard entirely).
 export async function getActiveRoundTimingAction(): Promise<{
   seconds_remaining: number | null
   seconds_into: number | null

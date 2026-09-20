@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
-import { getRtpAction, updateRtpAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
+import { getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
@@ -44,21 +44,31 @@ export default function SuperAdminDashboard() {
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [isSavingRtp, setIsSavingRtp] = React.useState(false)
   const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
-  // Locks the RTP Configuration widget (Issue #43) in a round's closing
-  // seconds. Uses the SAME 0-90 countdown players actually see in the app
-  // (derived from seconds_into, mirroring bsg_app's own _cycleToCountdown),
-  // not the raw server seconds_remaining (which counts down over the full
-  // 103-second cycle -- a different, later-ending clock). Unlocks the
-  // instant a new round starts, since this countdown jumps back up to ~90
-  // at that point. See getActiveRoundTimingAction.
+  // Bonus Multiplier (Issue #96): N/2X/3X/4X promotional payout multiplier,
+  // pinned per-round exactly like RTP -- shares this same lock/countdown
+  // (roundConfigLocked/displayCountdown, below) for the same reason RTP does.
+  const [bonusMultiplier, setBonusMultiplier] = React.useState(1)
+  const [isSavingBonusMultiplier, setIsSavingBonusMultiplier] = React.useState(false)
+  const [bonusMultiplierSuccess, setBonusMultiplierSuccess] = React.useState<string | null>(null)
+  // Locks BOTH the RTP Configuration widget (Issue #43) and the Bonus
+  // Multiplier widget (Issue #96) in a round's closing seconds. Uses the
+  // SAME 0-90 countdown players actually see in the app (derived from
+  // seconds_into, mirroring bsg_app's own _cycleToCountdown), not the raw
+  // server seconds_remaining (which counts down over the full 103-second
+  // cycle -- a different, later-ending clock). Unlocks the instant a new
+  // round starts, since this countdown jumps back up to ~90 at that point.
+  // See getActiveRoundTimingAction.
   //
-  // This is a UX/discipline courtesy only, not a correctness requirement --
-  // RTP is pinned onto each round at creation (draw_round reads the round's
-  // own value, never live game_config), so a change is safe to submit at
+  // This is a UX/discipline courtesy only, not a correctness requirement for
+  // either widget -- both RTP and the bonus multiplier are pinned onto each
+  // round at creation (get_current_round/tick_rounds capture both from
+  // game_config, and draw_round/settle_round read only the round's own
+  // pinned copy, never live game_config), so a change is safe to submit at
   // any second regardless of this lock. It just avoids the admin submitting
   // a change in a moment that might feel confusing about which round it's
-  // about to affect. (The payout multiplier used to share this lock too,
-  // before it became permanent and its widget was removed entirely.)
+  // about to affect. (The old, pre-Issue #89 payout multiplier used to share
+  // this lock too, before it became permanent and its widget was removed
+  // entirely.)
   const [roundSecondsInto, setRoundSecondsInto] = React.useState<number | null>(null)
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
@@ -88,12 +98,13 @@ export default function SuperAdminDashboard() {
     return Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
+      getBonusMultiplierAction(),
       getAuditLogsAction()
-    ]).then(([resMetrics, resRtp, resLogs]) => {
+    ]).then(([resMetrics, resRtp, resBonus, resLogs]) => {
       if (!metricsRequest.isCurrent(token)) return
       setIsLoadingMetrics(false)
       setIsRefreshing(false)
-      const errors = [resMetrics.error, resRtp.error, resLogs.error].filter(Boolean)
+      const errors = [resMetrics.error, resRtp.error, resBonus.error, resLogs.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (resMetrics && !resMetrics.error) {
         setTodayDeposited(resMetrics.today_deposited || 0)
@@ -114,6 +125,11 @@ export default function SuperAdminDashboard() {
       // would silently apply that fallback as if it were the real value.
       if (resRtp && !resRtp.error && resRtp.rtp) {
         setRtpValue(resRtp.rtp)
+      }
+      // Same explicit-.error-check reasoning as resRtp above: bonusMultiplier
+      // falls back to a truthy 1 even on error.
+      if (resBonus && !resBonus.error && resBonus.bonusMultiplier) {
+        setBonusMultiplier(resBonus.bonusMultiplier)
       }
       if (resLogs && !resLogs.error) {
         setSystemLogs(resLogs.logs)
@@ -147,6 +163,19 @@ export default function SuperAdminDashboard() {
       setRtpSuccess(`RTP updated to ${valToApply}%`)
       fetchMetrics() // isLoadingMetrics already false by now
       setTimeout(() => setRtpSuccess(null), 2500)
+    }
+  }
+
+  const handleApplyBonusMultiplier = async (mult: 1 | 2 | 3 | 4) => {
+    setIsSavingBonusMultiplier(true)
+    setBonusMultiplierSuccess(null)
+    const res = await updateBonusMultiplierAction(mult)
+    setIsSavingBonusMultiplier(false)
+    if (res.success) {
+      setBonusMultiplier(mult)
+      setBonusMultiplierSuccess(`Bonus set to ${mult === 1 ? 'N (no bonus)' : mult + 'X'} — applies to the next round`)
+      fetchMetrics()
+      setTimeout(() => setBonusMultiplierSuccess(null), 2500)
     }
   }
 
@@ -632,6 +661,68 @@ export default function SuperAdminDashboard() {
                 {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                 {isSavingRtp ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Configuration'}
               </Button>
+            </div>
+          )}
+        </Card>
+
+        {/* Bonus Multiplier (Issue #96) — promotional N/2X/3X/4X payout
+            multiplier, pinned per-round like RTP. Shares the same
+            roundConfigLocked/displayCountdown lock as RTP Configuration
+            above, for the same UX-courtesy reason (the underlying value is
+            already pinned at round creation, so this isn't what makes a
+            change safe -- it just avoids submitting mid-round for clarity). */}
+        <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+            <div className="flex items-center space-x-2">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                <Percent className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-foreground leading-tight">Bonus Multiplier</h3>
+                <p className="text-[10px] text-muted-foreground">Promotional payout boost — applies to the next round.</p>
+              </div>
+            </div>
+            <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+              {bonusMultiplier === 1 ? 'N' : `${bonusMultiplier}X`}
+            </span>
+          </div>
+
+          {isLoadingMetrics ? (
+            <div className="space-y-3 p-2 animate-pulse">
+              <div className="h-8 bg-secondary/60 rounded w-full" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bonusMultiplierSuccess && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                  <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
+                  <span>{bonusMultiplierSuccess}</span>
+                </div>
+              )}
+
+              {roundConfigLocked && (
+                <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
+                </div>
+              )}
+
+              <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                {([1, 2, 3, 4] as const).map((mult) => (
+                  <button
+                    key={mult}
+                    onClick={() => handleApplyBonusMultiplier(mult)}
+                    disabled={isSavingBonusMultiplier || roundConfigLocked}
+                    className={`flex-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      bonusMultiplier === mult
+                        ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {mult === 1 ? 'N' : `${mult}X`}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </Card>

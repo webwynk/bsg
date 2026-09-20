@@ -22,6 +22,11 @@ export interface CurrentRound {
   red: number | null
   green: number | null
   black: number | null
+  /** This round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X),
+   * captured from game_config at round creation. Null until the draw,
+   * matching red/green/black, so the app never learns which reveal image to
+   * show before it has the winning digits. */
+  bonus_multiplier: number | null
 }
 
 export interface PlaceBetResult {
