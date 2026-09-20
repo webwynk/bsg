@@ -3,13 +3,12 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Percent, Settings2, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, Check, Loader2, ArrowUpRight, ArrowDownRight, Search, Gamepad2, Clock } from 'lucide-react'
-import { Slider } from '@/components/ui/slider'
+import { Users, Coins, Percent, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, ArrowUpRight, ArrowDownRight, Search, Gamepad2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
-import { getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
+import { getRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
@@ -42,36 +41,14 @@ export default function SuperAdminDashboard() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [isLoadingMetrics, setIsLoadingMetrics] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
-  const [isSavingRtp, setIsSavingRtp] = React.useState(false)
-  const [rtpSuccess, setRtpSuccess] = React.useState<string | null>(null)
-  // Bonus Multiplier (Issue #96): N/2X/3X/4X promotional payout multiplier,
-  // pinned per-round exactly like RTP -- shares this same lock/countdown
-  // (roundConfigLocked/displayCountdown, below) for the same reason RTP does.
-  const [bonusMultiplier, setBonusMultiplier] = React.useState(1)
-  const [isSavingBonusMultiplier, setIsSavingBonusMultiplier] = React.useState(false)
-  const [bonusMultiplierSuccess, setBonusMultiplierSuccess] = React.useState<string | null>(null)
-  // Locks BOTH the RTP Configuration widget (Issue #43) and the Bonus
-  // Multiplier widget (Issue #96) in a round's closing seconds. Uses the
-  // SAME 0-90 countdown players actually see in the app (derived from
-  // seconds_into, mirroring bsg_app's own _cycleToCountdown), not the raw
-  // server seconds_remaining (which counts down over the full 103-second
-  // cycle -- a different, later-ending clock). Unlocks the instant a new
-  // round starts, since this countdown jumps back up to ~90 at that point.
-  // See getActiveRoundTimingAction.
-  //
-  // This is a UX/discipline courtesy only, not a correctness requirement for
-  // either widget -- both RTP and the bonus multiplier are pinned onto each
-  // round at creation (get_current_round/tick_rounds capture both from
-  // game_config, and draw_round/settle_round read only the round's own
-  // pinned copy, never live game_config), so a change is safe to submit at
-  // any second regardless of this lock. It just avoids the admin submitting
-  // a change in a moment that might feel confusing about which round it's
-  // about to affect. (The old, pre-Issue #89 payout multiplier used to share
-  // this lock too, before it became permanent and its widget was removed
-  // entirely.)
-  const [roundSecondsInto, setRoundSecondsInto] = React.useState<number | null>(null)
-  const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
-  const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
+  // rtpValue itself stays (the "Global RTP Target" KPI tile below reads it)
+  // -- but the editable RTP Configuration widget, the Bonus Multiplier
+  // widget, and their shared round-lock countdown (isSavingRtp/rtpSuccess/
+  // bonusMultiplier/isSavingBonusMultiplier/bonusMultiplierSuccess/
+  // roundSecondsInto/displayCountdown/roundConfigLocked) all moved to
+  // /superadmin/live-game's Triple Chance tab 2026-09-20 (Issue #97) --
+  // they're Triple-Chance-specific game settings, not general dashboard
+  // state, and now live next to that game's own live monitor.
   // Guards fetchMetrics against out-of-order responses -- this page has 3
   // independent triggers into it (live sync, manual refresh, and a
   // successful RTP change), the most of any page audited.
@@ -98,13 +75,12 @@ export default function SuperAdminDashboard() {
     return Promise.all([
       getSystemOverviewMetricsAction(),
       getRtpAction(),
-      getBonusMultiplierAction(),
       getAuditLogsAction()
-    ]).then(([resMetrics, resRtp, resBonus, resLogs]) => {
+    ]).then(([resMetrics, resRtp, resLogs]) => {
       if (!metricsRequest.isCurrent(token)) return
       setIsLoadingMetrics(false)
       setIsRefreshing(false)
-      const errors = [resMetrics.error, resRtp.error, resBonus.error, resLogs.error].filter(Boolean)
+      const errors = [resMetrics.error, resRtp.error, resLogs.error].filter(Boolean)
       setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (resMetrics && !resMetrics.error) {
         setTodayDeposited(resMetrics.today_deposited || 0)
@@ -125,11 +101,6 @@ export default function SuperAdminDashboard() {
       // would silently apply that fallback as if it were the real value.
       if (resRtp && !resRtp.error && resRtp.rtp) {
         setRtpValue(resRtp.rtp)
-      }
-      // Same explicit-.error-check reasoning as resRtp above: bonusMultiplier
-      // falls back to a truthy 1 even on error.
-      if (resBonus && !resBonus.error && resBonus.bonusMultiplier) {
-        setBonusMultiplier(resBonus.bonusMultiplier)
       }
       if (resLogs && !resLogs.error) {
         setSystemLogs(resLogs.logs)
@@ -152,33 +123,6 @@ export default function SuperAdminDashboard() {
     refresh() // cleared by fetchMetrics' own completion above
   }
 
-  const handleApplyRtp = async (targetVal?: number) => {
-    const valToApply = targetVal !== undefined ? targetVal : rtpValue
-    setIsSavingRtp(true)
-    setRtpSuccess(null)
-    const res = await updateRtpAction(valToApply)
-    setIsSavingRtp(false)
-    if (res.success) {
-      setRtpValue(valToApply)
-      setRtpSuccess(`RTP updated to ${valToApply}%`)
-      fetchMetrics() // isLoadingMetrics already false by now
-      setTimeout(() => setRtpSuccess(null), 2500)
-    }
-  }
-
-  const handleApplyBonusMultiplier = async (mult: 1 | 2 | 3 | 4) => {
-    setIsSavingBonusMultiplier(true)
-    setBonusMultiplierSuccess(null)
-    const res = await updateBonusMultiplierAction(mult)
-    setIsSavingBonusMultiplier(false)
-    if (res.success) {
-      setBonusMultiplier(mult)
-      setBonusMultiplierSuccess(`Bonus set to ${mult === 1 ? 'N (no bonus)' : mult + 'X'} — applies to the next round`)
-      fetchMetrics()
-      setTimeout(() => setBonusMultiplierSuccess(null), 2500)
-    }
-  }
-
   // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
   // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
   // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
@@ -198,39 +142,6 @@ export default function SuperAdminDashboard() {
   // still only refreshes on this same poll or a manual refresh, never on its
   // own real-time events.
   const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchMetrics, 'normal')
-
-  // Separate, faster poll dedicated to the RTP-lock countdown -- 60s (the
-  // metrics poll above) is far too coarse to reliably catch an 11-second
-  // window. Deliberately lightweight (getActiveRoundTimingAction only calls
-  // get_current_round(), not the heavier draws/bets query fetchMetrics uses).
-  //
-  // Issue #93 bug fix: this poll had NO guard at all against a previous
-  // tick's fetch still being in flight -- unlike every other poll in the
-  // dashboard, not even useRequestGeneration. Low severity (only drives a
-  // UI lock/countdown display, not financial data), but the same missing-
-  // protection pattern confirmed elsewhere to cause real problems under the
-  // same production latency. inFlight is a plain closure variable, not a
-  // ref -- this effect's own closure already lives exactly as long as the
-  // interval it guards, so there's nothing extra a ref would provide here.
-  React.useEffect(() => {
-    let cancelled = false
-    let inFlight = false
-    const poll = () => {
-      if (inFlight) return
-      inFlight = true
-      getActiveRoundTimingAction().then(res => {
-        if (!cancelled) setRoundSecondsInto(res.seconds_into)
-      }).finally(() => {
-        inFlight = false
-      })
-    }
-    poll()
-    const timingPoll = setInterval(poll, 2000)
-    return () => {
-      cancelled = true
-      clearInterval(timingPoll)
-    }
-  }, [])
 
   // Filtered & Paginated Logs
   const filteredLogs = React.useMemo(() => {
@@ -505,231 +416,15 @@ export default function SuperAdminDashboard() {
 
 
 
-      {/* Main Widgets: RTP Configuration & Recent System Logs */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* RTP Configuration (md:col-span-5) */}
-        <div className="md:col-span-5 space-y-4">
+      {/* Recent System Logs Widget. RTP Configuration and Bonus Multiplier
+          (Issue #96/#97) were relocated to /superadmin/live-game's Triple
+          Chance tab 2026-09-20 -- they're Triple-Chance-specific game
+          settings, so they now live next to that game's own live monitor
+          instead of the general dashboard. This card no longer needs a
+          12-column grid partner, so it's full width now instead of
+          md:col-span-7. rtpValue/getRtpAction stay on THIS page -- the
+          "Global RTP Target" KPI tile above still reads it. */}
         <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-            <div className="flex items-center space-x-2">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                <Settings2 className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-foreground leading-tight">RTP Configuration</h3>
-                <p className="text-[10px] text-muted-foreground">Adjust payout rates across slots & games.</p>
-              </div>
-            </div>
-            <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-              {rtpValue}%
-            </span>
-          </div>
-
-          {isLoadingMetrics ? (
-            <div className="space-y-3 p-2 animate-pulse">
-              <div className="h-4 bg-secondary/80 rounded w-full" />
-              <div className="h-8 bg-secondary/60 rounded w-full" />
-            </div>
-          ) : (
-            <div className="space-y-3.5">
-              {rtpSuccess && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
-                  <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
-                  <span>{rtpSuccess}</span>
-                </div>
-              )}
-
-              {roundConfigLocked && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
-                  <Clock className="h-3.5 w-3.5 shrink-0" />
-                  <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
-                </div>
-              )}
-
-              {/* Slider Controls */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-[10px] font-mono font-bold">
-                  <span className="text-muted-foreground">Adjust Target RTP</span>
-                  <span className="text-amber-500 font-black">{rtpValue}%</span>
-                </div>
-                <Slider
-                  value={[rtpValue]}
-                  onValueChange={(val) => {
-                    if (typeof val === 'number') {
-                      setRtpValue(val)
-                    } else if (Array.isArray(val) && typeof val[0] === 'number') {
-                      setRtpValue(val[0])
-                    }
-                  }}
-                  max={100}
-                  min={50}
-                  step={0.5}
-                  disabled={roundConfigLocked}
-                  className="w-full cursor-pointer disabled:opacity-50"
-                />
-                <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
-                  <span>50% (Max House Margin)</span>
-                  <span>100% (Zero House Margin)</span>
-                </div>
-              </div>
-
-              {/* Preset Quick Pills */}
-              <div className="space-y-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Quick Presets
-                </span>
-                <div className="flex items-center flex-wrap gap-1.5">
-                  {[
-                    { val: 90, label: '90% Aggressive' },
-                    { val: 92.5, label: '92.5% Medium' },
-                    { val: 95, label: '95% Balanced' },
-                    { val: 96.5, label: '96.5% Standard' },
-                    { val: 98, label: '98% High Payout' },
-                    { val: 100, label: '100% Full Return (0% House Edge)' }
-                  ].map((preset) => (
-                    <button
-                      key={preset.val}
-                      onClick={() => handleApplyRtp(preset.val)}
-                      disabled={isSavingRtp || roundConfigLocked}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
-                        rtpValue === preset.val
-                          ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                          : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Live House Edge & Payout Yield Breakdown Box */}
-              <div className="p-3 rounded-xl bg-secondary/30 border border-border/60 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Yield Rating & Margin
-                  </span>
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
-                    rtpValue < 92
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      : rtpValue <= 96.5
-                      ? 'bg-success-bg text-success-text border border-emerald-500/30'
-                      : rtpValue < 100
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  }`}>
-                    {rtpValue < 92 ? '🔥 Aggressive Yield' : rtpValue <= 96.5 ? '⚖️ Balanced (Recommended)' : rtpValue < 100 ? '💎 Player Friendly' : '🎁 100% Full Return (Zero House Edge)'}
-                  </span>
-                </div>
-
-                {/* Visual Ratio Progress Bar */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] font-mono font-bold">
-                    <span className="text-emerald-400">Player Return: {rtpValue}%</span>
-                    <span className="text-amber-400">House Edge: {(100 - rtpValue).toFixed(1)}%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-amber-500/20 overflow-hidden flex">
-                    <div 
-                      className="h-full bg-emerald-500 transition-all duration-300 rounded-l-full" 
-                      style={{ width: `${rtpValue}%` }} 
-                    />
-                    <div 
-                      className="h-full bg-amber-500 transition-all duration-300 rounded-r-full" 
-                      style={{ width: `${(100 - rtpValue).toFixed(1)}%` }} 
-                    />
-                  </div>
-                </div>
-
-                {/* Simulated 1,000 Wager Turnover */}
-                <div className="grid grid-cols-2 gap-2 pt-1 text-center text-[10px] font-mono">
-                  <div className="p-1.5 rounded-lg bg-card border border-border/40">
-                    <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. Player Payout (1k Coins)</span>
-                    <span className="font-black text-emerald-400 text-xs">{(1000 * (rtpValue / 100)).toFixed(0)} Coins</span>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-card border border-border/40">
-                    <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. House Profit (1k Coins)</span>
-                    <span className="font-black text-amber-400 text-xs">{(1000 * ((100 - rtpValue) / 100)).toFixed(0)} Coins</span>
-                  </div>
-                </div>
-              </div>
-
-              <Button
-                onClick={() => handleApplyRtp()}
-                disabled={isSavingRtp || roundConfigLocked}
-                className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {isSavingRtp ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Configuration'}
-              </Button>
-            </div>
-          )}
-        </Card>
-
-        {/* Bonus Multiplier (Issue #96) — promotional N/2X/3X/4X payout
-            multiplier, pinned per-round like RTP. Shares the same
-            roundConfigLocked/displayCountdown lock as RTP Configuration
-            above, for the same UX-courtesy reason (the underlying value is
-            already pinned at round creation, so this isn't what makes a
-            change safe -- it just avoids submitting mid-round for clarity). */}
-        <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-            <div className="flex items-center space-x-2">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
-                <Percent className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-foreground leading-tight">Bonus Multiplier</h3>
-                <p className="text-[10px] text-muted-foreground">Promotional payout boost — applies to the next round.</p>
-              </div>
-            </div>
-            <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-              {bonusMultiplier === 1 ? 'N' : `${bonusMultiplier}X`}
-            </span>
-          </div>
-
-          {isLoadingMetrics ? (
-            <div className="space-y-3 p-2 animate-pulse">
-              <div className="h-8 bg-secondary/60 rounded w-full" />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {bonusMultiplierSuccess && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
-                  <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
-                  <span>{bonusMultiplierSuccess}</span>
-                </div>
-              )}
-
-              {roundConfigLocked && (
-                <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
-                  <Clock className="h-3.5 w-3.5 shrink-0" />
-                  <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
-                </div>
-              )}
-
-              <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                {([1, 2, 3, 4] as const).map((mult) => (
-                  <button
-                    key={mult}
-                    onClick={() => handleApplyBonusMultiplier(mult)}
-                    disabled={isSavingBonusMultiplier || roundConfigLocked}
-                    className={`flex-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                      bonusMultiplier === mult
-                        ? 'bg-primary text-primary-foreground font-black shadow-xs'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {mult === 1 ? 'N' : `${mult}X`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-        </div>
-
-        {/* Recent System Logs Widget (md:col-span-7) */}
-        <Card className="md:col-span-7 bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
           {/* Header Bar + Log Filters & Search */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/60 pb-2.5">
             <div className="flex items-center space-x-2">
@@ -835,7 +530,6 @@ export default function SuperAdminDashboard() {
             )}
           </div>
         </Card>
-      </div>
     </div>
   )
 }

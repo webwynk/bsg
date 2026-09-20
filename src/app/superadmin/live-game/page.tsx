@@ -1,25 +1,31 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { getLatestGameDrawsAction } from '../actions'
+import { getLatestGameDrawsAction, getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction } from '../actions'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 import { formatCurrency } from '@/lib/utils'
 import { ErrorBanner } from '@/components/error-banner'
-import { 
-  Radio, 
-  RefreshCw, 
-  Clock, 
-  Loader2, 
-  Trophy, 
-  Sparkles, 
-  Search, 
-  Filter, 
-  ChevronLeft, 
-  ChevronRight, 
-  History, 
-  Gamepad2
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
+import {
+  Radio,
+  RefreshCw,
+  Clock,
+  Loader2,
+  Trophy,
+  Sparkles,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Gamepad2,
+  Settings2,
+  Percent,
+  Check
 } from 'lucide-react'
 
 interface PlayerBet {
@@ -90,6 +96,33 @@ export default function SuperAdminLiveGamePage() {
   // component every second regardless, so state costs nothing extra here.
   const [activeRoundFetchedAt, setActiveRoundFetchedAt] = useState<number>(0)
 
+  // RTP Configuration & Bonus Multiplier (Issue #97) -- relocated here
+  // 2026-09-20 from the general /superadmin dashboard, since both are
+  // Triple-Chance-specific game settings that belong next to this game's own
+  // live monitor. Fetched bundled into loadDraws() below (RULE #20B -- one
+  // action per page-load, not a separate round-trip per widget), so they
+  // refresh on this page's existing 'fast' (3s) live-round poll instead of
+  // needing a poll loop of their own.
+  const [rtpValue, setRtpValue] = useState(96.5)
+  const [isSavingRtp, setIsSavingRtp] = useState(false)
+  const [rtpSuccess, setRtpSuccess] = useState<string | null>(null)
+  const [bonusMultiplier, setBonusMultiplier] = useState(1)
+  const [isSavingBonusMultiplier, setIsSavingBonusMultiplier] = useState(false)
+  const [bonusMultiplierSuccess, setBonusMultiplierSuccess] = useState<string | null>(null)
+  // Locks both widgets in a round's closing seconds -- a UX/discipline
+  // courtesy only, not a correctness requirement, since both rtp_percentage
+  // and bonus_multiplier are pinned onto each round at creation
+  // (get_current_round/tick_rounds capture both from game_config, and
+  // draw_round/settle_round read only the round's own pinned copy, never
+  // live game_config) -- a change is safe to submit at any second regardless
+  // of this lock. Byte-for-byte the same pattern the old /superadmin
+  // location used, just relocated. Uses the SAME 0-90 countdown players
+  // actually see in the app (derived from seconds_into), not the raw server
+  // seconds_remaining (a different, later-ending clock).
+  const [roundSecondsInto, setRoundSecondsInto] = useState<number | null>(null)
+  const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
+  const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
+
   // Table search & filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'WON' | 'LOST' | 'NO BETS'>('ALL')
@@ -115,17 +148,36 @@ export default function SuperAdminLiveGamePage() {
   // Returned (not fire-and-forget) so useLiveSync can await it and skip
   // starting an overlapping poll tick while this one is still in flight --
   // see the in-flight guard in use-live-sync.ts (Issue #93).
+  // Issue #97: bundled with getRtpAction/getBonusMultiplierAction (one
+  // Promise.all, not a separate round-trip per widget -- RULE #20B) since
+  // RTP Configuration and Bonus Multiplier now live on this same tab. Both
+  // ride this page's existing 'fast' (3s) live-round poll below instead of
+  // needing a dedicated poll loop of their own.
   const loadDraws = useCallback(() => {
     const token = drawsRequest.nextGeneration()
-    return getLatestGameDrawsAction().then((res) => {
+    return Promise.all([
+      getLatestGameDrawsAction(),
+      getRtpAction(),
+      getBonusMultiplierAction(),
+    ]).then(([res, resRtp, resBonus]) => {
       if (!drawsRequest.isCurrent(token)) return
       setIsLoading(false)
       setIsRefreshing(false)
-      setLoadError(res.error)
+      const errors = [res.error, resRtp.error, resBonus.error].filter(Boolean)
+      setLoadError(errors.length > 0 ? errors.join(' — ') : null)
       if (!res.error) {
         setLatestDraws(res.draws)
         setActiveRound(res.active_round)
         setActiveRoundFetchedAt(Date.now())
+      }
+      // resRtp.rtp / resBonus.bonusMultiplier are truthy fallbacks even on
+      // error, so this must check .error explicitly -- a bare truthy check
+      // would silently apply that fallback as if it were the real value.
+      if (resRtp && !resRtp.error && resRtp.rtp) {
+        setRtpValue(resRtp.rtp)
+      }
+      if (resBonus && !resBonus.error && resBonus.bonusMultiplier) {
+        setBonusMultiplier(resBonus.bonusMultiplier)
       }
     }).catch((e) => {
       if (!drawsRequest.isCurrent(token)) return
@@ -144,6 +196,62 @@ export default function SuperAdminLiveGamePage() {
     setIsRefreshing(true)
     refresh()
   }
+
+  const handleApplyRtp = async (targetVal?: number) => {
+    const valToApply = targetVal !== undefined ? targetVal : rtpValue
+    setIsSavingRtp(true)
+    setRtpSuccess(null)
+    const res = await updateRtpAction(valToApply)
+    setIsSavingRtp(false)
+    if (res.success) {
+      setRtpValue(valToApply)
+      setRtpSuccess(`RTP updated to ${valToApply}%`)
+      loadDraws()
+      setTimeout(() => setRtpSuccess(null), 2500)
+    }
+  }
+
+  const handleApplyBonusMultiplier = async (mult: 1 | 2 | 3 | 4) => {
+    setIsSavingBonusMultiplier(true)
+    setBonusMultiplierSuccess(null)
+    const res = await updateBonusMultiplierAction(mult)
+    setIsSavingBonusMultiplier(false)
+    if (res.success) {
+      setBonusMultiplier(mult)
+      setBonusMultiplierSuccess(`Bonus set to ${mult === 1 ? 'N (no bonus)' : mult + 'X'} — applies to the next round`)
+      loadDraws()
+      setTimeout(() => setBonusMultiplierSuccess(null), 2500)
+    }
+  }
+
+  // Dedicated poll for the RTP/Bonus round-lock countdown -- the 3s
+  // useLiveSync poll below refreshes draws/config values, but the lock needs
+  // seconds_into on a reliable cadence independent of realtime push timing.
+  // Deliberately lightweight (getActiveRoundTimingAction only calls
+  // get_current_round(), not the heavier draws query). Carries its own
+  // in-flight guard (a plain closure variable, not a ref -- this effect's
+  // closure already lives exactly as long as the interval it guards) per
+  // RULE #20C, mirroring the reference pattern from the old /superadmin
+  // location this was relocated from.
+  useEffect(() => {
+    let cancelled = false
+    let inFlight = false
+    const poll = () => {
+      if (inFlight) return
+      inFlight = true
+      getActiveRoundTimingAction().then(res => {
+        if (!cancelled) setRoundSecondsInto(res.seconds_into)
+      }).finally(() => {
+        inFlight = false
+      })
+    }
+    poll()
+    const timingPoll = setInterval(poll, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(timingPoll)
+    }
+  }, [])
 
   // Issue #91 addendum (2026-08-25): replaces the old direct useLiveVersion
   // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
@@ -257,6 +365,226 @@ export default function SuperAdminLiveGamePage() {
       {/* Main Active View */}
       {selectedGameTab === 'triple_chance' && (
         <div className="space-y-5">
+          {/* RTP Configuration & Bonus Multiplier (Issue #97) — relocated
+              2026-09-20 from the general /superadmin dashboard. Both are
+              Triple-Chance-specific game settings, pinned per-round at
+              creation (see get_current_round/tick_rounds/draw_round/
+              settle_round), so this lock is a UX courtesy only, same as
+              before the move. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                    <Settings2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-foreground leading-tight">RTP Configuration</h3>
+                    <p className="text-[10px] text-muted-foreground">Adjust payout rates across slots & games.</p>
+                  </div>
+                </div>
+                <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+                  {rtpValue}%
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-3 p-2 animate-pulse">
+                  <div className="h-4 bg-secondary/80 rounded w-full" />
+                  <div className="h-8 bg-secondary/60 rounded w-full" />
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {rtpSuccess && (
+                    <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                      <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
+                      <span>{rtpSuccess}</span>
+                    </div>
+                  )}
+
+                  {roundConfigLocked && (
+                    <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
+                    </div>
+                  )}
+
+                  {/* Slider Controls */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-[10px] font-mono font-bold">
+                      <span className="text-muted-foreground">Adjust Target RTP</span>
+                      <span className="text-amber-500 font-black">{rtpValue}%</span>
+                    </div>
+                    <Slider
+                      value={[rtpValue]}
+                      onValueChange={(val) => {
+                        if (typeof val === 'number') {
+                          setRtpValue(val)
+                        } else if (Array.isArray(val) && typeof val[0] === 'number') {
+                          setRtpValue(val[0])
+                        }
+                      }}
+                      max={100}
+                      min={50}
+                      step={0.5}
+                      disabled={roundConfigLocked}
+                      className="w-full cursor-pointer disabled:opacity-50"
+                    />
+                    <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
+                      <span>50% (Max House Margin)</span>
+                      <span>100% (Zero House Margin)</span>
+                    </div>
+                  </div>
+
+                  {/* Preset Quick Pills */}
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      Quick Presets
+                    </span>
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      {[
+                        { val: 90, label: '90% Aggressive' },
+                        { val: 92.5, label: '92.5% Medium' },
+                        { val: 95, label: '95% Balanced' },
+                        { val: 96.5, label: '96.5% Standard' },
+                        { val: 98, label: '98% High Payout' },
+                        { val: 100, label: '100% Full Return (0% House Edge)' }
+                      ].map((preset) => (
+                        <button
+                          key={preset.val}
+                          onClick={() => handleApplyRtp(preset.val)}
+                          disabled={isSavingRtp || roundConfigLocked}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-black transition-all cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed ${
+                            rtpValue === preset.val
+                              ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                              : 'bg-secondary/40 text-muted-foreground border-border/60 hover:text-foreground hover:bg-secondary'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live House Edge & Payout Yield Breakdown Box */}
+                  <div className="p-3 rounded-xl bg-secondary/30 border border-border/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Yield Rating & Margin
+                      </span>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black uppercase ${
+                        rtpValue < 92
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : rtpValue <= 96.5
+                          ? 'bg-success-bg text-success-text border border-emerald-500/30'
+                          : rtpValue < 100
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      }`}>
+                        {rtpValue < 92 ? '🔥 Aggressive Yield' : rtpValue <= 96.5 ? '⚖️ Balanced (Recommended)' : rtpValue < 100 ? '💎 Player Friendly' : '🎁 100% Full Return (Zero House Edge)'}
+                      </span>
+                    </div>
+
+                    {/* Visual Ratio Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-mono font-bold">
+                        <span className="text-emerald-400">Player Return: {rtpValue}%</span>
+                        <span className="text-amber-400">House Edge: {(100 - rtpValue).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-amber-500/20 overflow-hidden flex">
+                        <div
+                          className="h-full bg-emerald-500 transition-all duration-300 rounded-l-full"
+                          style={{ width: `${rtpValue}%` }}
+                        />
+                        <div
+                          className="h-full bg-amber-500 transition-all duration-300 rounded-r-full"
+                          style={{ width: `${(100 - rtpValue).toFixed(1)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Simulated 1,000 Wager Turnover */}
+                    <div className="grid grid-cols-2 gap-2 pt-1 text-center text-[10px] font-mono">
+                      <div className="p-1.5 rounded-lg bg-card border border-border/40">
+                        <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. Player Payout (1k Coins)</span>
+                        <span className="font-black text-emerald-400 text-xs">{(1000 * (rtpValue / 100)).toFixed(0)} Coins</span>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-card border border-border/40">
+                        <span className="text-muted-foreground block text-[9px] uppercase font-bold">Est. House Profit (1k Coins)</span>
+                        <span className="font-black text-amber-400 text-xs">{(1000 * ((100 - rtpValue) / 100)).toFixed(0)} Coins</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => handleApplyRtp()}
+                    disabled={isSavingRtp || roundConfigLocked}
+                    className="w-full h-9 font-extrabold text-xs cursor-pointer bg-primary text-primary-foreground hover:bg-primary/95 rounded-xl shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSavingRtp ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                    {isSavingRtp ? 'Saving Configuration...' : roundConfigLocked ? 'Locked Until Next Round' : 'Apply Configuration'}
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                    <Percent className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-foreground leading-tight">Bonus Multiplier</h3>
+                    <p className="text-[10px] text-muted-foreground">Promotional payout boost — applies to the next round.</p>
+                  </div>
+                </div>
+                <span className="font-mono font-black text-amber-500 text-lg bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+                  {bonusMultiplier === 1 ? 'N' : `${bonusMultiplier}X`}
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="space-y-3 p-2 animate-pulse">
+                  <div className="h-8 bg-secondary/60 rounded w-full" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {bonusMultiplierSuccess && (
+                    <div className="p-2 text-xs font-bold rounded-lg bg-success-bg text-success-text border border-emerald-500/20 flex items-center space-x-1.5">
+                      <Check className="h-3.5 w-3.5 text-success-text shrink-0" />
+                      <span>{bonusMultiplierSuccess}</span>
+                    </div>
+                  )}
+
+                  {roundConfigLocked && (
+                    <div className="p-2 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center space-x-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span>Locked — betting closes in {displayCountdown}s. Unlocks automatically when the next round starts.</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                    {([1, 2, 3, 4] as const).map((mult) => (
+                      <button
+                        key={mult}
+                        onClick={() => handleApplyBonusMultiplier(mult)}
+                        disabled={isSavingBonusMultiplier || roundConfigLocked}
+                        className={`flex-1 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                          bonusMultiplier === mult
+                            ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {mult === 1 ? 'N' : `${mult}X`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+
           {(() => {
             const latest = latestDraws.length > 0 ? latestDraws[0] : null
             const drawTime = latest?.created_at ? new Date(latest.created_at).getTime() : 0
