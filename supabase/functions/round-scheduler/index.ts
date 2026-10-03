@@ -12,7 +12,7 @@
 //   'bsg-round-scheduler',
 //   '* * * * *',   -- every minute
 //   $$SELECT net.http_post(
-//     url := 'https://nkxltuucirzdctqkhnit.supabase.co/functions/v1/round-scheduler',
+//     url := 'https://ezcmxxfhjtzqolbtmshr.supabase.co/functions/v1/round-scheduler',
 //     headers := jsonb_build_object(
 //       'Content-Type', 'application/json',
 //       'Authorization', 'Bearer <YOUR_SERVICE_ROLE_KEY>'
