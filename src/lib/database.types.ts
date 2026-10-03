@@ -1,7 +1,7 @@
 /**
  * GENERATED FILE — do not edit by hand.
  *
- * Produced from the live schema of project pkwifufxakvwyqjamywo.
+ * Produced from the live schema of project ezcmxxfhjtzqolbtmshr.
  * Regenerate after any migration:
  *     POSTGRES_URL=... node scripts/gen-db-types.js
  *
