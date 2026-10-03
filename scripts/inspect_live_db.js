@@ -97,6 +97,9 @@ async function main() {
       console.log(`\n--- Latest Round: #${lr.rows[0].round_number} ---`);
       console.log(' ', Object.keys(lr.rows[0]).map(k => `${k}=${lr.rows[0][k]}`).join(', '));
     }
+    const acl = await c.query(`SELECT p.proname, p.proacl FROM pg_proc p WHERE p.proname = 'apply_bonus_to_current_round'`);
+    console.log('\n--- apply_bonus_to_current_round ACL ---');
+    console.log(' ', acl.rows[0]);
   } catch (err) {
     console.log(`\n--- Latest Round error: ${err.message} ---`);
   }
