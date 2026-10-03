@@ -1,3 +1,4 @@
+/// <reference path="../deno.d.ts" />
 // Supabase Edge Function: round-scheduler
 // Deploy with: supabase functions deploy round-scheduler
 //
