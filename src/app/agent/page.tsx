@@ -21,6 +21,8 @@ import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
+import { MoneySplitLine } from '@/components/money-split-line'
+import { EMPTY_MONEY_BY_GAME, houseResult, type MoneyByGame } from '@/lib/money-totals-logic'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentDashboard() {
@@ -31,6 +33,9 @@ export default function AgentDashboard() {
   const [todaysBets, setTodaysBets] = React.useState(0)
   const [todaysWins, setTodaysWins] = React.useState(0)
   const [todaysProfitLoss, setTodaysProfitLoss] = React.useState(0)
+  // Each game's own share of today's figures above (Triple Chance, Lucky Card) --
+  // a small line under each (Issue #122 / Lucky Card D3).
+  const [todaysSplit, setTodaysSplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
   const [isLoadingDashboard, setIsLoadingDashboard] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
@@ -67,6 +72,7 @@ export default function AgentDashboard() {
         setTodaysBets(resDash.todays_stake || 0)
         setTodaysWins(resDash.todays_payout || 0)
         setTodaysProfitLoss(resDash.todays_profit || 0)
+        setTodaysSplit(resDash.todays_split)
         if (resDash.full_name) {
           setAgentInfo({
             name: resDash.full_name,
@@ -229,6 +235,7 @@ export default function AgentDashboard() {
           <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
             {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
           </div>
+          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={houseResult(todaysSplit.triple_chance)} lucky={houseResult(todaysSplit.lucky_card)} kind="signed" />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily 00:00 IST</p>
         </Card>
 
@@ -241,6 +248,7 @@ export default function AgentDashboard() {
           <div className={`text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
             {formatCurrency(todaysBets)}
           </div>
+          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.stake} lucky={todaysSplit.lucky_card.stake} />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Wagered coins today</p>
         </Card>
 
@@ -253,6 +261,7 @@ export default function AgentDashboard() {
           <div className={`text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
             {formatCurrency(todaysWins)}
           </div>
+          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.payout} lucky={todaysSplit.lucky_card.payout} />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players today</p>
         </Card>
       </div>

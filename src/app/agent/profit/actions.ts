@@ -2,6 +2,7 @@
 
 import { requireAuth } from '@/lib/auth-guard'
 import { runAgentProfitReport, EMPTY_PROFIT_REPORT } from './profit-report-logic'
+import type { MoneySummary } from '@/lib/money-totals-logic'
 
 /**
  * Agent profit & loss report — v2.
@@ -16,8 +17,10 @@ import { runAgentProfitReport, EMPTY_PROFIT_REPORT } from './profit-report-logic
  *        by passing their id.
  *   S-4  agent_id only. No parent_agent_id.
  *
- * House profit is stake minus payout. Both figures come from `bets`, written by
- * settle_round(), so the report and the player's own history cannot disagree.
+ * House profit is stake minus payout. Both figures come from the bets of BOTH
+ * games (`bets` for Triple Chance, written by settle_round(), and
+ * `lucky_card_bets`), added up by the database (Issue #122), so the report and
+ * the player's own history cannot disagree.
  */
 
 export interface ProfitReportParams {
@@ -53,6 +56,10 @@ export interface ProfitReport {
     total_stake: number
     total_payout: number
     margin_pct: number
+    /** Issue #122 / Lucky Card D3: the figures above add up BOTH games; this
+     *  shows each game's own share (bets, stake, payout) for lifetime, today
+     *  and the selected window. */
+    split: MoneySummary
   }
   players: PlayerProfitRow[]
   total_pages: number

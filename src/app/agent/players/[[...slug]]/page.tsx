@@ -31,6 +31,7 @@ import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
+import { LuckyCardPlayerHistory } from "@/components/lucky-card-player-history"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
@@ -50,6 +51,8 @@ export default function PlayersPage() {
   const [players, setPlayers] = React.useState<PlayerRow[]>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
+  // Which game's plays the Game Plays tab shows (spec 13.2, 17AT).
+  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card'>('triple_chance')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [isLoadingPlayers, setIsLoadingPlayers] = React.useState(true)
   const params = useParams()
@@ -988,7 +991,7 @@ export default function PlayersPage() {
                   <div className="flex items-center space-x-1.5">
                     <Activity className="h-3.5 w-3.5 text-primary" />
                     <h3 className="text-[10px] font-black uppercase tracking-wider text-foreground">
-                      Player Performance Summary
+                      Triple Chance Performance Summary
                     </h3>
                   </div>
 
@@ -1156,6 +1159,23 @@ export default function PlayersPage() {
                       </Button>
                     )}
 
+                    {/* Game switch: which game's plays the Game Plays tab shows */}
+                    {activeTab === 'games' && (
+                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card']] as const).map(([game, label]) => (
+                          <button
+                            key={game}
+                            onClick={() => setGameTab(game)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+                              gameTab === game ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Outcome Quick Filter Pills */}
                     {activeTab === 'games' && (
                       <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
@@ -1173,8 +1193,8 @@ export default function PlayersPage() {
                       </div>
                     )}
 
-                    {/* Mode Quick Filter Pills */}
-                    {activeTab === 'games' && (
+                    {/* Mode Quick Filter Pills (Triple Chance only) */}
+                    {activeTab === 'games' && gameTab === 'triple_chance' && (
                       <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
                         {(['all', 'SINGLE', 'DOUBLE', 'TRIPLE'] as const).map((m) => (
                           <button
@@ -1194,7 +1214,15 @@ export default function PlayersPage() {
 
                 {/* Tab Content Display */}
                 <div className="overflow-hidden">
-                  {isLoadingHistory ? (
+                  {activeTab === 'games' && gameTab === 'lucky_card' && selectedPlayer ? (
+                    <LuckyCardPlayerHistory
+                      playerIdentifier={selectedPlayer.id}
+                      playerFullName={selectedPlayer.full_name}
+                      playerUsername={selectedPlayer.username}
+                      filterDate={filterDate}
+                      filterOutcome={filterOutcome}
+                    />
+                  ) : isLoadingHistory ? (
                     <div className="p-4 space-y-2.5">
                       {[1, 2, 3, 4].map((i) => (
                         <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-secondary/20 animate-pulse border border-border/40">

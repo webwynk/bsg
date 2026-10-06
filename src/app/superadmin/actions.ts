@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase'
 import { revalidatePath } from 'next/cache'
 import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type CurrentRound } from '@/lib/rpc'
+import { fetchMoneySummary } from '@/lib/money-totals'
+import { combineGames, houseResult, EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
 
 /**
  * SuperAdmin system actions — v2.
@@ -119,13 +121,18 @@ export interface SystemMetrics {
   today_stake: number
   today_payout: number
   today_house: number
+  // Issue #122 / Lucky Card D3: the lifetime_* and today_* figures above now
+  // add up BOTH games; these show each game's own share (bets, stake, payout).
+  lifetime_split: MoneyByGame
+  today_split: MoneyByGame
   error: string | null
 }
 
 const EMPTY_METRICS: SystemMetrics = {
   total_coins: 0, today_deposited: 0, today_withdrawn: 0, active_agents: 0, active_players: 0,
   lifetime_bets: 0, lifetime_stake: 0, lifetime_payout: 0, lifetime_house: 0,
-  today_bets: 0, today_stake: 0, today_payout: 0, today_house: 0, error: null,
+  today_bets: 0, today_stake: 0, today_payout: 0, today_house: 0,
+  lifetime_split: EMPTY_MONEY_BY_GAME, today_split: EMPTY_MONEY_BY_GAME, error: null,
 }
 
 export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
@@ -136,20 +143,20 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
     const db = createAdminClient()
     const dayStart = istDayStartISO()
 
-    const [profilesRes, issuedRes, allBetsRes, todayBetsRes] = await Promise.all([
-      // .range() defeats PostgREST's 1,000-row default cap.
+    // Issue #122: bets and payouts of BOTH games are added up by the database
+    // (exact, no row limit) instead of downloading every bet row and summing in
+    // JavaScript, which silently stopped at 1,000 rows. NOTE: the .range() on
+    // the two reads below does NOT lift PostgREST's 1,000-row cap (it was
+    // believed to); both tables are small today, flagged in Issue #122.
+    const [profilesRes, issuedRes, money] = await Promise.all([
       db.from('profiles').select('role, coin_balance, is_active').range(0, 999999),
       db.from('coin_ledger').select('amount')
         .in('kind', ['admin_credit', 'admin_debit'])
         .gte('created_at', dayStart).range(0, 999999),
-      db.from('bets').select('total_stake, total_payout').range(0, 999999),
-      db.from('bets').select('total_stake, total_payout')
-        .gte('created_at', dayStart).range(0, 999999),
+      fetchMoneySummary({ dayStart }),
     ])
     if (profilesRes.error)  throw new Error(`profiles: ${profilesRes.error.message}`)
     if (issuedRes.error)    throw new Error(`ledger: ${issuedRes.error.message}`)
-    if (allBetsRes.error)   throw new Error(`bets: ${allBetsRes.error.message}`)
-    if (todayBetsRes.error) throw new Error(`today bets: ${todayBetsRes.error.message}`)
 
     let total_coins = 0, active_agents = 0, active_players = 0
     for (const p of profilesRes.data ?? []) {
@@ -171,13 +178,9 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
       else today_withdrawn += amount
     }
 
-    const sum = (rows: Array<{ total_stake: unknown; total_payout: unknown }>) => ({
-      count: rows.length,
-      stake: rows.reduce((s, r) => s + Number(r.total_stake ?? 0), 0),
-      payout: rows.reduce((s, r) => s + Number(r.total_payout ?? 0), 0),
-    })
-    const lifetime = sum(allBetsRes.data ?? [])
-    const today = sum(todayBetsRes.data ?? [])
+    // Both games added together; each game's own share goes out as *_split.
+    const lifetime = combineGames(money.lifetime)
+    const today = combineGames(money.today)
 
     return {
       total_coins,
@@ -185,14 +188,16 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
       today_withdrawn,
       active_agents,
       active_players,
-      lifetime_bets: lifetime.count,
+      lifetime_bets: lifetime.bets,
       lifetime_stake: lifetime.stake,
       lifetime_payout: lifetime.payout,
-      lifetime_house: lifetime.stake - lifetime.payout,
-      today_bets: today.count,
+      lifetime_house: houseResult(lifetime),
+      today_bets: today.bets,
       today_stake: today.stake,
       today_payout: today.payout,
-      today_house: today.stake - today.payout,
+      today_house: houseResult(today),
+      lifetime_split: money.lifetime,
+      today_split: money.today,
       error: null,
     }
   } catch (err) {

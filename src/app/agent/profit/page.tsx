@@ -23,14 +23,26 @@ import { getAgentProfitReportAction } from './actions'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
+import { MoneySplitLine } from '@/components/money-split-line'
+import { EMPTY_MONEY_SUMMARY, houseResult, marginPct, type MoneySummary } from '@/lib/money-totals-logic'
 
 export default function AgentProfitPage() {
-  const [summary, setSummary] = React.useState({
+  const [summary, setSummary] = React.useState<{
+    todays_profit: number
+    lifetime_profit: number
+    total_stake: number
+    total_payout: number
+    margin_pct: number
+    // Each game's own share (Triple Chance, Lucky Card) of the figures above,
+    // shown as a small line under each (Issue #122 / Lucky Card D3).
+    split: MoneySummary
+  }>({
     todays_profit: 0,
     lifetime_profit: 0,
     total_stake: 0,
     total_payout: 0,
-    margin_pct: 0
+    margin_pct: 0,
+    split: EMPTY_MONEY_SUMMARY
   })
   const [players, setPlayers] = React.useState<Array<{
     id: string
@@ -193,6 +205,7 @@ export default function AgentProfitPage() {
               {summary.todays_profit >= 0 ? '+' : ''}{formatCurrency(summary.todays_profit)}
             </div>
           )}
+          {!isLoading && <MoneySplitLine className="mt-0.5" triple={houseResult(summary.split.today.triple_chance)} lucky={houseResult(summary.split.today.lucky_card)} kind="signed" />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily at 00:00</p>
         </Card>
 
@@ -209,6 +222,7 @@ export default function AgentProfitPage() {
               {summary.lifetime_profit >= 0 ? '+' : ''}{formatCurrency(summary.lifetime_profit)}
             </div>
           )}
+          {!isLoading && <MoneySplitLine className="mt-0.5" triple={houseResult(summary.split.lifetime.triple_chance)} lucky={houseResult(summary.split.lifetime.lucky_card)} kind="signed" />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">All-time net earnings</p>
         </Card>
 
@@ -225,6 +239,7 @@ export default function AgentProfitPage() {
               {formatCurrency(summary.total_stake)}
             </div>
           )}
+          {!isLoading && <MoneySplitLine className="mt-0.5" triple={summary.split.window.triple_chance.stake} lucky={summary.split.window.lucky_card.stake} />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Total wagered coins</p>
         </Card>
 
@@ -241,6 +256,7 @@ export default function AgentProfitPage() {
               {formatCurrency(summary.total_payout)}
             </div>
           )}
+          {!isLoading && <MoneySplitLine className="mt-0.5" triple={summary.split.window.triple_chance.payout} lucky={summary.split.window.lucky_card.payout} />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players</p>
         </Card>
 
@@ -257,6 +273,7 @@ export default function AgentProfitPage() {
               {summary.margin_pct.toFixed(1)}%
             </div>
           )}
+          {!isLoading && <MoneySplitLine className="mt-0.5" triple={marginPct(summary.split.window.triple_chance)} lucky={marginPct(summary.split.window.lucky_card)} kind="percent" />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Net margin percentage</p>
         </Card>
       </div>

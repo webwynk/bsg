@@ -13,6 +13,8 @@ import { formatCurrency } from '@/lib/utils'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
+import { MoneySplitLine } from '@/components/money-split-line'
+import { EMPTY_MONEY_BY_GAME, houseResult, type MoneyByGame } from '@/lib/money-totals-logic'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
@@ -31,6 +33,10 @@ export default function SuperAdminDashboard() {
   const [todayBetCoins, setTodayBetCoins] = React.useState(0)
   const [todayWinCoins, setTodayWinCoins] = React.useState(0)
   const [todayLostCoins, setTodayLostCoins] = React.useState(0)
+  // Each game's own share of the combined figures above (Triple Chance, Lucky
+  // Card) -- shown as a small line under each figure (Issue #122 / Lucky Card D3).
+  const [lifetimeSplit, setLifetimeSplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
+  const [todaySplit, setTodaySplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
 
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; kind: string; detail: string; time: string; actor: string }>>([])
   // Issue #15: surfaces a real backend failure instead of silently leaving
@@ -95,6 +101,8 @@ export default function SuperAdminDashboard() {
         setTodayBetCoins(resMetrics.today_stake || 0)
         setTodayWinCoins(resMetrics.today_payout || 0)
         setTodayLostCoins(resMetrics.today_house || 0)
+        setLifetimeSplit(resMetrics.lifetime_split)
+        setTodaySplit(resMetrics.today_split)
       }
       // resRtp.rtp is a truthy 96 even on error (its own hardcoded fallback),
       // so this must check .error explicitly -- a bare truthy check on rtp
@@ -168,6 +176,8 @@ export default function SuperAdminDashboard() {
     setLastLogFilters([logCategory, logSearchQuery])
     setLogPage(1)
   }
+
+  const gameSplit = gameplayScope === 'today' ? todaySplit : lifetimeSplit
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -363,6 +373,7 @@ export default function SuperAdminDashboard() {
                 {gameplayScope === 'today' ? todayBetsCount : totalBetsCount} <span className="text-[10px] sm:text-[11px] text-muted-foreground font-normal">Plays</span>
               </div>
             )}
+            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.bets} lucky={gameSplit.lucky_card.bets} kind="count" />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total bets placed by players</p>
           </div>
 
@@ -378,6 +389,7 @@ export default function SuperAdminDashboard() {
                 {formatCurrency(gameplayScope === 'today' ? todayBetCoins : totalBetCoins)}
               </div>
             )}
+            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.stake} lucky={gameSplit.lucky_card.stake} />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total wagered coins</p>
           </div>
 
@@ -393,6 +405,7 @@ export default function SuperAdminDashboard() {
                 {formatCurrency(gameplayScope === 'today' ? todayWinCoins : totalWinCoins)}
               </div>
             )}
+            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.payout} lucky={gameSplit.lucky_card.payout} />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Returned to winning players</p>
           </div>
 
@@ -409,6 +422,7 @@ export default function SuperAdminDashboard() {
                 {formatCurrency(gameplayScope === 'today' ? todayLostCoins : totalLostCoins)}
               </div>
             )}
+            {!isLoadingMetrics && <MoneySplitLine triple={houseResult(gameSplit.triple_chance)} lucky={houseResult(gameSplit.lucky_card)} kind="signed" />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Net lost coins by players</p>
           </div>
         </div>

@@ -1,9 +1,11 @@
 import { createAdminClient } from '@/lib/supabase'
 import { resolveAgentId } from '@/app/superadmin/agents/resolve-agent-id'
+import { fetchMoneySummary, fetchPlayerMoneyRows } from '@/lib/money-totals'
+import { combineGames, houseResult, marginPct, EMPTY_MONEY_SUMMARY } from '@/lib/money-totals-logic'
 import type { ProfitReportParams, ProfitReport, PlayerProfitRow } from './actions'
 
 export const EMPTY_PROFIT_REPORT: ProfitReport = {
-  summary: { todays_profit: 0, lifetime_profit: 0, total_stake: 0, total_payout: 0, margin_pct: 0 },
+  summary: { todays_profit: 0, lifetime_profit: 0, total_stake: 0, total_payout: 0, margin_pct: 0, split: EMPTY_MONEY_SUMMARY },
   players: [], total_pages: 1, total_items: 0, error: null,
 }
 
@@ -49,9 +51,11 @@ function istRange(preset?: string, filterDate?: string) {
  * server-only code, reachable only through callers that have already
  * verified `caller` themselves via requireAuth().
  *
- * House profit is stake minus payout. Both figures come from `bets`, written
- * by settle_round(), so the report and the player's own history cannot
- * disagree.
+ * House profit is stake minus payout. Both figures come from the bets of BOTH
+ * games (`bets` for Triple Chance, written by settle_round(), and
+ * `lucky_card_bets`), so the report and the player's own history cannot
+ * disagree. Issue #122 / Lucky Card D3: they are added up by the database (the
+ * old code downloaded every bet row, which silently stopped at 1,000 rows).
  */
 export async function runAgentProfitReport(
   caller: { id: string; role: string },
@@ -86,42 +90,24 @@ export async function runAgentProfitReport(
 
     if (playerIds.length === 0) return { ...EMPTY_PROFIT_REPORT }
 
-    let filtered = db.from('bets')
-      .select('user_id, total_stake, total_payout, created_at')
-      .in('user_id', playerIds).range(0, 999999)
-    if (start) filtered = filtered.gte('created_at', start)
-    if (end)   filtered = filtered.lte('created_at', end)
-
-    const [allRes, todayRes, filteredRes] = await Promise.all([
-      db.from('bets').select('total_stake, total_payout')
-        .in('user_id', playerIds).range(0, 999999),
-      db.from('bets').select('total_stake, total_payout')
-        .in('user_id', playerIds).gte('created_at', dayStartISO).range(0, 999999),
-      filtered,
+    // The three totals (lifetime, today, the selected window) for both games in
+    // one call, and one row per player who played in the window. The database
+    // scopes both to this agent's players itself.
+    const [money, playerRows] = await Promise.all([
+      fetchMoneySummary({ agentId, dayStart: dayStartISO, from: start, to: end }),
+      fetchPlayerMoneyRows(agentId, start, end),
     ])
-    if (allRes.error)      throw new Error(`lifetime: ${allRes.error.message}`)
-    if (todayRes.error)    throw new Error(`today: ${todayRes.error.message}`)
-    if (filteredRes.error) throw new Error(`filtered: ${filteredRes.error.message}`)
 
-    const profitOf = (rows: Array<{ total_stake: unknown; total_payout: unknown }>) =>
-      rows.reduce((s, r) => s + (Number(r.total_stake ?? 0) - Number(r.total_payout ?? 0)), 0)
+    const windowTotal = combineGames(money.window)
+    const total_stake  = windowTotal.stake
+    const total_payout = windowTotal.payout
 
-    const total_stake  = (filteredRes.data ?? []).reduce((s, r) => s + Number(r.total_stake ?? 0), 0)
-    const total_payout = (filteredRes.data ?? []).reduce((s, r) => s + Number(r.total_payout ?? 0), 0)
-
-    // Per-player aggregation over the filtered window.
-    const stats = new Map<string, { plays: number; stake: number; payout: number; last: string | null }>()
-    for (const b of filteredRes.data ?? []) {
-      const cur = stats.get(b.user_id) ?? { plays: 0, stake: 0, payout: 0, last: null }
-      cur.plays += 1
-      cur.stake += Number(b.total_stake ?? 0)
-      cur.payout += Number(b.total_payout ?? 0)
-      if (!cur.last || b.created_at > cur.last) cur.last = b.created_at
-      stats.set(b.user_id, cur)
-    }
+    // Per-player figures over the filtered window (both games combined per player).
+    const stats = new Map(playerRows.map(r => [r.user_id, r]))
 
     let rows: PlayerProfitRow[] = players.map(p => {
-      const s = stats.get(p.id) ?? { plays: 0, stake: 0, payout: 0, last: null }
+      const found = stats.get(p.id)
+      const s = { plays: found?.plays ?? 0, stake: found?.stake ?? 0, payout: found?.payout ?? 0, last: found?.last_played_at ?? null }
       const net = s.stake - s.payout
       return {
         id: p.id,
@@ -155,11 +141,12 @@ export async function runAgentProfitReport(
 
     return {
       summary: {
-        todays_profit: profitOf(todayRes.data ?? []),
-        lifetime_profit: profitOf(allRes.data ?? []),
+        todays_profit: houseResult(combineGames(money.today)),
+        lifetime_profit: houseResult(combineGames(money.lifetime)),
         total_stake,
         total_payout,
-        margin_pct: total_stake > 0 ? ((total_stake - total_payout) / total_stake) * 100 : 0,
+        margin_pct: marginPct(windowTotal),
+        split: money,
       },
       players: rows.slice((page - 1) * limit, page * limit),
       total_pages: Math.max(1, Math.ceil(total_items / limit)),

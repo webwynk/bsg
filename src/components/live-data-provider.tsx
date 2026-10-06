@@ -3,9 +3,13 @@
 import * as React from "react"
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser"
 
-export type LiveTable = 'profiles' | 'bets' | 'coin_ledger' | 'rounds'
+// 'lucky_card_rounds' (Lucky Card's own rounds table) is watched for the Live
+// Game "Lucky Card" tab. Only the rounds table, not lucky_card_bets: a bet
+// never changes the round row, so a per-bet signal would reach every logged-in
+// staff browser for no visible change.
+export type LiveTable = 'profiles' | 'bets' | 'coin_ledger' | 'rounds' | 'lucky_card_rounds'
 
-const ALL_TABLES: LiveTable[] = ['profiles', 'bets', 'coin_ledger', 'rounds']
+const ALL_TABLES: LiveTable[] = ['profiles', 'bets', 'coin_ledger', 'rounds', 'lucky_card_rounds']
 
 // One shared debounce across every table, not one per table -- a single bet
 // placement typically writes both `bets` and `coin_ledger` within
@@ -54,6 +58,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
     bets: 0,
     coin_ledger: 0,
     rounds: 0,
+    lucky_card_rounds: 0,
   })
 
   React.useEffect(() => {
@@ -84,6 +89,7 @@ export function LiveDataProvider({ children }: { children: React.ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, () => scheduleBump('bets'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'coin_ledger' }, () => scheduleBump('coin_ledger'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds' }, () => scheduleBump('rounds'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lucky_card_rounds' }, () => scheduleBump('lucky_card_rounds'))
       .subscribe()
 
     const fallbackTimer = setInterval(() => {

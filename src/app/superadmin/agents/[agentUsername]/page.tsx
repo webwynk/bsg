@@ -34,6 +34,9 @@ import { ErrorBanner } from "@/components/error-banner"
 import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
+import { LuckyCardPlayerHistory } from "@/components/lucky-card-player-history"
+import { MoneySplitLine } from "@/components/money-split-line"
+import { EMPTY_MONEY_SUMMARY, houseResult, marginPct, type MoneySummary } from "@/lib/money-totals-logic"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
@@ -89,7 +92,13 @@ export default function AgentDetailPage({ params }: Props) {
   const [pointsHistory, setPointsHistory] = React.useState<PlayerCoinMovement[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points' | 'profit'>('games')
-  const [profitSummary, setProfitSummary] = React.useState({ todays_profit: 0, lifetime_profit: 0, total_stake: 0, total_payout: 0, margin_pct: 0 })
+  // Which game's plays the Game Plays tab shows (spec 13.2, 17AT).
+  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card'>('triple_chance')
+  // `split` = each game's own share (Triple Chance, Lucky Card) of the combined
+  // figures, shown as a small line under each (Issue #122 / Lucky Card D3).
+  const [profitSummary, setProfitSummary] = React.useState<{
+    todays_profit: number; lifetime_profit: number; total_stake: number; total_payout: number; margin_pct: number; split: MoneySummary
+  }>({ todays_profit: 0, lifetime_profit: 0, total_stake: 0, total_payout: 0, margin_pct: 0, split: EMPTY_MONEY_SUMMARY })
   const [profitPlayers, setProfitPlayers] = React.useState<PlayerProfitRow[]>([])
   
   // Filter & Scope States
@@ -903,7 +912,7 @@ export default function AgentDetailPage({ params }: Props) {
                   <div className="flex items-center space-x-1.5">
                     <Activity className="h-3.5 w-3.5 text-primary" />
                     <h3 className="text-[10px] font-black uppercase tracking-wider text-foreground">
-                      Player Performance Summary
+                      Triple Chance Performance Summary
                     </h3>
                   </div>
 
@@ -1092,6 +1101,23 @@ export default function AgentDetailPage({ params }: Props) {
                       </Button>
                     )}
 
+                    {/* Game switch: which game's plays the Game Plays tab shows */}
+                    {activeTab === 'games' && (
+                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
+                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card']] as const).map(([game, label]) => (
+                          <button
+                            key={game}
+                            onClick={() => setGameTab(game)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+                              gameTab === game ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Outcome Quick Filter Pills */}
                     {activeTab === 'games' && (
                       <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
@@ -1109,8 +1135,8 @@ export default function AgentDetailPage({ params }: Props) {
                       </div>
                     )}
 
-                    {/* Mode Quick Filter Pills */}
-                    {activeTab === 'games' && (
+                    {/* Mode Quick Filter Pills (Triple Chance only) */}
+                    {activeTab === 'games' && gameTab === 'triple_chance' && (
                       <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
                         {(['all', 'SINGLE', 'DOUBLE', 'TRIPLE'] as const).map((m) => (
                           <button
@@ -1176,7 +1202,15 @@ export default function AgentDetailPage({ params }: Props) {
 
               {/* Content Body */}
               <div className="overflow-hidden min-h-[380px]">
-                {isLoadingHistory ? (
+                {activeTab === 'games' && gameTab === 'lucky_card' && selectedPlayer ? (
+                  <LuckyCardPlayerHistory
+                    playerIdentifier={selectedPlayer.id}
+                    playerFullName={selectedPlayer.full_name}
+                    playerUsername={selectedPlayer.username}
+                    filterDate={filterDate}
+                    filterOutcome={filterOutcome}
+                  />
+                ) : isLoadingHistory ? (
                   <div className="p-4 space-y-2.5">
                     {[1, 2, 3, 4].map((i) => (
                       <div key={i} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-secondary/20 animate-pulse border border-border/40">
@@ -1423,22 +1457,26 @@ export default function AgentDetailPage({ params }: Props) {
                             <span className={`font-mono font-black ${profitSummary.todays_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                               {profitSummary.todays_profit >= 0 ? '+' : ''}{formatCurrency(profitSummary.todays_profit)}
                             </span>
+                            <MoneySplitLine triple={houseResult(profitSummary.split.today.triple_chance)} lucky={houseResult(profitSummary.split.today.lucky_card)} kind="signed" />
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Lifetime P/L</span>
                             <span className={`font-mono font-black ${profitSummary.lifetime_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                               {profitSummary.lifetime_profit >= 0 ? '+' : ''}{formatCurrency(profitSummary.lifetime_profit)}
                             </span>
+                            <MoneySplitLine triple={houseResult(profitSummary.split.lifetime.triple_chance)} lucky={houseResult(profitSummary.split.lifetime.lucky_card)} kind="signed" />
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Bets</span>
                             <span className="font-mono font-bold text-foreground">{formatCurrency(profitSummary.total_stake)}</span>
+                            <MoneySplitLine triple={profitSummary.split.window.triple_chance.stake} lucky={profitSummary.split.window.lucky_card.stake} />
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">House Margin</span>
                             <span className={`font-mono font-black ${profitSummary.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                               {profitSummary.margin_pct.toFixed(1)}%
                             </span>
+                            <MoneySplitLine triple={marginPct(profitSummary.split.window.triple_chance)} lucky={marginPct(profitSummary.split.window.lucky_card)} kind="percent" />
                           </div>
                         </div>
 

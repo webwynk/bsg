@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase'
 
 import { requireAuth } from '@/lib/auth-guard'
 import { CASHIER_KINDS, playerFacingDirection, SUPERADMIN_DISPLAY_NAME, type LedgerKind } from '@/lib/ledger'
+import { fetchMoneySummary } from '@/lib/money-totals'
+import { combineGames, houseResult, EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
 
 /**
  * Agent cashier dashboard data.
@@ -49,6 +51,9 @@ export interface AgentDashboardData {
   todays_stake: number
   todays_payout: number
   todays_profit: number
+  // Issue #122 / Lucky Card D3: the todays_* figures above add up BOTH games;
+  // this shows each game's own share (bets, stake, payout).
+  todays_split: MoneyByGame
   recent_transfers: Array<{
     id: string
     direction: 'deposit' | 'withdraw'
@@ -63,6 +68,7 @@ export interface AgentDashboardData {
 const EMPTY: AgentDashboardData = {
   coin_balance: 0, username: '', full_name: '', joined_date: '',
   players_count: 0, players: [], todays_stake: 0, todays_payout: 0, todays_profit: 0,
+  todays_split: EMPTY_MONEY_BY_GAME,
   recent_transfers: [], error: null,
 }
 
@@ -100,21 +106,14 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
     // Today's gameplay, scoped strictly to my own players.
     // B-10: no network-wide fallback. No players means zero, not someone else's
     // numbers.
-    let todays_stake = 0
-    let todays_payout = 0
-    if (playerIds.length > 0) {
-      const betsRes = await db
-        .from('bets')
-        .select('total_stake, total_payout')
-        .in('user_id', playerIds)
-        .gte('created_at', istDayStartISO())
-      if (betsRes.error) throw new Error(`bets: ${betsRes.error.message}`)
-
-      for (const b of betsRes.data ?? []) {
-        todays_stake  += Number(b.total_stake  ?? 0)
-        todays_payout += Number(b.total_payout ?? 0)
-      }
-    }
+    //
+    // Issue #122 / Lucky Card D3: both games, added up by the database for the
+    // players that report to me (exact; the old row download stopped at 1,000
+    // rows). The database scopes by agent itself, so no player list is sent.
+    const todaysByGame = playerIds.length > 0
+      ? (await fetchMoneySummary({ agentId: me.id, dayStart: istDayStartISO() })).today
+      : EMPTY_MONEY_BY_GAME
+    const todays = combineGames(todaysByGame)
 
     // Recent cashier movements -- MY OWN user_id only. Same Issue #6 fix
     // pattern as getAgentTransactionHistoryAction: a player transfer writes
@@ -158,9 +157,10 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
       }),
       players_count: players.length,
       players,
-      todays_stake,
-      todays_payout,
-      todays_profit: todays_stake - todays_payout,
+      todays_stake: todays.stake,
+      todays_payout: todays.payout,
+      todays_profit: houseResult(todays),
+      todays_split: todaysByGame,
       recent_transfers,
       error: null,
     }

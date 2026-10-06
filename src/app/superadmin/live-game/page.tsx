@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction, getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction, applyBonusToCurrentRoundAction } from '../actions'
+import { LuckyCardLive } from './lucky-card-live'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
@@ -80,7 +81,7 @@ export default function SuperAdminLiveGamePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
-  const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'game2' | 'game3'>('triple_chance')
+  const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'lucky_card' | 'game3'>('triple_chance')
   // Housekeeping #91 fix: Date.now() can't be called during render (React
   // purity rule) -- start at 0 and let the ticker effect below set the real
   // value immediately, which is the only place it's safe to read the clock.
@@ -391,11 +392,15 @@ export default function SuperAdminLiveGamePage() {
           </button>
 
           <button
-            disabled
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold text-muted-foreground/40 bg-secondary/20 cursor-not-allowed border border-border/30"
+            onClick={() => setSelectedGameTab('lucky_card')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              selectedGameTab === 'lucky_card'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+            }`}
           >
-            <span>Game 2</span>
-            <span className="text-[9px] bg-secondary px-1.5 py-0.5 rounded text-muted-foreground font-semibold">Soon</span>
+            <Sparkles className="h-4 w-4" />
+            <span>Lucky Card</span>
           </button>
 
           <button
@@ -1241,6 +1246,8 @@ export default function SuperAdminLiveGamePage() {
           </div>
         </div>
       )}
+
+      {selectedGameTab === 'lucky_card' && <LuckyCardLive />}
     </div>
   )
 }
