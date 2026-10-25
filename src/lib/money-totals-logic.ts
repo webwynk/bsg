@@ -4,9 +4,10 @@
  * Issue #122). No imports, no database, no React: tested on its own
  * (money-totals-logic.test.ts, run with `node --test`).
  *
- * The database adds the bets up exactly, for Triple Chance and Lucky Card
- * separately; the dashboard shows the two combined and, as a small line, each
- * game's own share (user decision 2026-10-07, spec 17AY).
+ * The database adds the bets up exactly, for Triple Chance, Lucky Card and
+ * Spin2Win separately; the dashboard shows them combined and, as a small line,
+ * each game's own share (user decision 2026-10-07, spec 17AY; Spin2Win added
+ * 2026-10-25, Spin2Win build plan step 17).
  */
 
 /** One game's figures over one window: how many bets, the coins bet, the coins paid out. */
@@ -19,6 +20,7 @@ export interface GameMoney {
 export interface MoneyByGame {
   triple_chance: GameMoney
   lucky_card: GameMoney
+  spin2win: GameMoney
 }
 
 /** The three windows staff_money_summary answers in one call. */
@@ -33,6 +35,7 @@ export const ZERO_GAME_MONEY: GameMoney = { bets: 0, stake: 0, payout: 0 }
 export const EMPTY_MONEY_BY_GAME: MoneyByGame = {
   triple_chance: ZERO_GAME_MONEY,
   lucky_card: ZERO_GAME_MONEY,
+  spin2win: ZERO_GAME_MONEY,
 }
 
 export const EMPTY_MONEY_SUMMARY: MoneySummary = {
@@ -53,7 +56,12 @@ function readGame(raw: unknown): GameMoney {
 
 function readByGame(raw: unknown): MoneyByGame {
   const r = (raw ?? {}) as Record<string, unknown>
-  return { triple_chance: readGame(r.triple_chance), lucky_card: readGame(r.lucky_card) }
+  // An answer from before Spin2Win was added has no "spin2win" part: it reads as 0.
+  return {
+    triple_chance: readGame(r.triple_chance),
+    lucky_card: readGame(r.lucky_card),
+    spin2win: readGame(r.spin2win),
+  }
 }
 
 /** Turns the database's JSON answer into numbers; anything missing becomes 0. */
@@ -66,12 +74,12 @@ export function readMoneySummary(raw: unknown): MoneySummary {
   }
 }
 
-/** Both games added together. */
+/** All three games added together. */
 export function combineGames(m: MoneyByGame): GameMoney {
   return {
-    bets: m.triple_chance.bets + m.lucky_card.bets,
-    stake: m.triple_chance.stake + m.lucky_card.stake,
-    payout: m.triple_chance.payout + m.lucky_card.payout,
+    bets: m.triple_chance.bets + m.lucky_card.bets + m.spin2win.bets,
+    stake: m.triple_chance.stake + m.lucky_card.stake + m.spin2win.stake,
+    payout: m.triple_chance.payout + m.lucky_card.payout + m.spin2win.payout,
   }
 }
 
@@ -85,7 +93,7 @@ export function marginPct(m: GameMoney): number {
   return m.stake > 0 ? (houseResult(m) / m.stake) * 100 : 0
 }
 
-/** One player's row from staff_player_money_rows (both games combined). */
+/** One player's row from staff_player_money_rows (all three games combined). */
 export interface PlayerMoneyRow {
   user_id: string
   plays: number
@@ -110,7 +118,7 @@ export function readPlayerMoneyRows(raw: unknown): PlayerMoneyRow[] {
 }
 
 // ---------------------------------------------------------------------------
-// The small "Triple Chance X · Lucky Card Y" line under a combined figure
+// The small "Triple Chance X · Lucky Card Y · Spin2Win Z" line under a combined figure
 // ---------------------------------------------------------------------------
 
 /** How a figure is written: a plain count, coins, coins with a sign (+ for zero or more), or a percentage. */

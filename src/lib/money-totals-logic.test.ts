@@ -112,3 +112,35 @@ test('formatSplitValue: counts, coins, signed coins and percentages', () => {
   assert.equal(M.formatSplitValue(-20.04, 'percent'), '-20.0%')
   assert.equal(M.formatSplitValue(0, 'percent'), '0.0%')
 })
+
+// ---------------------------------------------------------------------------
+// Spin2Win, the third game (Spin2Win build plan step 17)
+// ---------------------------------------------------------------------------
+
+const answerWithSpin2Win = {
+  ...answer,
+  today: {
+    ...answer.today,
+    spin2win: { bets: 5, stake: '700', payout: 450 },
+  },
+}
+
+test('readMoneySummary reads the Spin2Win part when the database sends it', () => {
+  const s = M.readMoneySummary(answerWithSpin2Win)
+  assert.deepEqual(s.today.spin2win, { bets: 5, stake: 700, payout: 450 })
+  assert.deepEqual(s.today.triple_chance, { bets: 40, stake: 8000, payout: 7200 })
+  assert.deepEqual(s.today.lucky_card, { bets: 12, stake: 1500, payout: 1800 })
+})
+
+test('an answer without a Spin2Win part reads Spin2Win as 0', () => {
+  const s = M.readMoneySummary(answer)
+  assert.deepEqual(s.lifetime.spin2win, { bets: 0, stake: 0, payout: 0 })
+  assert.deepEqual(s.today.spin2win, { bets: 0, stake: 0, payout: 0 })
+  assert.deepEqual(M.EMPTY_MONEY_BY_GAME.spin2win, { bets: 0, stake: 0, payout: 0 })
+})
+
+test('combineGames adds all three games', () => {
+  const s = M.readMoneySummary(answerWithSpin2Win)
+  assert.deepEqual(M.combineGames(s.today), { bets: 57, stake: 10200, payout: 9450 })
+  assert.equal(M.houseResult(M.combineGames(s.today)), 750)
+})

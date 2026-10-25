@@ -35,6 +35,7 @@ import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
 import { LuckyCardPlayerHistory } from "@/components/lucky-card-player-history"
+import { Spin2WinPlayerHistory } from "@/components/spin2win-player-history"
 import { MoneySplitLine } from "@/components/money-split-line"
 import { EMPTY_MONEY_SUMMARY, houseResult, marginPct, type MoneySummary } from "@/lib/money-totals-logic"
 import { useLiveSync } from "@/hooks/use-live-sync"
@@ -93,8 +94,8 @@ export default function AgentDetailPage({ params }: Props) {
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points' | 'profit'>('games')
   // Which game's plays the Game Plays tab shows (spec 13.2, 17AT).
-  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card'>('triple_chance')
-  // `split` = each game's own share (Triple Chance, Lucky Card) of the combined
+  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card' | 'spin2win'>('triple_chance')
+  // `split` = each game's own share (Triple Chance, Lucky Card, Spin2Win) of the combined
   // figures, shown as a small line under each (Issue #122 / Lucky Card D3).
   const [profitSummary, setProfitSummary] = React.useState<{
     todays_profit: number; lifetime_profit: number; total_stake: number; total_payout: number; margin_pct: number; split: MoneySummary
@@ -1104,7 +1105,7 @@ export default function AgentDetailPage({ params }: Props) {
                     {/* Game switch: which game's plays the Game Plays tab shows */}
                     {activeTab === 'games' && (
                       <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card']] as const).map(([game, label]) => (
+                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card'], ['spin2win', 'Spin2Win']] as const).map(([game, label]) => (
                           <button
                             key={game}
                             onClick={() => setGameTab(game)}
@@ -1204,6 +1205,14 @@ export default function AgentDetailPage({ params }: Props) {
               <div className="overflow-hidden min-h-[380px]">
                 {activeTab === 'games' && gameTab === 'lucky_card' && selectedPlayer ? (
                   <LuckyCardPlayerHistory
+                    playerIdentifier={selectedPlayer.id}
+                    playerFullName={selectedPlayer.full_name}
+                    playerUsername={selectedPlayer.username}
+                    filterDate={filterDate}
+                    filterOutcome={filterOutcome}
+                  />
+                ) : activeTab === 'games' && gameTab === 'spin2win' && selectedPlayer ? (
+                  <Spin2WinPlayerHistory
                     playerIdentifier={selectedPlayer.id}
                     playerFullName={selectedPlayer.full_name}
                     playerUsername={selectedPlayer.username}
@@ -1457,26 +1466,26 @@ export default function AgentDetailPage({ params }: Props) {
                             <span className={`font-mono font-black ${profitSummary.todays_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                               {profitSummary.todays_profit >= 0 ? '+' : ''}{formatCurrency(profitSummary.todays_profit)}
                             </span>
-                            <MoneySplitLine triple={houseResult(profitSummary.split.today.triple_chance)} lucky={houseResult(profitSummary.split.today.lucky_card)} kind="signed" />
+                            <MoneySplitLine triple={houseResult(profitSummary.split.today.triple_chance)} lucky={houseResult(profitSummary.split.today.lucky_card)} spin={houseResult(profitSummary.split.today.spin2win)} kind="signed" />
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Lifetime P/L</span>
                             <span className={`font-mono font-black ${profitSummary.lifetime_profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                               {profitSummary.lifetime_profit >= 0 ? '+' : ''}{formatCurrency(profitSummary.lifetime_profit)}
                             </span>
-                            <MoneySplitLine triple={houseResult(profitSummary.split.lifetime.triple_chance)} lucky={houseResult(profitSummary.split.lifetime.lucky_card)} kind="signed" />
+                            <MoneySplitLine triple={houseResult(profitSummary.split.lifetime.triple_chance)} lucky={houseResult(profitSummary.split.lifetime.lucky_card)} spin={houseResult(profitSummary.split.lifetime.spin2win)} kind="signed" />
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Bets</span>
                             <span className="font-mono font-bold text-foreground">{formatCurrency(profitSummary.total_stake)}</span>
-                            <MoneySplitLine triple={profitSummary.split.window.triple_chance.stake} lucky={profitSummary.split.window.lucky_card.stake} />
+                            <MoneySplitLine triple={profitSummary.split.window.triple_chance.stake} lucky={profitSummary.split.window.lucky_card.stake} spin={profitSummary.split.window.spin2win.stake} />
                           </div>
                           <div>
                             <span className="text-[9px] font-bold text-muted-foreground uppercase block">House Margin</span>
                             <span className={`font-mono font-black ${profitSummary.margin_pct >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                               {profitSummary.margin_pct.toFixed(1)}%
                             </span>
-                            <MoneySplitLine triple={marginPct(profitSummary.split.window.triple_chance)} lucky={marginPct(profitSummary.split.window.lucky_card)} kind="percent" />
+                            <MoneySplitLine triple={marginPct(profitSummary.split.window.triple_chance)} lucky={marginPct(profitSummary.split.window.lucky_card)} spin={marginPct(profitSummary.split.window.spin2win)} kind="percent" />
                           </div>
                         </div>
 
