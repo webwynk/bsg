@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction, getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction, applyBonusToCurrentRoundAction } from '../actions'
 import { LuckyCardLive } from './lucky-card-live'
 import { Spin2WinLive } from './spin2win-live'
+import { Lucky16Live } from './lucky16-live'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
@@ -83,7 +84,7 @@ export default function SuperAdminLiveGamePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null)
-  const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'lucky_card' | 'spin2win'>('triple_chance')
+  const [selectedGameTab, setSelectedGameTab] = useState<'triple_chance' | 'lucky_card' | 'spin2win' | 'lucky16'>('triple_chance')
   // Housekeeping #91 fix: Date.now() can't be called during render (React
   // purity rule) -- start at 0 and let the ticker effect below set the real
   // value immediately, which is the only place it's safe to read the clock.
@@ -415,6 +416,18 @@ export default function SuperAdminLiveGamePage() {
           >
             <CircleDot className="h-4 w-4" />
             <span>Spin2Win</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedGameTab('lucky16')}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              selectedGameTab === 'lucky16'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Lucky 16 Card</span>
           </button>
         </div>
       </div>
@@ -1255,6 +1268,7 @@ export default function SuperAdminLiveGamePage() {
 
       {selectedGameTab === 'lucky_card' && <LuckyCardLive />}
       {selectedGameTab === 'spin2win' && <Spin2WinLive />}
+      {selectedGameTab === 'lucky16' && <Lucky16Live />}
     </div>
   )
 }
