@@ -33,6 +33,7 @@ import { ResetPasswordDialog } from "@/components/reset-password-dialog"
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
 import { LuckyCardPlayerHistory } from "@/components/lucky-card-player-history"
 import { Spin2WinPlayerHistory } from "@/components/spin2win-player-history"
+import { Lucky16PlayerHistory } from "@/components/lucky16-player-history"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
@@ -53,7 +54,7 @@ export default function PlayersPage() {
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
   // Which game's plays the Game Plays tab shows (spec 13.2, 17AT).
-  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card' | 'spin2win'>('triple_chance')
+  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card' | 'spin2win' | 'lucky16'>('triple_chance')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [isLoadingPlayers, setIsLoadingPlayers] = React.useState(true)
   const params = useParams()
@@ -1163,7 +1164,7 @@ export default function PlayersPage() {
                     {/* Game switch: which game's plays the Game Plays tab shows */}
                     {activeTab === 'games' && (
                       <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card'], ['spin2win', 'Spin2Win']] as const).map(([game, label]) => (
+                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card'], ['spin2win', 'Spin2Win'], ['lucky16', 'Lucky 16 Card']] as const).map(([game, label]) => (
                           <button
                             key={game}
                             onClick={() => setGameTab(game)}
@@ -1225,6 +1226,14 @@ export default function PlayersPage() {
                     />
                   ) : activeTab === 'games' && gameTab === 'spin2win' && selectedPlayer ? (
                     <Spin2WinPlayerHistory
+                      playerIdentifier={selectedPlayer.id}
+                      playerFullName={selectedPlayer.full_name}
+                      playerUsername={selectedPlayer.username}
+                      filterDate={filterDate}
+                      filterOutcome={filterOutcome}
+                    />
+                  ) : activeTab === 'games' && gameTab === 'lucky16' && selectedPlayer ? (
+                    <Lucky16PlayerHistory
                       playerIdentifier={selectedPlayer.id}
                       playerFullName={selectedPlayer.full_name}
                       playerUsername={selectedPlayer.username}

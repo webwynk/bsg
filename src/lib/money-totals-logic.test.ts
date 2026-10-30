@@ -144,3 +144,39 @@ test('combineGames adds all three games', () => {
   assert.deepEqual(M.combineGames(s.today), { bets: 57, stake: 10200, payout: 9450 })
   assert.equal(M.houseResult(M.combineGames(s.today)), 750)
 })
+
+// ---------------------------------------------------------------------------
+// Lucky 16 Card, the fourth game (Lucky 16 Card dashboard step 18)
+// ---------------------------------------------------------------------------
+
+const answerWithLucky16 = {
+  today: {
+    triple_chance: { bets: 1, stake: 100, payout: 50 },
+    lucky_card: { bets: 2, stake: 200, payout: 0 },
+    spin2win: { bets: 3, stake: 300, payout: 100 },
+    lucky16: { bets: 4, stake: '400', payout: 700 },
+  },
+}
+
+test('readMoneySummary reads the Lucky 16 Card part when the database sends it', () => {
+  const s = M.readMoneySummary(answerWithLucky16)
+  assert.deepEqual(s.today.lucky16, { bets: 4, stake: 400, payout: 700 })
+})
+
+test('an answer without a Lucky 16 Card part reads it as 0 and leaves the others alone', () => {
+  const s = M.readMoneySummary({ today: { spin2win: { bets: 3, stake: 300, payout: 100 } } })
+  assert.deepEqual(s.today.lucky16, { bets: 0, stake: 0, payout: 0 })
+  assert.deepEqual(s.today.spin2win, { bets: 3, stake: 300, payout: 100 })
+  assert.deepEqual(M.EMPTY_MONEY_BY_GAME.lucky16, { bets: 0, stake: 0, payout: 0 })
+})
+
+test('combineGames adds all four games', () => {
+  const s = M.readMoneySummary(answerWithLucky16)
+  assert.deepEqual(M.combineGames(s.today), { bets: 10, stake: 1000, payout: 850 })
+  assert.equal(M.houseResult(M.combineGames(s.today)), 150)
+})
+
+test('combineGames with no Lucky 16 Card bets equals the three games', () => {
+  const s = M.readMoneySummary({ today: { lucky_card: { bets: 2, stake: 200, payout: 10 } } })
+  assert.deepEqual(M.combineGames(s.today), { bets: 2, stake: 200, payout: 10 })
+})

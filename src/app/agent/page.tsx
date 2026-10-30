@@ -33,7 +33,7 @@ export default function AgentDashboard() {
   const [todaysBets, setTodaysBets] = React.useState(0)
   const [todaysWins, setTodaysWins] = React.useState(0)
   const [todaysProfitLoss, setTodaysProfitLoss] = React.useState(0)
-  // Each game's own share of today's figures above (Triple Chance, Lucky Card, Spin2Win) --
+  // Each game's own share of today's figures above (Triple Chance, Lucky Card, Spin2Win, Lucky 16 Card) --
   // a small line under each (Issue #122 / Lucky Card D3).
   const [todaysSplit, setTodaysSplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
   const [isLoadingDashboard, setIsLoadingDashboard] = React.useState(true)
@@ -235,7 +235,7 @@ export default function AgentDashboard() {
           <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
             {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
           </div>
-          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={houseResult(todaysSplit.triple_chance)} lucky={houseResult(todaysSplit.lucky_card)} spin={houseResult(todaysSplit.spin2win)} kind="signed" />}
+          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={houseResult(todaysSplit.triple_chance)} lucky={houseResult(todaysSplit.lucky_card)} spin={houseResult(todaysSplit.spin2win)} l16={houseResult(todaysSplit.lucky16)} kind="signed" />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily 00:00 IST</p>
         </Card>
 
@@ -248,7 +248,7 @@ export default function AgentDashboard() {
           <div className={`text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
             {formatCurrency(todaysBets)}
           </div>
-          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.stake} lucky={todaysSplit.lucky_card.stake} spin={todaysSplit.spin2win.stake} />}
+          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.stake} lucky={todaysSplit.lucky_card.stake} spin={todaysSplit.spin2win.stake} l16={todaysSplit.lucky16.stake} />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Wagered coins today</p>
         </Card>
 
@@ -261,7 +261,7 @@ export default function AgentDashboard() {
           <div className={`text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
             {formatCurrency(todaysWins)}
           </div>
-          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.payout} lucky={todaysSplit.lucky_card.payout} spin={todaysSplit.spin2win.payout} />}
+          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.payout} lucky={todaysSplit.lucky_card.payout} spin={todaysSplit.spin2win.payout} l16={todaysSplit.lucky16.payout} />}
           <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players today</p>
         </Card>
       </div>

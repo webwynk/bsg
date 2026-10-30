@@ -373,7 +373,7 @@ export default function SuperAdminDashboard() {
                 {gameplayScope === 'today' ? todayBetsCount : totalBetsCount} <span className="text-[10px] sm:text-[11px] text-muted-foreground font-normal">Plays</span>
               </div>
             )}
-            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.bets} lucky={gameSplit.lucky_card.bets} spin={gameSplit.spin2win.bets} kind="count" />}
+            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.bets} lucky={gameSplit.lucky_card.bets} spin={gameSplit.spin2win.bets} l16={gameSplit.lucky16.bets} kind="count" />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total bets placed by players</p>
           </div>
 
@@ -389,7 +389,7 @@ export default function SuperAdminDashboard() {
                 {formatCurrency(gameplayScope === 'today' ? todayBetCoins : totalBetCoins)}
               </div>
             )}
-            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.stake} lucky={gameSplit.lucky_card.stake} spin={gameSplit.spin2win.stake} />}
+            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.stake} lucky={gameSplit.lucky_card.stake} spin={gameSplit.spin2win.stake} l16={gameSplit.lucky16.stake} />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total wagered coins</p>
           </div>
 
@@ -405,7 +405,7 @@ export default function SuperAdminDashboard() {
                 {formatCurrency(gameplayScope === 'today' ? todayWinCoins : totalWinCoins)}
               </div>
             )}
-            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.payout} lucky={gameSplit.lucky_card.payout} spin={gameSplit.spin2win.payout} />}
+            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.payout} lucky={gameSplit.lucky_card.payout} spin={gameSplit.spin2win.payout} l16={gameSplit.lucky16.payout} />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Returned to winning players</p>
           </div>
 
@@ -422,7 +422,7 @@ export default function SuperAdminDashboard() {
                 {formatCurrency(gameplayScope === 'today' ? todayLostCoins : totalLostCoins)}
               </div>
             )}
-            {!isLoadingMetrics && <MoneySplitLine triple={houseResult(gameSplit.triple_chance)} lucky={houseResult(gameSplit.lucky_card)} spin={houseResult(gameSplit.spin2win)} kind="signed" />}
+            {!isLoadingMetrics && <MoneySplitLine triple={houseResult(gameSplit.triple_chance)} lucky={houseResult(gameSplit.lucky_card)} spin={houseResult(gameSplit.spin2win)} l16={houseResult(gameSplit.lucky16)} kind="signed" />}
             <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Net lost coins by players</p>
           </div>
         </div>
