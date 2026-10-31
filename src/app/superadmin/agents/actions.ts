@@ -7,6 +7,7 @@ import { asRpc, type AdminIssueResult, type SetAgentActiveResult } from '@/lib/r
 import { logAuditEventAction } from '../actions'
 import { isCredit, toWholeCoins, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
+import { fetchAccountCodes } from '@/lib/account-codes'
 import { resolveAgentId } from './resolve-agent-id'
 import { runAgentProfitReport, EMPTY_PROFIT_REPORT } from '@/app/agent/profit/profit-report-logic'
 import { runPlayerDetailHistory } from '@/app/agent/players/player-history-logic'
@@ -46,6 +47,8 @@ export interface AgentRow {
   is_active: boolean
   auto_locked_at: string | null
   player_count: number
+  /** The permanent account ID (A01), or null if none yet. Display only. */
+  account_code: string | null
 }
 
 export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: string | null }> {
@@ -67,6 +70,7 @@ export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: st
     for (const p of playersRes.data ?? []) {
       if (p.agent_id) counts.set(p.agent_id, (counts.get(p.agent_id) ?? 0) + 1)
     }
+    const codes = await fetchAccountCodes(db, (agentsRes.data ?? []).map(a => a.id))
 
     return {
       agents: (agentsRes.data ?? []).map(a => ({
@@ -77,6 +81,7 @@ export async function getAgentsAction(): Promise<{ agents: AgentRow[]; error: st
         is_active: a.is_active,
         auto_locked_at: a.auto_locked_at,
         player_count: counts.get(a.id) ?? 0,
+        account_code: codes.get(a.id) ?? null,
       })),
       error: null,
     }
@@ -125,6 +130,7 @@ async function runAgentDetail(agentId: string) {
     const seenAt = new Map((sessionsRes.data ?? []).map(s => [s.user_id, new Date(s.last_seen_at).getTime()]))
     const now = Date.now()
     const a = agentRes.data
+    const codes = await fetchAccountCodes(db, [agentId, ...playerIds])
 
     return {
       agent: {
@@ -134,6 +140,7 @@ async function runAgentDetail(agentId: string) {
         coin_balance: Number(a.coin_balance ?? 0),
         is_active: a.is_active,
         auto_locked_at: a.auto_locked_at,
+        account_code: codes.get(agentId) ?? null,
         joined_date: new Date(a.created_at).toLocaleDateString('en-US', {
           timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric',
         }),
@@ -146,6 +153,7 @@ async function runAgentDetail(agentId: string) {
         is_active: p.is_active,
         is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
         auto_locked_at: p.auto_locked_at,
+        account_code: codes.get(p.id) ?? null,
       })),
       error: null as string | null,
     }

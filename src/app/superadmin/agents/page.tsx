@@ -1,5 +1,6 @@
 "use client"
 
+import { accountCodeLabel, accountCodeMatches } from '@/lib/account-codes'
 import * as React from 'react'
 import Link from 'next/link'
 import {
@@ -38,7 +39,7 @@ import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
 
 export default function AgentsPage() {
-  const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; auto_locked_at: string | null; player_count: number }>>([])
+  const [agents, setAgents] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number; is_active: boolean; auto_locked_at: string | null; player_count: number; account_code: string | null }>>([])
   // Issue #15: distinct from errorMessage below, which is scoped to the
   // Create Agent modal -- this one is for the page's own data load.
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -132,7 +133,8 @@ export default function AgentsPage() {
 
   const filteredAgents = agents.filter(agent => {
     const matchesSearch = agent.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      agent.username.toLowerCase().includes(searchQuery.toLowerCase())
+      agent.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      accountCodeMatches(agent.account_code, searchQuery)
     // Driven by the same playerStatus() the badge itself renders from -- not
     // a second, independent is_active check -- so the filter and the badge
     // can never silently disagree the way they did before this fix.
@@ -393,7 +395,7 @@ export default function AgentsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/70" />
           <Input 
-            placeholder="Search agents by name or @username..." 
+            placeholder="Search agents by name, @username or ID..." 
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value)
@@ -483,7 +485,7 @@ export default function AgentsPage() {
                         <span>{agent.full_name}</span>
                       </Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-xs py-2">@{agent.username}</TableCell>
+                    <TableCell className="text-muted-foreground font-mono text-xs py-2">@{agent.username} &bull; {accountCodeLabel(agent.account_code)}</TableCell>
                     <TableCell className="text-right text-foreground font-mono font-black text-xs py-2">
                       {formatCurrency(agent.coin_balance)}
                     </TableCell>

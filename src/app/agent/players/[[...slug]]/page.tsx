@@ -1,5 +1,6 @@
 "use client"
 
+import { accountCodeLabel, accountCodeMatches } from '@/lib/account-codes'
 import * as React from 'react'
 import {
   Dialog,
@@ -480,7 +481,8 @@ export default function PlayersPage() {
 
   const filteredPlayers = players.filter(p =>
     p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.username.toLowerCase().includes(searchQuery.toLowerCase())
+    p.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    accountCodeMatches(p.account_code, searchQuery)
   )
 
   return (
@@ -726,7 +728,7 @@ export default function PlayersPage() {
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
-                      <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
+                      <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username} &bull; {accountCodeLabel(player.account_code)}</span>
                       {isRefreshing || isLoadingPlayers ? (
                         <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
                       ) : (
@@ -782,6 +784,8 @@ export default function PlayersPage() {
                       </div>
                       <div className="flex items-center space-x-2 text-[10px] font-mono">
                         <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
+                        <span className="text-muted-foreground/60">&bull;</span>
+                        <span className="text-foreground font-bold shrink-0">ID {accountCodeLabel(selectedPlayer.account_code)}</span>
                         <span className="text-muted-foreground/60">&bull;</span>
                         {selectedPlayer.is_online && selectedPlayer.is_active ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">

@@ -1,5 +1,6 @@
 "use client"
 
+import { accountCodeLabel } from '@/lib/account-codes'
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
@@ -28,7 +29,7 @@ import { useRequestGeneration } from '@/hooks/use-request-generation'
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number }>>([])
   const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; direction: 'deposit' | 'withdraw'; amount: number; target_name: string; target_username: string; created_at: string }>>([])
-  const [agentInfo, setAgentInfo] = React.useState<{ name: string; username: string; joinedDate: string } | null>(null)
+  const [agentInfo, setAgentInfo] = React.useState<{ name: string; username: string; accountCode: string | null; joinedDate: string } | null>(null)
   const [balance, setBalance] = React.useState(0)
   const [todaysBets, setTodaysBets] = React.useState(0)
   const [todaysWins, setTodaysWins] = React.useState(0)
@@ -77,6 +78,7 @@ export default function AgentDashboard() {
           setAgentInfo({
             name: resDash.full_name,
             username: resDash.username || 'agent',
+            accountCode: resDash.account_code,
             joinedDate: resDash.joined_date || 'Jul 28, 2026'
           })
         }
@@ -186,6 +188,8 @@ export default function AgentDashboard() {
             </div>
             <p className="text-muted-foreground text-xs leading-tight font-mono mt-0.5 flex flex-wrap items-center gap-2">
               <span className="font-bold text-foreground/80">@{agentInfo?.username || 'agent'}</span>
+              <span>&bull;</span>
+              <span className="font-bold text-foreground/80">Your ID: {accountCodeLabel(agentInfo?.accountCode)}</span>
               <span>&bull;</span>
               <span className="text-muted-foreground">Joined: {agentInfo?.joinedDate || 'Jul 28, 2026'}</span>
             </p>

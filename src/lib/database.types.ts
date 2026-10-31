@@ -19,6 +19,30 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
+      account_codes: {
+        Row: {
+          user_id: string
+          code: string
+          letter: string
+          number: number
+          assigned_at: string
+        }
+        Insert: {
+          user_id: string
+          code: string
+          letter: string
+          number: number
+          assigned_at?: string
+        }
+        Update: {
+          user_id?: string
+          code?: string
+          letter?: string
+          number?: number
+          assigned_at?: string
+        }
+        Relationships: []
+      }
       active_sessions: {
         Row: {
           user_id: string

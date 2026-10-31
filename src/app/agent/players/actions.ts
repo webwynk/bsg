@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type AgentTransferResult } from '@/lib/rpc'
 import { toWholeCoins, type LedgerKind, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
+import { fetchAccountCodes } from '@/lib/account-codes'
 import { resolveAgentId } from '@/app/superadmin/agents/resolve-agent-id'
 import { istDateTime, resolvePlayerId, assertOwnership } from './players-shared'
 import { runPlayerDetailHistory } from './player-history-logic'
@@ -38,6 +39,8 @@ export interface PlayerRow {
    * Lets the UI show "Temporary Block" instead of "Blocked", and route
    * unlocking through a password reset instead of a direct Activate button. */
   auto_locked_at: string | null
+  /** The permanent account ID (P07), or null if none yet. Display only. */
+  account_code: string | null
 }
 
 /**
@@ -86,6 +89,7 @@ async function runPlayersList(
 
     const seenAt = new Map((sessionsRes.data ?? []).map(s => [s.user_id, new Date(s.last_seen_at).getTime()]))
     const now = Date.now()
+    const codes = await fetchAccountCodes(db, playerIds)
 
     return {
       players: (profilesRes.data ?? []).map(p => ({
@@ -96,6 +100,7 @@ async function runPlayersList(
         is_active: p.is_active,
         is_online: (now - (seenAt.get(p.id) ?? 0)) < 60_000,
         auto_locked_at: p.auto_locked_at,
+        account_code: codes.get(p.id) ?? null,
       })),
       error: null,
     }

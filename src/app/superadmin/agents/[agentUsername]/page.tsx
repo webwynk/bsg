@@ -1,5 +1,6 @@
 "use client"
 
+import { accountCodeLabel } from '@/lib/account-codes'
 import * as React from 'react'
 import Link from 'next/link'
 import {
@@ -60,6 +61,7 @@ export default function AgentDetailPage({ params }: Props) {
     coin_balance: number
     is_active: boolean
     auto_locked_at: string | null
+    account_code: string | null
     joined_date: string
   } | null>(null)
   const [players, setPlayers] = React.useState<Array<{
@@ -70,6 +72,7 @@ export default function AgentDetailPage({ params }: Props) {
     is_active: boolean
     is_online: boolean
     auto_locked_at: string | null
+    account_code: string | null
   }>>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   // Issue #15: for the page's own data load (loadAgentDetails/loadPlayerHistory)
@@ -526,6 +529,8 @@ export default function AgentDetailPage({ params }: Props) {
             <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-xs flex items-center space-x-2 font-mono">
               <span>@{agentInfo ? agentInfo.username : '...'}</span>
               <span>&bull;</span>
+              <span className="font-bold text-foreground/80">ID {accountCodeLabel(agentInfo?.account_code)}</span>
+              <span>&bull;</span>
               <span className="text-[10px]">Joined: {agentInfo?.joined_date || 'Jul 28, 2026'}</span>
             </p>
           </div>
@@ -885,7 +890,7 @@ export default function AgentDetailPage({ params }: Props) {
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/30">
-                        <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username}</span>
+                        <span className="text-muted-foreground font-mono text-[10px] truncate">@{player.username} &bull; {accountCodeLabel(player.account_code)}</span>
                         {isRefreshing ? (
                           <div className="h-3.5 w-12 bg-secondary/80 rounded animate-pulse shrink-0" />
                         ) : (
@@ -1028,6 +1033,8 @@ export default function AgentDetailPage({ params }: Props) {
                       </div>
                       <div className="flex items-center space-x-2 text-[10px] font-mono">
                         <span className="text-muted-foreground truncate">@{selectedPlayer.username}</span>
+                        <span className="text-muted-foreground/60">&bull;</span>
+                        <span className="text-foreground font-bold shrink-0">ID {accountCodeLabel(selectedPlayer.account_code)}</span>
                         <span className="text-muted-foreground/60">&bull;</span>
                         {selectedPlayer.is_online && selectedPlayer.is_active ? (
                           <span className="inline-flex items-center text-emerald-400 font-extrabold text-[9px]">

@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth-guard'
 import { CASHIER_KINDS, playerFacingDirection, SUPERADMIN_DISPLAY_NAME, type LedgerKind } from '@/lib/ledger'
 import { fetchMoneySummary } from '@/lib/money-totals'
+import { fetchAccountCodes } from '@/lib/account-codes'
 import { combineGames, houseResult, EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
 
 /**
@@ -44,6 +45,8 @@ function istDateTime(value: string): string {
 export interface AgentDashboardData {
   coin_balance: number
   username: string
+  /** The agent's own permanent ID (A01), or null if none yet. Display only. */
+  account_code: string | null
   full_name: string
   joined_date: string
   players_count: number
@@ -66,7 +69,7 @@ export interface AgentDashboardData {
 }
 
 const EMPTY: AgentDashboardData = {
-  coin_balance: 0, username: '', full_name: '', joined_date: '',
+  coin_balance: 0, username: '', account_code: null, full_name: '', joined_date: '',
   players_count: 0, players: [], todays_stake: 0, todays_payout: 0, todays_profit: 0,
   todays_split: EMPTY_MONEY_BY_GAME,
   recent_transfers: [], error: null,
@@ -94,6 +97,8 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
 
     if (profileRes.error) throw new Error(`profile: ${profileRes.error.message}`)
     if (playersRes.error) throw new Error(`players: ${playersRes.error.message}`)
+
+    const ownCode = (await fetchAccountCodes(db, [me.id])).get(me.id) ?? null
 
     const players = (playersRes.data ?? []).map(p => ({
       id: p.id,
@@ -151,6 +156,7 @@ export async function getAgentDashboardDataAction(): Promise<AgentDashboardData>
     return {
       coin_balance: Number(profileRes.data.coin_balance ?? 0),
       username: profileRes.data.username,
+      account_code: ownCode,
       full_name: profileRes.data.full_name || profileRes.data.username,
       joined_date: new Date(profileRes.data.created_at).toLocaleDateString('en-US', {
         timeZone: 'Asia/Kolkata', year: 'numeric', month: 'short', day: 'numeric',
