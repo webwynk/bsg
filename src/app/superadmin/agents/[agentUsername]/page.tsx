@@ -45,6 +45,7 @@ import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
 import { getAgentDetailBundleAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
+import { roundId } from '@/lib/round-id'
 
 interface Props {
   params: React.Usable<{ agentUsername: string }>
@@ -1258,7 +1259,7 @@ export default function AgentDetailPage({ params }: Props) {
                                 {/* Card Header */}
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-2 min-w-0">
-                                    <span className="font-mono text-xs font-black text-foreground">#{spin.hand_id}</span>
+                                    <span className="font-mono text-xs font-black text-foreground">{roundId('TC', spin.round_number)}</span>
                                     <span className="text-xs font-semibold text-muted-foreground truncate">{'Triple Chance'}</span>
                                   </div>
                                   <div className="flex items-center space-x-2">
@@ -1329,7 +1330,7 @@ export default function AgentDetailPage({ params }: Props) {
                             <TableHeader>
                               <TableRow className="border-border hover:bg-transparent bg-secondary/20">
                                 <TableHead className="w-8"></TableHead>
-                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Hand ID</TableHead>
+                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Round ID</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[100px]">Game</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[120px]">Mode</TableHead>
                                 <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
@@ -1358,7 +1359,7 @@ export default function AgentDetailPage({ params }: Props) {
                                       }
                                     />
                                   </TableCell>
-                                  <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{spin.hand_id}</TableCell>
+                                  <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('TC', spin.round_number)}</TableCell>
                                   <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{'Triple Chance'}</TableCell>
                                   <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
                                   <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.created_at}</TableCell>

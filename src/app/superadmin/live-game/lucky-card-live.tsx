@@ -64,6 +64,7 @@ import {
   type LuckyCardDraw,
   type RtpTone,
 } from './lucky-card-live-logic'
+import { roundId } from '@/lib/round-id'
 
 /**
  * Lucky Card tab of the Live Game page (spec 13.1, 17AN to 17AQ). Everything
@@ -304,7 +305,7 @@ export function LuckyCardLive() {
     setIsSavingThisRound(false)
     if (res.success) {
       setData(prev => (prev && prev.activeRound ? { ...prev, activeRound: { ...prev.activeRound, bonus: value } } : prev))
-      flash(setThisRoundMessage, `Round #${res.roundNumber} boosted to ${bonusLabelLong(value)} — live now`, false, 3500)
+      flash(setThisRoundMessage, `Round ${roundId('LC', res.roundNumber ?? 0)} boosted to ${bonusLabelLong(value)} — live now`, false, 3500)
       refresh()
     } else {
       flash(setThisRoundMessage, res.error ?? 'Could not apply the bonus.', true, 3500)
@@ -581,7 +582,7 @@ export function LuckyCardLive() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center space-x-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                <span>{activeRound.drawn ? `Card Drawn (Round #${activeRound.roundNumber})` : `Round #${activeRound.roundNumber} in Progress`}</span>
+                <span>{activeRound.drawn ? `Card Drawn (Round ${roundId('LC', activeRound.roundNumber)})` : `Round ${roundId('LC', activeRound.roundNumber)} in Progress`}</span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -622,7 +623,7 @@ export function LuckyCardLive() {
 
           {previous && (
             <div className="pt-3 border-t border-amber-500/20 text-[11px] flex items-center gap-x-3 gap-y-1 flex-wrap text-muted-foreground">
-              <span className="font-bold">Previous round #{previous.roundNumber}:</span>
+              <span className="font-bold">Previous round {roundId('LC', previous.roundNumber)}:</span>
               {previous.rank && previous.suit && <CardFace rank={previous.rank} suit={previous.suit} className="text-sm" />}
               <span className="font-mono">{previous.playerCount} players · wagered <Money amount={previous.totalStake} /> · paid <Money amount={previous.totalPayout} /></span>
               <span>{relativeTime(diffSecondsOf(previous.time))}</span>
@@ -742,7 +743,7 @@ export function LuckyCardLive() {
                       <td className="py-2.5 px-3 text-muted-foreground text-[11px] font-sans">{istTime(draw.time)}</td>
                       <td className="py-2.5 px-3 font-bold text-foreground font-sans">
                         <span className="flex items-center space-x-1.5">
-                          <span>#{draw.roundNumber}</span>
+                          <span>{roundId('LC', draw.roundNumber)}</span>
                           {expandable && (
                             <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-mono shrink-0">
                               {isExpanded ? '▲ Hide' : '▼ Details'}
@@ -798,7 +799,7 @@ export function LuckyCardLive() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
-                      <span className="font-bold text-foreground text-xs font-mono">#{draw.roundNumber}</span>
+                      <span className="font-bold text-foreground text-xs font-mono">{roundId('LC', draw.roundNumber)}</span>
                       {expandable && (
                         <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-mono shrink-0">
                           {isExpanded ? '▲ Hide' : '▼ Details'}

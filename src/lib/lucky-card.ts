@@ -190,7 +190,7 @@ export type PlayerLuckyCardBetRow = {
 export type PlayOutcome = 'WON' | 'LOST' | 'PENDING'
 
 export interface PlayerLuckyCardPlay {
-  /** The full round UUID, shown as the Hand ID like Triple Chance's list. */
+  /** The full round UUID, a row key only; screens show the Round ID. */
   hand_id: string
   round_number: number
   /** The winning card "K♠", null until the round is drawn. */

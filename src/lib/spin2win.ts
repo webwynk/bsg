@@ -183,7 +183,7 @@ export type PlayerSpin2WinBetRow = {
 export type PlayOutcome = 'WON' | 'LOST' | 'PENDING'
 
 export interface PlayerSpin2WinPlay {
-  /** The full round UUID, shown as the Hand ID like the other games' lists. */
+  /** The full round UUID, a row key only; screens show the Round ID. */
   hand_id: string
   round_number: number
   /** The winning number 0 to 9, null until the round is drawn. */

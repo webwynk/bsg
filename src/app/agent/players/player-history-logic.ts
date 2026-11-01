@@ -79,8 +79,7 @@ export async function runPlayerDetailHistory(
       const payout = Number(b.total_payout ?? 0)
 
       return {
-        // Full round UUID as Hand ID -- displayed in full in the dashboard
-        // detail popup per explicit user requirement.
+        // The round's own id: a row key only. Screens show roundId().
         hand_id: String(b.round_id),
         round_number: Number(round.round_number),
         mode: modes.join(' + ') || 'TRIPLE CHANCE',

@@ -21,6 +21,7 @@ import {
   type LuckyCardPlayerBet,
   type LuckyCardRoundRow,
 } from './lucky-card-live-logic'
+import { roundId } from '@/lib/round-id'
 
 /**
  * Lucky Card -- server actions for the Live Game "Lucky Card" tab
@@ -289,7 +290,7 @@ export async function applyLuckyCardBonusToCurrentRoundAction(bonus: number): Pr
 
     await writeAuditLine(
       db, auth.user.id,
-      `Lucky Card bonus multiplier set to ${bonusLabelLong(bonus)} for the CURRENT round (#${result.round_number}) — takes effect immediately`
+      `Lucky Card bonus multiplier set to ${bonusLabelLong(bonus)} for the CURRENT round (${roundId('LC', Number(result.round_number))}) — takes effect immediately`
     )
     revalidatePath('/superadmin/live-game')
     return { success: true, roundNumber: result.round_number ?? null, bonus: result.bonus_multiplier ?? null, error: null }

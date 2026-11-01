@@ -26,6 +26,7 @@ import {
   type PlayOutcomeFilter,
   type PlayerLuckyCardPlay,
 } from '@/lib/lucky-card'
+import { roundId } from '@/lib/round-id'
 
 /**
  * The "Lucky Card" side of the Game Plays tab on the agent and superadmin player
@@ -251,7 +252,7 @@ export function LuckyCardPlayerHistory({
                 <Card key={play.hand_id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 min-w-0">
-                      <span className="font-mono text-xs font-black text-foreground">#{play.round_number}</span>
+                      <span className="font-mono text-xs font-black text-foreground">{roundId('LC', play.round_number)}</span>
                       <span className="text-xs font-semibold text-muted-foreground truncate">Lucky Card</span>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -329,7 +330,7 @@ export function LuckyCardPlayerHistory({
                           }
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">#{play.round_number}</TableCell>
+                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('LC', play.round_number)}</TableCell>
                       <TableCell className="text-[11px] font-semibold text-foreground p-2.5">Lucky Card</TableCell>
                       <TableCell className="text-[11px] font-mono font-bold text-primary p-2.5">{play.picks || '—'}</TableCell>
                       <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{play.created_at}</TableCell>

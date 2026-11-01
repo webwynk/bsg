@@ -31,6 +31,7 @@ import {
   Check,
   CircleDot
 } from 'lucide-react'
+import { roundId, roundMatches } from '@/lib/round-id'
 
 interface PlayerBet {
   username: string
@@ -261,7 +262,7 @@ export default function SuperAdminLiveGamePage() {
     if (res.success) {
       setCurrentRoundBonus(res.bonus_multiplier)
       setCurrentRoundBonusIsError(false)
-      setCurrentRoundBonusMessage(`Round #${res.round_number} boosted to ${mult === 1 ? 'N (no bonus)' : mult + 'X'} — live now`)
+      setCurrentRoundBonusMessage(`Round ${roundId('TC', res.round_number ?? 0)} boosted to ${mult === 1 ? 'N (no bonus)' : mult + 'X'} — live now`)
     } else {
       setCurrentRoundBonusIsError(true)
       setCurrentRoundBonusMessage(res.error ?? 'Could not apply bonus.')
@@ -325,8 +326,7 @@ export default function SuperAdminLiveGamePage() {
     // search, but player_bets[].username was never actually checked.
     const matchesSearch =
       draw.result.toString().includes(searchQuery) ||
-      draw.hand_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      draw.round_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      roundMatches('TC', draw.round_number, searchQuery) ||
       (draw.player_bets ?? []).some(pb => pb.username.toLowerCase().includes(searchQuery.toLowerCase()))
 
     // Housekeeping #25 fix: total_payout === 0 is true for BOTH a genuine
@@ -731,8 +731,8 @@ export default function SuperAdminLiveGamePage() {
                         <Sparkles className="h-3.5 w-3.5 text-amber-400" />
                         <span>
                           {hasDigits
-                            ? `⚡ God Mode Outcome Revealed (Round #${activeRound.round_number})`
-                            : `⚡ Waiting for Winning Number (Round #${activeRound.round_number})`}
+                            ? `⚡ God Mode Outcome Revealed (Round ${roundId('TC', activeRound.round_number)})`
+                            : `⚡ Waiting for Winning Number (Round ${roundId('TC', activeRound.round_number)})`}
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -884,8 +884,8 @@ export default function SuperAdminLiveGamePage() {
                 {/* Round Financial Breakdown */}
                 <div className="grid grid-cols-3 gap-3 pt-3 border-t border-purple-500/20 text-xs sm:text-sm">
                   <div>
-                    <span className="text-muted-foreground font-semibold block text-[10px]">Player:</span>
-                    <span className="font-extrabold font-mono text-foreground">@{latest.hand_id}</span>
+                    <span className="text-muted-foreground font-semibold block text-[10px]">Round ID:</span>
+                    <span className="font-extrabold font-mono text-foreground">{roundId('TC', latest.round_number)}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground font-semibold block text-[10px]">Wagered:</span>
@@ -1027,7 +1027,7 @@ export default function SuperAdminLiveGamePage() {
                 <thead>
                   <tr className="border-b border-border/60 text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
                     <th className="py-2.5 px-3">Timestamp</th>
-                    <th className="py-2.5 px-3">Hand ID</th>
+                    <th className="py-2.5 px-3">Round ID</th>
                     <th className="py-2.5 px-3">Bonus</th>
                     <th className="py-2.5 px-3">Digits (R • G • B)</th>
                     <th className="py-2.5 px-3">Wagered</th>
@@ -1064,17 +1064,9 @@ export default function SuperAdminLiveGamePage() {
                         >
                           <td className="py-2.5 px-3 text-muted-foreground text-[11px] font-sans">{formattedTime}</td>
                           <td className="py-2.5 px-3 font-bold text-foreground font-sans">
-                            {/* Housekeeping #25 fix: this cell used to be split across two
-                                separate columns ("Hand ID" showing round_id.slice(-8), and a
-                                mislabeled "Player" column showing the exact same value again
-                                via draw.hand_id) -- confirmed both rendered identical text.
-                                Merged into one, now showing the full round_id (previously
-                                truncated to 8 characters) instead of duplicating a shortened
-                                copy of itself. The expand/collapse indicator, which used to
-                                live in the now-deleted "Player" cell, moved here so it isn't
-                                silently lost. */}
+                            {/* The expand/collapse indicator lives in this one cell. */}
                             <span className="flex items-center space-x-1.5">
-                              <span>{draw.round_id}</span>
+                              <span>{roundId('TC', draw.round_number)}</span>
                               {hasMultiple && (
                                 <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono shrink-0">
                                   {isExpanded ? '▲ Hide' : '▼ Details'}
@@ -1162,18 +1154,8 @@ export default function SuperAdminLiveGamePage() {
                       className={`p-3 rounded-xl bg-secondary/30 border border-border/80 space-y-2 text-xs ${hasMultiple ? 'cursor-pointer' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        {/* Housekeeping #25 fix: full round_id instead of the
-                            previous 8-character truncation, matching the
-                            desktop table's fix. flex-wrap + break-all + a
-                            smaller font size keep this responsive -- a full
-                            UUID is ~36 characters, much longer than the old
-                            short form, and this card has no horizontal
-                            scroll to fall back on the way the desktop table
-                            does. shrink-0 on the result badge below keeps it
-                            fixed-width on the right regardless of how many
-                            lines the id wraps to. */}
                         <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
-                          <span className="font-bold text-foreground text-[10px] font-mono break-all">{draw.round_id}</span>
+                          <span className="font-bold text-foreground text-[10px] font-mono break-all">{roundId('TC', draw.round_number)}</span>
                           {hasMultiple && (
                             <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-mono shrink-0">
                               {isExpanded ? '▲ Hide' : '▼ Details'}

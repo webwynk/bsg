@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type CurrentRound } from '@/lib/rpc'
 import { fetchMoneySummary } from '@/lib/money-totals'
 import { combineGames, houseResult, EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
+import { roundId } from '@/lib/round-id'
 
 /**
  * SuperAdmin system actions — v2.
@@ -444,7 +445,7 @@ export async function applyBonusToCurrentRoundAction(bonus: number): Promise<{
     }
 
     const label = bonus === 1 ? 'N (no bonus)' : `${bonus}X`
-    await logAuditEventAction('system', `Bonus multiplier set to ${label} for the CURRENT round (#${result.round_number}) — takes effect immediately`)
+    await logAuditEventAction('system', `Bonus multiplier set to ${label} for the CURRENT round (${roundId('TC', Number(result.round_number))}) — takes effect immediately`)
     revalidatePath('/superadmin/live-game')
     return { success: true, round_number: result.round_number ?? null, bonus_multiplier: result.bonus_multiplier ?? null, error: null }
   } catch (err) {

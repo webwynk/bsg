@@ -25,6 +25,7 @@ import {
   type Spin2WinPlayerBet,
   type Spin2WinRoundRow,
 } from './spin2win-live-logic'
+import { roundId } from '@/lib/round-id'
 
 /**
  * Spin2Win -- server actions for the Live Game "Spin2Win" tab
@@ -333,7 +334,7 @@ export async function applySpin2WinBonusToCurrentRoundAction(bonus: number): Pro
 
     await writeAuditLine(
       db, auth.user.id,
-      `Spin2Win bonus multiplier set to ${bonusLabelLong(bonus)} for the CURRENT round (#${result.round_number}) — takes effect immediately`
+      `Spin2Win bonus multiplier set to ${bonusLabelLong(bonus)} for the CURRENT round (${roundId('SW', Number(result.round_number))}) — takes effect immediately`
     )
     revalidatePath('/superadmin/live-game')
     return { success: true, roundNumber: result.round_number ?? null, bonus: result.bonus_multiplier ?? null, error: null }

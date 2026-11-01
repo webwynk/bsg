@@ -17,6 +17,7 @@ import {
   suitSymbol,
   type PlayerLucky16Play,
 } from "@/lib/lucky16"
+import { roundId } from '@/lib/round-id'
 
 /**
  * Full-detail popup for one Lucky 16 Card play: who played, which round, the winning
@@ -103,11 +104,7 @@ export function Lucky16PlayDetailDialog({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 border-t border-slate-200/70 text-[11px] font-mono">
               <span>
                 <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mr-1.5">Round:</span>
-                <span className="font-bold text-slate-700">#{play.round_number}</span>
-              </span>
-              <span className="min-w-0 flex items-center gap-1.5">
-                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Hand ID:</span>
-                <span className="font-bold text-slate-700 break-all select-all">{play.hand_id}</span>
+                <span className="font-bold text-slate-700">{roundId('LS', play.round_number)}</span>
               </span>
             </div>
           </div>

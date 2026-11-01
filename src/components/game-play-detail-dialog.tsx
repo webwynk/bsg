@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Download, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { roundId } from '@/lib/round-id'
 
 /** Fixed page-layout constants for the PDF receipt (all in px, matching the
  * jsPDF document's own `unit: 'px'`). Nothing here reads from the DOM or the
@@ -145,6 +146,7 @@ function pdfBadge(
  * without either one depending on the other's action module. */
 export interface GamePlaySpin {
   hand_id: string
+  round_number: number
   mode: string
   result: string
   total_stake: number
@@ -294,15 +296,15 @@ export function GamePlayDetailDialog({
       pdf.setDrawColor('#e2e8f0')
       pdf.line(PDF_MARGIN + 14, y + 46, PDF_MARGIN + PDF_CONTENT_WIDTH - 14, y + 46)
 
-      // Row 2: Hand ID
+      // Row 2: Round ID
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(11) // +3px from 8
       pdf.setTextColor('#94a3b8')
-      pdf.text('HAND ID:', PDF_MARGIN + 14, y + 62)
+      pdf.text('ROUND ID:', PDF_MARGIN + 14, y + 62)
       pdf.setFont('courier', 'bold')
       pdf.setFontSize(13) // +3px from 10
       pdf.setTextColor('#334155')
-      pdf.text(spin.hand_id, PDF_MARGIN + 14 + pdf.getTextWidth('HAND ID:') + 8, y + 62)
+      pdf.text(roundId('TC', spin.round_number), PDF_MARGIN + 14 + pdf.getTextWidth('ROUND ID:') + 8, y + 62)
 
       y += PDF_IDENTITY_H + PDF_BLOCK_GAP
 
@@ -438,8 +440,7 @@ export function GamePlayDetailDialog({
         y += pdfSectionBodyHeight(section.entries.length) + PDF_SECTION_GAP
       }
 
-      const safeHandId = spin.hand_id.replace(/[^a-zA-Z0-9]/g, '')
-      pdf.save(`hand-${safeHandId}-${playerUsername}.pdf`)
+      pdf.save(`${roundId('TC', spin.round_number)}-${playerUsername}.pdf`)
     } catch (e) {
       console.error('PDF generation failed:', e)
     } finally {
@@ -477,7 +478,7 @@ export function GamePlayDetailDialog({
           style={{ background: '#ffffff' }}
         >
 
-          {/* 1. Consolidated Identity Ribbon (Player + Mode + Date + Hand ID) */}
+          {/* 1. Consolidated Identity Ribbon (Player + Mode + Date + Round ID) */}
           <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50/90 border border-slate-200/80 space-y-2">
             {/* Top Row: Avatar + Name + Tags + Timestamp */}
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -516,10 +517,10 @@ export function GamePlayDetailDialog({
               </div>
             </div>
 
-            {/* Bottom Row: Full Hand ID */}
+            {/* Bottom Row: Round ID */}
             <div className="flex items-center gap-2 pt-1.5 border-t border-slate-200/70 text-[11px] font-mono">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Hand ID:</span>
-              <span className="font-bold text-slate-700 truncate select-all">{spin.hand_id}</span>
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 shrink-0">Round ID:</span>
+              <span className="font-bold text-slate-700 truncate select-all">{roundId('TC', spin.round_number)}</span>
             </div>
           </div>
 
