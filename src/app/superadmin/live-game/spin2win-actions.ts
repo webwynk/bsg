@@ -230,7 +230,7 @@ export async function updateSpin2WinRtpAction(rtpPercentage: number): Promise<{
   // The database enforces this range too (CHECK on spin2win_config); validating
   // here just produces a friendlier message.
   if (!isValidRtp(rtpPercentage)) {
-    return { success: false, rtp: null, error: 'RTP must be a number between 30 and 100.' }
+    return { success: false, rtp: null, error: 'RTP must be a number between 20 and 100.' }
   }
   if (serverSecondsInto(Date.now()) >= S2W_CONFIG_LOCK_SECOND) {
     return { success: false, rtp: null, error: CONFIG_LOCKED_MESSAGE }

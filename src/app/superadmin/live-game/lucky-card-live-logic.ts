@@ -10,7 +10,7 @@
  *
  * Mirrors the Triple Chance Live Game page's rules where the two games behave
  * the same (the lock seconds, the RTP rating tiers), with Lucky Card's own
- * ranges: RTP 30 to 100, bonus 1 to 10, a 103-second cycle (spec
+ * ranges: RTP 20 to 100 (30 to 100 before 20261106120000), bonus 1 to 10, a 103-second cycle (spec
  * LUCKY_CARD_GAME_SPEC.md 5, 6, 13.1, 17AN, 17AO).
  */
 
@@ -23,10 +23,11 @@ import { asRank, asSuit, bonusLabel, cardName, embeddedCount, stakedCards, suitS
 // Ranges and timing
 // ---------------------------------------------------------------------------
 
-export const LC_RTP_MIN = 30
+// 20 to 100 since the Fair draw v2 install (20261106120000_lucky_card_fair_draw_v2.sql).
+export const LC_RTP_MIN = 20
 export const LC_RTP_MAX = 100
 export const LC_RTP_STEP = 0.5
-export const LC_RTP_PRESETS: readonly number[] = [30, 50, 70, 90, 95, 100]
+export const LC_RTP_PRESETS: readonly number[] = [20, 30, 50, 70, 90, 95, 100]
 
 /** One round lasts 103 seconds on the server clock. The server's own
  *  seconds_into is `epoch seconds % 103`, so counting it forward on the screen

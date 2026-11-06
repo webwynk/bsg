@@ -8,7 +8,7 @@
  * and the time wording live in src/lib/lucky16.ts; this file imports from there.
  *
  * Copied from the Lucky Card tab's rules, with Lucky 16 Card's own ranges (RTP
- * 30 to 100, bonus 1 to 10, a 103-second cycle, draw at second 89) and, as on
+ * 20 to 100 since 20261106130000_lucky16_fair_draw_v2.sql (was 30 to 100), bonus 1 to 10, a 103-second cycle, draw at second 89) and, as on
  * the Spin2Win tab, locks that the server actions enforce too (see the
  * refusal functions below).
  */
@@ -22,10 +22,10 @@ import { asRank, asSuit, bonusLabel, cardName, embeddedCount, isValidBonus, stak
 // Ranges and timing
 // ---------------------------------------------------------------------------
 
-export const L16_RTP_MIN = 30
+export const L16_RTP_MIN = 20
 export const L16_RTP_MAX = 100
 export const L16_RTP_STEP = 0.5
-export const L16_RTP_PRESETS: readonly number[] = [30, 50, 70, 90, 95, 100]
+export const L16_RTP_PRESETS: readonly number[] = [20, 30, 50, 70, 90, 95, 100]
 
 /** One round lasts 103 seconds on the server clock. The server's own
  *  seconds_into is `epoch seconds % 103`, so counting it forward on the screen
@@ -56,7 +56,7 @@ export function isValidRtp(value: unknown): value is number {
 
 /** Why the RTP may not be set now, or null when it may. Used by the server action. */
 export function rtpRefusal(value: unknown, secondsInto: number): string | null {
-  if (!isValidRtp(value)) return 'RTP must be a number between 30 and 100.'
+  if (!isValidRtp(value)) return `RTP must be a number between ${L16_RTP_MIN} and ${L16_RTP_MAX}.`
   return isConfigLocked(secondsInto) ? L16_CONFIG_LOCKED_TEXT : null
 }
 

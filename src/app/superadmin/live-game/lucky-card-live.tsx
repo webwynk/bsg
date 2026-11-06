@@ -68,7 +68,7 @@ import { roundId } from '@/lib/round-id'
 
 /**
  * Lucky Card tab of the Live Game page (spec 13.1, 17AN to 17AQ). Everything
- * the superadmin needs for the game in one place: its own RTP (30 to 100), its
+ * the superadmin needs for the game in one place: its own RTP (20 to 100), its
  * own bonus (this round and next round, 1 to 10), the round in progress, the
  * recent draws and the draw ledger. Separate from Triple Chance's settings,
  * which live in another table and are never touched from here.
