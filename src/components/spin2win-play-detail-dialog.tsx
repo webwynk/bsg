@@ -8,7 +8,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { PlayPdfFooter } from '@/components/play-pdf-footer'
+import { PopupTicketList } from '@/components/round-tickets'
 import { formatCurrency } from "@/lib/utils"
+import type { PlayPdfData } from '@/lib/play-pdf'
+import { ticketTokens, type PlayerTicket } from '@/lib/player-tickets'
 import {
   bonusColors,
   bonusLabel,
@@ -22,8 +26,8 @@ import { roundId } from '@/lib/round-id'
  * number and the round's bonus, the bet and the win, and the ten numbers with
  * the coins the player put on each (the winning number highlighted).
  *
- * Built like lucky-card-play-detail-dialog.tsx, which is left untouched. No PDF
- * download, the same as Lucky Card. Shared by the agent and superadmin player
+ * Built like lucky-card-play-detail-dialog.tsx. Download PDF comes from
+ * lib/play-pdf.ts, the same as Lucky Card. Shared by the agent and superadmin player
  * pages, so it takes only the play and the player's name. Drawn on a white
  * panel like the other games' popups, so it reads the same in both themes.
  */
@@ -31,16 +35,45 @@ export function Spin2WinPlayDetailDialog({
   play,
   playerFullName,
   playerUsername,
+  tickets,
   trigger,
 }: {
   play: PlayerSpin2WinPlay
   playerFullName: string
   playerUsername: string
+  /** This round's tickets, for a Print player. */
+  tickets?: PlayerTicket[]
   trigger: React.ReactElement
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const net = play.total_payout - play.total_stake
   const bonus = bonusColors(play.bonus_multiplier)
+
+  const pdfData = (): PlayPdfData => ({
+    gameName: 'Spin2Win',
+    roundLabel: roundId('SW', play.round_number),
+    createdAt: play.created_at,
+    playerFullName,
+    playerUsername,
+    resultTitle: 'WINNING NUMBER',
+    result: play.winning_number !== null
+      ? { kind: 'number', number: play.winning_number, color: numberColor(play.winning_number) }
+      : null,
+    bonusLabel: bonusLabel(play.bonus_multiplier),
+    totalStake: play.total_stake,
+    totalPayout: play.total_payout,
+    outcome: play.outcome,
+    gridTitle: 'COINS ON EACH NUMBER',
+    gridColumns: 5,
+    cells: play.stakes.map(cell => ({
+      face: { kind: 'number' as const, number: cell.number, color: numberColor(cell.number) },
+      amount: cell.amount,
+      isWinner: cell.isWinner,
+    })),
+    tickets,
+    ticketContents: ticket => ticketTokens('SW', ticket.items, formatCurrency),
+    formatAmount: formatCurrency,
+  })
 
   const statusStyle =
     play.outcome === 'WON'
@@ -197,7 +230,11 @@ export function Spin2WinPlayDetailDialog({
               })}
             </div>
           </div>
+
+          <PopupTicketList game="SW" tickets={tickets} />
         </div>
+
+        <PlayPdfFooter data={pdfData} />
       </DialogContent>
     </Dialog>
   )

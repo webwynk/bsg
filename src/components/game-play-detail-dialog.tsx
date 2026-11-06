@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button"
 import { Download, Loader2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { roundId } from '@/lib/round-id'
+import { PopupTicketList } from '@/components/round-tickets'
+import { drawPdfTickets, planPdfTickets } from '@/lib/play-pdf'
+import { ticketTokens, type PlayerTicket } from '@/lib/player-tickets'
 
 /** Fixed page-layout constants for the PDF receipt (all in px, matching the
  * jsPDF document's own `unit: 'px'`). Nothing here reads from the DOM or the
@@ -178,11 +181,14 @@ export function GamePlayDetailDialog({
   spin,
   playerFullName,
   playerUsername,
+  tickets = [],
   trigger,
 }: {
   spin: GamePlaySpin
   playerFullName: string
   playerUsername: string
+  /** This round's tickets, for a Print player. */
+  tickets?: PlayerTicket[]
   trigger: React.ReactElement
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -227,7 +233,15 @@ export function GamePlayDetailDialog({
         { title: 'TRIPLE', entries: tripleEntries, pad: 3, isWinning: (num) => targetTriple !== null && num.padStart(3, '0') === targetTriple, emptyText: 'No Triple bets placed.' },
       ]
 
-      const pageHeight = pdfTotalHeight(sections)
+      // No tickets leaves the page exactly as it was. With them, they start where
+      // the last section ends, and run on to more pages when there are many.
+      const baseHeight = pdfTotalHeight(sections)
+      const ticketPlan = planPdfTickets(
+        tickets,
+        baseHeight - PDF_SECTION_GAP - PDF_BOTTOM_MARGIN,
+        ticket => ticketTokens('TC', ticket.items, formatCurrency),
+      )
+      const pageHeight = tickets.length > 0 ? ticketPlan.firstPageHeight : baseHeight
       // jsPDF silently SWAPS a custom [width, height] format's two values
       // whenever they don't match the requested orientation -- confirmed
       // directly (a hardcoded 'portrait' with a short hand's page, where
@@ -440,6 +454,8 @@ export function GamePlayDetailDialog({
         y += pdfSectionBodyHeight(section.entries.length) + PDF_SECTION_GAP
       }
 
+      if (tickets.length > 0) drawPdfTickets(pdf, ticketPlan, tickets.length, roundId('TC', spin.round_number), formatCurrency)
+
       pdf.save(`${roundId('TC', spin.round_number)}-${playerUsername}.pdf`)
     } catch (e) {
       console.error('PDF generation failed:', e)
@@ -633,6 +649,8 @@ export function GamePlayDetailDialog({
               emptyText="No Triple bets placed."
             />
           </div>
+
+          <PopupTicketList game="TC" tickets={tickets} />
         </div>
 
         {/* Modal Footer */}

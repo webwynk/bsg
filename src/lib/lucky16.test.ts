@@ -86,13 +86,12 @@ const betRow = {
   lucky16_rounds: { round_number: '17403942', winning_rank: 'A', winning_suit: 'spades', bonus_multiplier: 1 },
 }
 
-test('shapePlayerPlay: the card, the sixteen stakes, the picks and the outcome', () => {
+test('shapePlayerPlay: the card, the sixteen stakes and the outcome', () => {
   const p = L.shapePlayerPlay(betRow, () => 'shown')
   assert.equal(p.hand_id, 'round-1')
   assert.equal(p.round_number, 17403942)
   assert.equal(p.card, 'A♠')
   assert.equal(p.stakes.length, 16)
-  assert.equal(p.picks, 'A♠ 50 · K♣ 20')
   assert.equal(p.outcome, 'WON')
   assert.equal(p.created_at, 'shown')
 })

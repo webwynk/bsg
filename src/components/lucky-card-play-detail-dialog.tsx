@@ -8,7 +8,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { PlayPdfFooter } from '@/components/play-pdf-footer'
+import { PopupTicketList } from '@/components/round-tickets'
 import { formatCurrency } from "@/lib/utils"
+import type { PlayPdfData } from '@/lib/play-pdf'
+import { ticketTokens, type PlayerTicket } from '@/lib/player-tickets'
 import {
   LC_RANKS,
   LC_SUITS,
@@ -25,7 +29,7 @@ import { roundId } from '@/lib/round-id'
  * coins the player put on each card (the winning card highlighted).
  *
  * The Lucky Card counterpart of game-play-detail-dialog.tsx (Triple Chance),
- * which is left untouched. No PDF download (user decision 2026-10-07, spec 17AT).
+ * which is left untouched. Download PDF comes from lib/play-pdf.ts (Hasan, 2026-11-02).
  * Shared by the agent and superadmin player pages, so it takes only the play
  * and the player's name, not a page-owned type. Drawn on a white panel like
  * the Triple Chance popup, so it reads the same in both themes.
@@ -34,15 +38,41 @@ export function LuckyCardPlayDetailDialog({
   play,
   playerFullName,
   playerUsername,
+  tickets,
   trigger,
 }: {
   play: PlayerLuckyCardPlay
   playerFullName: string
   playerUsername: string
+  /** This round's tickets, for a Print player. */
+  tickets?: PlayerTicket[]
   trigger: React.ReactElement
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const net = play.total_payout - play.total_stake
+
+  const pdfData = (): PlayPdfData => ({
+    gameName: 'Lucky Card',
+    roundLabel: roundId('LC', play.round_number),
+    createdAt: play.created_at,
+    playerFullName,
+    playerUsername,
+    resultTitle: 'WINNING CARD',
+    result: play.rank && play.suit ? { kind: 'card', rank: play.rank, suit: play.suit } : null,
+    bonusLabel: bonusLabel(play.bonus_multiplier),
+    totalStake: play.total_stake,
+    totalPayout: play.total_payout,
+    outcome: play.outcome,
+    gridTitle: 'COINS ON EACH CARD',
+    gridColumns: LC_SUITS.length,
+    cells: LC_RANKS.flatMap((rank, r) => LC_SUITS.map((suit, s) => {
+      const cell = play.stakes[r * LC_SUITS.length + s]
+      return { face: { kind: 'card' as const, rank, suit }, amount: cell.amount, isWinner: cell.isWinner }
+    })),
+    tickets,
+    ticketContents: ticket => ticketTokens('LC', ticket.items, formatCurrency),
+    formatAmount: formatCurrency,
+  })
 
   const statusStyle =
     play.outcome === 'WON'
@@ -206,7 +236,11 @@ export function LuckyCardPlayDetailDialog({
               ))}
             </div>
           </div>
+
+          <PopupTicketList game="LC" tickets={tickets} />
         </div>
+
+        <PlayPdfFooter data={pdfData} />
       </DialogContent>
     </Dialog>
   )

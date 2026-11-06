@@ -199,7 +199,6 @@ export interface PlayerSpin2WinPlay {
   /** All ten numbers with the coins the player put on each. */
   stakes: NumberStake[]
   /** The numbers bet on as one line: "3: 50 · 7: 20". */
-  picks: string
 }
 
 /** Lucky Card's rule: a settled bet that paid anything is WON. */
@@ -231,7 +230,6 @@ export function shapePlayerPlay(row: PlayerSpin2WinBetRow, formatTime: (iso: str
     created_at: formatTime(row.created_at),
     created_at_iso: row.created_at,
     stakes: numberStakes(row, winner),
-    picks: stakedNumbers(row, winner).map(s => `${s.number}: ${s.amount}`).join(' · '),
   }
 }
 

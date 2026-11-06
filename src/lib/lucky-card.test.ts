@@ -190,7 +190,6 @@ test('shapePlayerPlay: a won, settled bet', () => {
   assert.equal(p.created_at, 'T(2026-10-06T18:31:00Z)')
   assert.equal(p.created_at_iso, '2026-10-06T18:31:00Z')
   assert.equal(p.stakes.length, 12)
-  assert.equal(p.picks, 'Q♥ 20 · K♠ 50')
   assert.deepEqual(p.stakes.filter((c: { isWinner: boolean }) => c.isWinner).map((c: { card: string; amount: number }) => [c.card, c.amount]), [['K♠', 50]])
 })
 
@@ -216,10 +215,6 @@ test('shapePlayerPlay: lost, pending, undrawn round, missing numbers', () => {
   assert.equal(blanks.total_payout, 0)
   assert.equal(blanks.bonus_multiplier, 1)
   assert.equal(blanks.outcome, 'PENDING')
-})
-
-test('shapePlayerPlay: a bet with no stakes has no picks text', () => {
-  assert.equal(L.shapePlayerPlay({ ...betRow, k_spades: 0, q_hearts: 0 }, fmt).picks, '')
 })
 
 test('istDayKey: the Indian-time day, across midnight', () => {

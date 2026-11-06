@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
 import { Spin2WinPlayDetailDialog } from '@/components/spin2win-play-detail-dialog'
+import { TicketArrow, TicketList, TicketTableRow, useRoundTickets } from '@/components/round-tickets'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import type { LiveTable } from '@/components/live-data-provider'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
@@ -162,6 +163,7 @@ export function Spin2WinPlayerHistory({
   const plays = isLoading ? [] : loaded.plays
   const filtered = filterPlays(plays, filterDate, filterOutcome)
   const pageInfo = paginate(filtered, page, ITEMS_PER_PAGE)
+  const tickets = useRoundTickets(playerIdentifier, 'SW', pageInfo.items)
   const summary = summarizePlays(plays, scope, todayKey)
 
   return (
@@ -264,10 +266,12 @@ export function Spin2WinPlayerHistory({
                     </div>
                     <div className="flex items-center space-x-2">
                       <OutcomeBadge outcome={play.outcome} />
+                      <TicketArrow tickets={tickets} round={play.round_number} />
                       <Spin2WinPlayDetailDialog
                         play={play}
                         playerFullName={playerFullName}
                         playerUsername={playerUsername}
+                        tickets={tickets.ticketsFor(play.round_number)}
                         trigger={
                           <button className="p-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none" aria-label="View Details">
                             <Eye className="h-4 w-4" />
@@ -279,7 +283,6 @@ export function Spin2WinPlayerHistory({
                   <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground pt-1 border-t border-border/40">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <BonusBadge bonus={play.bonus_multiplier} />
-                      <span className="font-mono font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded break-words min-w-0">{play.picks || '—'}</span>
                     </div>
                     <span className="font-mono shrink-0">{play.created_at}</span>
                   </div>
@@ -301,6 +304,7 @@ export function Spin2WinPlayerHistory({
                       </span>
                     </div>
                   </div>
+                  <TicketList tickets={tickets} round={play.round_number} />
                 </Card>
               ))}
             </div>
@@ -313,7 +317,6 @@ export function Spin2WinPlayerHistory({
                     <TableHead className="w-8"></TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[90px]">Round</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[100px]">Game</TableHead>
-                    <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[140px]">Numbers Bet</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
                     <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win No.</TableHead>
                     <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[60px]">Bonus</TableHead>
@@ -324,33 +327,39 @@ export function Spin2WinPlayerHistory({
                 </TableHeader>
                 <TableBody>
                   {pageInfo.items.map(play => (
-                    <TableRow key={play.hand_id} className="border-border hover:bg-secondary/30 transition-colors">
-                      <TableCell className="p-2">
-                        <Spin2WinPlayDetailDialog
-                          play={play}
-                          playerFullName={playerFullName}
-                          playerUsername={playerUsername}
-                          trigger={
-                            <button className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none" aria-label="View Details">
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('SW', play.round_number)}</TableCell>
-                      <TableCell className="text-[11px] font-semibold text-foreground p-2.5">Spin2Win</TableCell>
-                      <TableCell className="text-[11px] font-mono font-bold text-primary p-2.5">{play.picks || '—'}</TableCell>
-                      <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{play.created_at}</TableCell>
-                      <TableCell className="text-center p-2.5 text-sm font-mono">
-                        {play.winning_number !== null ? <NumberChip n={play.winning_number} /> : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                      <TableCell className="text-center p-2.5"><BonusBadge bonus={play.bonus_multiplier} /></TableCell>
-                      <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">{formatCurrency(play.total_stake)}</TableCell>
-                      <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${play.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                        <WinText amount={play.total_payout} />
-                      </TableCell>
-                      <TableCell className="text-center p-2.5"><OutcomeBadge outcome={play.outcome} /></TableCell>
-                    </TableRow>
+                    <React.Fragment key={play.hand_id}>
+                      <TableRow className="border-border hover:bg-secondary/30 transition-colors">
+                        <TableCell className="p-2">
+                          <div className="flex items-center gap-1">
+                            <Spin2WinPlayDetailDialog
+                              play={play}
+                              playerFullName={playerFullName}
+                              playerUsername={playerUsername}
+                              tickets={tickets.ticketsFor(play.round_number)}
+                              trigger={
+                                <button className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none" aria-label="View Details">
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              }
+                            />
+                            <TicketArrow tickets={tickets} round={play.round_number} />
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('SW', play.round_number)}</TableCell>
+                        <TableCell className="text-[11px] font-semibold text-foreground p-2.5">Spin2Win</TableCell>
+                        <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{play.created_at}</TableCell>
+                        <TableCell className="text-center p-2.5 text-sm font-mono">
+                          {play.winning_number !== null ? <NumberChip n={play.winning_number} /> : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-center p-2.5"><BonusBadge bonus={play.bonus_multiplier} /></TableCell>
+                        <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">{formatCurrency(play.total_stake)}</TableCell>
+                        <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${play.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                          <WinText amount={play.total_payout} />
+                        </TableCell>
+                        <TableCell className="text-center p-2.5"><OutcomeBadge outcome={play.outcome} /></TableCell>
+                      </TableRow>
+                      <TicketTableRow tickets={tickets} round={play.round_number} colSpan={9} />
+                    </React.Fragment>
                   ))}
                 </TableBody>
               </Table>

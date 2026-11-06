@@ -4,7 +4,7 @@ import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { LayoutDashboard, Users, LogOut, ShieldAlert, Radio, Bell } from 'lucide-react'
+import { LayoutDashboard, Users, LogOut, ShieldAlert, Radio, Bell, Monitor } from 'lucide-react'
 import { AgentNotificationsProvider, useAgentNotifications } from '@/components/agent-notifications-provider'
 import { LiveDataProvider } from '@/components/live-data-provider'
 
@@ -44,6 +44,7 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
   const isDashboardActive = pathname === '/superadmin' || pathname === '/superadmin/'
   const isLiveGameActive = !!pathname?.startsWith('/superadmin/live-game')
   const isAgentsActive = !!pathname?.startsWith('/superadmin/agents')
+  const isDesktopPlayersActive = !!pathname?.startsWith('/superadmin/desktop-players')
   // /superadmin/alerts, NOT /agent/alerts -- proxy.ts (formerly middleware.ts)
   // strictly redirects any superadmin session away from /agent/*, so linking to /agent/alerts
   // never actually worked. Both routes share the same content component
@@ -112,6 +113,18 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
           >
             <Users className="h-4 w-4 shrink-0" />
             <span>Agents</span>
+          </Link>
+
+          <Link
+            href="/superadmin/desktop-players"
+            className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold ${
+              isDesktopPlayersActive
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <Monitor className="h-4 w-4 shrink-0" />
+            <span>Desktop Player</span>
           </Link>
 
           <Link
@@ -220,6 +233,23 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
             <Users className={`h-4 w-4 transition-transform duration-300 ${isAgentsActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
             <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isAgentsActive ? 'font-black text-primary' : 'font-bold'}`}>
               Agents
+            </span>
+          </Link>
+
+          <Link
+            href="/superadmin/desktop-players"
+            className={`relative flex flex-col items-center justify-center flex-1 h-11 mx-0.5 rounded-xl transition-all duration-300 cursor-pointer ${
+              isDesktopPlayersActive
+                ? 'bg-primary/15 text-primary border border-primary/25 shadow-xs font-black'
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 font-semibold'
+            }`}
+          >
+            {isDesktopPlayersActive && (
+              <span className="absolute -top-1 w-3 h-1 rounded-full bg-primary animate-pulse shadow-xs" />
+            )}
+            <Monitor className={`h-4 w-4 transition-transform duration-300 ${isDesktopPlayersActive ? 'scale-110 stroke-[2.5]' : 'stroke-[1.8]'}`} />
+            <span className={`text-[9px] mt-0.5 tracking-wider uppercase ${isDesktopPlayersActive ? 'font-black text-primary' : 'font-bold'}`}>
+              Desktop
             </span>
           </Link>
 

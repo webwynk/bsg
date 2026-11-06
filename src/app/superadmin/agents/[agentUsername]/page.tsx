@@ -3,6 +3,7 @@
 import { accountCodeLabel } from '@/lib/account-codes'
 import * as React from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   Table,
   TableBody,
@@ -35,6 +36,7 @@ import { ErrorBanner } from "@/components/error-banner"
 import type { PlayerProfitRow } from '@/app/agent/profit/actions'
 import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
 import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
+import { TicketArrow, TicketList, TicketTableRow, useRoundTickets } from '@/components/round-tickets'
 import { LuckyCardPlayerHistory } from "@/components/lucky-card-player-history"
 import { Spin2WinPlayerHistory } from "@/components/spin2win-player-history"
 import { Lucky16PlayerHistory } from "@/components/lucky16-player-history"
@@ -47,12 +49,16 @@ import { getAgentDetailBundleAction, issueAgentCoinsAction, setAgentActiveAction
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
 import { roundId } from '@/lib/round-id'
 
+const NO_PLAYS: PlayerGamePlay[] = []
+
 interface Props {
   params: React.Usable<{ agentUsername: string }>
 }
 
 export default function AgentDetailPage({ params }: Props) {
   const { agentUsername } = React.use(params)
+  // ?player=<username>, set by the Desktop Player tab's history arrow.
+  const requestedPlayer = useSearchParams().get('player')
   const resolvedAgentIdRef = React.useRef<string>('') // UUID resolved from username by server action
   
   const [agentInfo, setAgentInfo] = React.useState<{
@@ -228,6 +234,9 @@ export default function AgentDetailPage({ params }: Props) {
     return filteredGames.slice(start, start + itemsPerPage)
   }, [filteredGames, gamesPage])
 
+  // Only while the Triple Chance side is open; the other games load their own.
+  const tickets = useRoundTickets(selectedPlayer?.id, 'TC', activeTab === 'games' && gameTab === 'triple_chance' ? paginatedGames : NO_PLAYS)
+
   const paginatedPoints = React.useMemo(() => {
     const start = (pointsPage - 1) * itemsPerPage
     return filteredPoints.slice(start, start + itemsPerPage)
@@ -362,10 +371,12 @@ export default function AgentDetailPage({ params }: Props) {
         } else if (res.players.length > 0) {
           // First load, nothing selected yet -- which player is "first" isn't
           // known until this response comes back, so this one-time case still
-          // needs its own follow-up fetch rather than being bundled above.
-          selectedPlayerIdRef.current = res.players[0].id
-          setSelectedPlayer(res.players[0])
-          loadPlayerHistory(res.players[0].id)
+          // needs its own follow-up fetch rather than being bundled above. A
+          // ?player= link opens that player; otherwise the first in the list.
+          const firstPlayer = res.players.find(p => p.username === requestedPlayer) ?? res.players[0]
+          selectedPlayerIdRef.current = firstPlayer.id
+          setSelectedPlayer(firstPlayer)
+          loadPlayerHistory(firstPlayer.id)
         }
       }
       if (!res.profit.error) {
@@ -377,7 +388,7 @@ export default function AgentDetailPage({ params }: Props) {
       setIsRefreshing(false)
       setLoadError(e instanceof Error ? e.message : 'Could not load agent details.')
     })
-  }, [agentUsername, loadPlayerHistory, applyHistoryResult, agentDetailsRequest])
+  }, [agentUsername, requestedPlayer, loadPlayerHistory, applyHistoryResult, agentDetailsRequest])
 
   // Keep filter refs in sync so stable loadAgentDetails always reads latest values
   React.useEffect(() => {
@@ -1268,10 +1279,12 @@ export default function AgentDetailPage({ params }: Props) {
                                     }`}>
                                       {isWon ? 'WON' : 'LOST'}
                                     </span>
+                                    <TicketArrow tickets={tickets} round={spin.round_number} />
                                     <GamePlayDetailDialog
                                       spin={spin}
                                       playerFullName={selectedPlayer?.full_name || ''}
                                       playerUsername={selectedPlayer?.username || ''}
+                                      tickets={tickets.ticketsFor(spin.round_number)}
                                       trigger={
                                         <button
                                           className="p-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
@@ -1319,6 +1332,7 @@ export default function AgentDetailPage({ params }: Props) {
                                     </span>
                                   </div>
                                 </div>
+                                <TicketList tickets={tickets} round={spin.round_number} />
                               </Card>
                             )
                           })}
@@ -1343,55 +1357,62 @@ export default function AgentDetailPage({ params }: Props) {
                             </TableHeader>
                             <TableBody>
                               {paginatedGames.map((spin) => (
-                                <TableRow key={spin.hand_id} className="border-border hover:bg-secondary/30 transition-colors">
-                                  <TableCell className="p-2">
-                                    <GamePlayDetailDialog
-                                      spin={spin}
-                                      playerFullName={selectedPlayer?.full_name || ''}
-                                      playerUsername={selectedPlayer?.username || ''}
-                                      trigger={
-                                        <button
-                                          className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
-                                          aria-label="View Details"
-                                        >
-                                          <Eye className="h-3.5 w-3.5" />
-                                        </button>
-                                      }
-                                    />
-                                  </TableCell>
-                                  <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('TC', spin.round_number)}</TableCell>
-                                  <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{'Triple Chance'}</TableCell>
-                                  <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
-                                  <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.created_at}</TableCell>
-                                  <TableCell className="text-center p-2.5">
-                                    <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
-                                      {spin.result.toString().padStart(3, '0')}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-center p-2.5">
-                                    {/* Issue #100: this round's own pinned bonus multiplier. */}
-                                    <span className={`font-mono font-black text-[10px] rounded-md px-1.5 py-0.5 inline-block ${
-                                      spin.bonus_multiplier === 1
-                                        ? 'text-muted-foreground bg-secondary/40'
-                                        : 'text-amber-400 bg-amber-500/10'
-                                    }`}>
-                                      {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                    {formatCurrency(spin.total_stake)}
-                                  </TableCell>
-                                  <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                    {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
-                                  </TableCell>
-                                  <TableCell className="text-center p-2.5">
-                                    <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                      spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
-                                    }`}>
-                                      {spin.outcome}
-                                    </span>
-                                  </TableCell>
-                                </TableRow>
+                                <React.Fragment key={spin.hand_id}>
+                                  <TableRow className="border-border hover:bg-secondary/30 transition-colors">
+                                    <TableCell className="p-2">
+                                      <div className="flex items-center gap-1">
+                                        <GamePlayDetailDialog
+                                          spin={spin}
+                                          playerFullName={selectedPlayer?.full_name || ''}
+                                          playerUsername={selectedPlayer?.username || ''}
+                                          tickets={tickets.ticketsFor(spin.round_number)}
+                                          trigger={
+                                            <button
+                                              className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+                                              aria-label="View Details"
+                                            >
+                                              <Eye className="h-3.5 w-3.5" />
+                                            </button>
+                                          }
+                                        />
+                                        <TicketArrow tickets={tickets} round={spin.round_number} />
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('TC', spin.round_number)}</TableCell>
+                                    <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{'Triple Chance'}</TableCell>
+                                    <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
+                                    <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.created_at}</TableCell>
+                                    <TableCell className="text-center p-2.5">
+                                      <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
+                                        {spin.result.toString().padStart(3, '0')}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-center p-2.5">
+                                      {/* Issue #100: this round's own pinned bonus multiplier. */}
+                                      <span className={`font-mono font-black text-[10px] rounded-md px-1.5 py-0.5 inline-block ${
+                                        spin.bonus_multiplier === 1
+                                          ? 'text-muted-foreground bg-secondary/40'
+                                          : 'text-amber-400 bg-amber-500/10'
+                                      }`}>
+                                        {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
+                                      {formatCurrency(spin.total_stake)}
+                                    </TableCell>
+                                    <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
+                                      {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-center p-2.5">
+                                      <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
+                                        spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
+                                      }`}>
+                                        {spin.outcome}
+                                      </span>
+                                    </TableCell>
+                                  </TableRow>
+                                  <TicketTableRow tickets={tickets} round={spin.round_number} colSpan={10} />
+                                </React.Fragment>
                               ))}
                             </TableBody>
                           </Table>

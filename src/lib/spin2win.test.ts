@@ -138,7 +138,6 @@ test('shapePlayerPlay: a pending bet', () => {
   assert.equal(p.is_settled, false)
   assert.equal(p.created_at, 'T:2026-10-25T06:30:00Z')
   assert.equal(p.created_at_iso, '2026-10-25T06:30:00Z')
-  assert.equal(p.picks, '3: 50 · 7: 20')
   assert.equal(p.stakes.length, 10)
   assert.ok(p.stakes.every(s => !s.isWinner))
 })

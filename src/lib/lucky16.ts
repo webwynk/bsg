@@ -260,7 +260,6 @@ export interface PlayerLucky16Play {
   /** All sixteen cards with the coins the player put on each. */
   stakes: CardStake[]
   /** The cards bet on as one line: "J♥ 50 · K♠ 20". */
-  picks: string
 }
 
 export function playOutcome(isSettled: boolean, totalPayout: number): PlayOutcome {
@@ -274,7 +273,6 @@ export function shapePlayerPlay(row: PlayerLucky16BetRow, formatTime: (iso: stri
   const round = row.lucky16_rounds
   const rank = asRank(round.winning_rank)
   const suit = asSuit(round.winning_suit)
-  const staked = stakedCards(row, round.winning_rank, round.winning_suit)
   const totalPayout = Number(row.total_payout ?? 0)
   // A bet counts as settled only when its round also has its card.
   const isSettled = Boolean(row.is_settled) && rank !== null && suit !== null
@@ -292,7 +290,6 @@ export function shapePlayerPlay(row: PlayerLucky16BetRow, formatTime: (iso: stri
     created_at: formatTime(row.created_at),
     created_at_iso: row.created_at,
     stakes: cardStakes(row, round.winning_rank, round.winning_suit),
-    picks: staked.map(c => `${c.card} ${c.amount}`).join(' · '),
   }
 }
 
