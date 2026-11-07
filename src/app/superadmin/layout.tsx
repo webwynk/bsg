@@ -3,7 +3,6 @@
 import { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { LayoutDashboard, Users, LogOut, ShieldAlert, Radio, Bell, Monitor } from 'lucide-react'
 import { AgentNotificationsProvider, useAgentNotifications } from '@/components/agent-notifications-provider'
 import { LiveDataProvider } from '@/components/live-data-provider'
@@ -73,7 +72,6 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
               <p className="text-[10px] text-muted-foreground font-semibold">Super Admin</p>
             </div>
           </div>
-          <ThemeToggle />
         </div>
         <nav className="flex-1 p-2 space-y-1">
           <Link 
@@ -167,7 +165,6 @@ function SuperAdminLayoutShell({ pathname, children }: { pathname: string | null
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <ThemeToggle />
             <button 
               onClick={handleSignOut}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-red-500 hover:bg-red-500/10 cursor-pointer"

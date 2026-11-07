@@ -19,17 +19,24 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Dark mode only (2026-11-07, Hasan's decision): `dark` is on <html> from the
+  // first paint (no light flash, even before any script runs), next-themes is
+  // forced to dark (a saved 'light' choice or a light device setting is
+  // ignored), and color-scheme: dark (globals.css) makes the browser's own
+  // parts -- scrollbars, autofill, native inputs -- dark too. There is no theme
+  // toggle any more. PDFs are drawn by jsPDF with their own colours and are not
+  // affected.
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} h-full antialiased`}
+      className={`${dmSans.variable} dark h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans bg-background text-foreground">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          forcedTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           {children}

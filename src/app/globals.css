@@ -38,6 +38,9 @@
 }
 
 .dark {
+  /* Dark mode only (2026-11-07): tells the browser to draw its own parts
+     (scrollbars, autofill, date/number inputs) dark as well. */
+  color-scheme: dark;
   --background: #0B0F19; /* Dark Slate-Blue */
   --foreground: #F8FAFC;
   --card: #151D30;
