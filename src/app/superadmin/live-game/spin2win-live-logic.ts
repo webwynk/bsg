@@ -8,10 +8,9 @@
  * the time wording live in src/lib/spin2win.ts; this file imports from there.
  *
  * Same shape as the Lucky Card tab's rules (lucky-card-live-logic.ts), with
- * Spin2Win's own values: RTP 20 to 100, bonus 1 to 4, a 100-second cycle, the
+ * Spin2Win's own values: RTP 30 to 100, bonus 1 to 4, a 100-second cycle, the
  * draw at second 90 and betting closed from second 88
- * (migrations 20261024210000, 20261024250000 and, for the RTP range,
- * 20261106100000).
+ * (migrations 20261024210000 and 20261024250000).
  */
 
 // The .ts extension is what Node's test runner needs; TypeScript does not allow
@@ -23,11 +22,10 @@ import { asWinningNumber, bonusLabel, embeddedCount, stakedNumbers } from '../..
 // Ranges and timing
 // ---------------------------------------------------------------------------
 
-// 20 to 100 since the Fair draw v2 install (20261106100000_spin2win_fair_draw_v2.sql).
-export const S2W_RTP_MIN = 20
+export const S2W_RTP_MIN = 30
 export const S2W_RTP_MAX = 100
 export const S2W_RTP_STEP = 0.5
-export const S2W_RTP_PRESETS: readonly number[] = [20, 30, 50, 70, 90, 95, 100]
+export const S2W_RTP_PRESETS: readonly number[] = [30, 50, 70, 90, 95, 100]
 
 /** One round lasts 100 seconds on the server clock (round_number = epoch / 100).
  *  The server's own seconds_into is `epoch seconds % 100`, so counting it

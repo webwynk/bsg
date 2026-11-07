@@ -18,10 +18,10 @@ import * as L from './lucky-card-live-logic.ts'
 // ---------------------------------------------------------------------------
 
 test('constants are the agreed values', () => {
-  assert.equal(L.LC_RTP_MIN, 20)
+  assert.equal(L.LC_RTP_MIN, 30)
   assert.equal(L.LC_RTP_MAX, 100)
   assert.equal(L.LC_RTP_STEP, 0.5)
-  assert.deepEqual([...L.LC_RTP_PRESETS], [20, 30, 50, 70, 90, 95, 100])
+  assert.deepEqual([...L.LC_RTP_PRESETS], [30, 50, 70, 90, 95, 100])
   assert.equal(L.LC_CYCLE_SECONDS, 103)
   assert.equal(L.LC_BOOST_LOCK_SECOND, 75)
   assert.equal(L.LC_CONFIG_LOCK_SECOND, 78)
@@ -31,16 +31,12 @@ test('every preset is itself a valid RTP', () => {
   for (const p of L.LC_RTP_PRESETS) assert.equal(L.isValidRtp(p), true, String(p))
 })
 
-test('isValidRtp: 20 to 100 inclusive, finite numbers only', () => {
-  assert.equal(L.isValidRtp(20), true)
-  assert.equal(L.isValidRtp(20.5), true)
+test('isValidRtp: 30 to 100 inclusive, finite numbers only', () => {
   assert.equal(L.isValidRtp(30), true)
-  assert.equal(L.isValidRtp(19.99), false)
-  assert.equal(L.isValidRtp(19), false)
   assert.equal(L.isValidRtp(100), true)
   assert.equal(L.isValidRtp(90), true)
   assert.equal(L.isValidRtp(96.5), true)
-  assert.equal(L.isValidRtp(29.99), true)
+  assert.equal(L.isValidRtp(29.99), false)
   assert.equal(L.isValidRtp(100.01), false)
   assert.equal(L.isValidRtp(0), false)
   assert.equal(L.isValidRtp(-5), false)

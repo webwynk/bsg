@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getLatestGameDrawsAction, getRtpAction, updateRtpAction, getBonusMultiplierAction, updateBonusMultiplierAction, getActiveRoundTimingAction, applyBonusToCurrentRoundAction } from '../actions'
-import { TC_RTP_MAX, TC_RTP_MIN, TC_RTP_PRESETS, TC_RTP_STEP } from './triple-chance-rtp'
 import { LuckyCardLive } from './lucky-card-live'
 import { Spin2WinLive } from './spin2win-live'
 import { Lucky16Live } from './lucky16-live'
@@ -501,16 +500,16 @@ export default function SuperAdminLiveGamePage() {
                           setRtpValue(val[0])
                         }
                       }}
-                      max={TC_RTP_MAX}
-                      min={TC_RTP_MIN}
-                      step={TC_RTP_STEP}
+                      max={100}
+                      min={50}
+                      step={0.5}
                       disabled={roundConfigLocked}
                       formatValue={(v) => `${v}%`}
                       className="w-full cursor-pointer disabled:opacity-50"
                     />
                     <div className="flex justify-between text-[9px] text-muted-foreground font-mono">
-                      <span>{TC_RTP_MIN}%</span>
-                      <span>{TC_RTP_MAX}%</span>
+                      <span>50%</span>
+                      <span>100%</span>
                     </div>
                   </div>
 
@@ -519,11 +518,9 @@ export default function SuperAdminLiveGamePage() {
                       the Recent Draw Stream carousel below) instead of a
                       wrapping 2-row grid; short "%"-only labels instead of
                       the old verbose "90% Aggressive" text. Same values,
-                      same onClick, same active/disabled logic as before.
-                      Values: 20/30/50/70/90/95/100 since the range became
-                      20 to 100 (same buttons as Spin2Win). */}
+                      same onClick, same active/disabled logic as before. */}
                   <div className="flex items-center gap-1.5 overflow-x-auto table-scroll pb-1">
-                    {TC_RTP_PRESETS.map((val) => (
+                    {[90, 92.5, 95, 96.5, 98, 100].map((val) => (
                       <button
                         key={val}
                         onClick={() => handleApplyRtp(val)}

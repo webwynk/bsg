@@ -72,7 +72,7 @@ import { roundId } from '@/lib/round-id'
 
 /**
  * Lucky 16 Card tab of the Live Game page. Everything the superadmin needs for
- * the game in one place: its own RTP (20 to 100), its own bonus (this round and
+ * the game in one place: its own RTP (30 to 100), its own bonus (this round and
  * next round, 1 to 10), the round in progress with the coins on each of the 16
  * cards, the recent draws and the draw ledger. Separate from the other games'
  * settings, which live in other tables and are never touched from here.

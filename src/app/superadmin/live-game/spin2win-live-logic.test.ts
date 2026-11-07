@@ -18,10 +18,10 @@ import * as L from './spin2win-live-logic.ts'
 // ---------------------------------------------------------------------------
 
 test('constants are the agreed values', () => {
-  assert.equal(L.S2W_RTP_MIN, 20)
+  assert.equal(L.S2W_RTP_MIN, 30)
   assert.equal(L.S2W_RTP_MAX, 100)
   assert.equal(L.S2W_RTP_STEP, 0.5)
-  assert.deepEqual([...L.S2W_RTP_PRESETS], [20, 30, 50, 70, 90, 95, 100])
+  assert.deepEqual([...L.S2W_RTP_PRESETS], [30, 50, 70, 90, 95, 100])
   assert.equal(L.S2W_CYCLE_SECONDS, 100)
   assert.equal(L.S2W_DRAW_SECOND, 90)
   assert.equal(L.S2W_BOOST_LOCK_SECOND, 85)
@@ -32,14 +32,11 @@ test('every preset is itself a valid RTP', () => {
   for (const p of L.S2W_RTP_PRESETS) assert.equal(L.isValidRtp(p), true, String(p))
 })
 
-test('isValidRtp: 20 to 100 inclusive, finite numbers only', () => {
-  assert.equal(L.isValidRtp(20), true)
+test('isValidRtp: 30 to 100 inclusive, finite numbers only', () => {
   assert.equal(L.isValidRtp(30), true)
-  assert.equal(L.isValidRtp(50), true)
   assert.equal(L.isValidRtp(100), true)
   assert.equal(L.isValidRtp(96.5), true)
-  assert.equal(L.isValidRtp(19.99), false)
-  assert.equal(L.isValidRtp(19), false)
+  assert.equal(L.isValidRtp(29.99), false)
   assert.equal(L.isValidRtp(100.01), false)
   for (const bad of [NaN, Infinity, '90', null, undefined]) assert.equal(L.isValidRtp(bad), false, String(bad))
 })

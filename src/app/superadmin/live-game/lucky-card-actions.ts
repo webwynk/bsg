@@ -13,8 +13,6 @@ import {
   isValidBonus,
 } from '@/lib/lucky-card'
 import {
-  LC_RTP_MAX,
-  LC_RTP_MIN,
   isValidRtp,
   shapeDraw,
   shapePlayerBet,
@@ -196,11 +194,10 @@ export async function updateLuckyCardRtpAction(rtpPercentage: number): Promise<{
   const auth = await requireAuth(['superadmin'])
   if (auth.error || !auth.user) return { success: false, rtp: null, error: auth.error ?? 'Unauthorized' }
 
-  // 20 to 100 (was 30 to 100 before 20261106120000_lucky_card_fair_draw_v2.sql).
-  // The database enforces this range too (CHECK on lucky_card_config and
-  // lucky_card_rounds); validating here just produces a friendlier message.
+  // The database enforces this range too (CHECK on lucky_card_config); validating
+  // here just produces a friendlier message.
   if (!isValidRtp(rtpPercentage)) {
-    return { success: false, rtp: null, error: `RTP must be a number between ${LC_RTP_MIN} and ${LC_RTP_MAX}.` }
+    return { success: false, rtp: null, error: 'RTP must be a number between 30 and 100.' }
   }
 
   try {

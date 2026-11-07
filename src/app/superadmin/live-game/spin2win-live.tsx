@@ -67,7 +67,7 @@ import { roundId } from '@/lib/round-id'
 
 /**
  * Spin2Win tab of the Live Game page. Everything the superadmin needs for the
- * game in one place: its own RTP (20 to 100), its own bonus (this round and
+ * game in one place: its own RTP (30 to 100), its own bonus (this round and
  * next round, N / 2x / 3x / 4x), the round in progress, the recent draws and
  * the draw ledger. Separate from Triple Chance's and Lucky Card's settings,
  * which live in other tables and are never touched from here.

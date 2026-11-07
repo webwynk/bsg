@@ -18,25 +18,24 @@ import assert from 'node:assert/strict'
 import * as L from './lucky16-live-logic.ts'
 
 test('constants are the agreed values', () => {
-  assert.equal(L.L16_RTP_MIN, 20)
+  assert.equal(L.L16_RTP_MIN, 30)
   assert.equal(L.L16_RTP_MAX, 100)
   assert.equal(L.L16_RTP_STEP, 0.5)
-  assert.deepEqual([...L.L16_RTP_PRESETS], [20, 30, 50, 70, 90, 95, 100])
+  assert.deepEqual([...L.L16_RTP_PRESETS], [30, 50, 70, 90, 95, 100])
   assert.equal(L.L16_CYCLE_SECONDS, 103)
   assert.equal(L.L16_BOOST_LOCK_SECOND, 85)
   assert.equal(L.L16_CONFIG_LOCK_SECOND, 88)
 })
 
-test('RTP: 20 to 100 only', () => {
-  for (const ok of [20, 20.5, 29.5, 30, 87.5, 90, 100]) assert.equal(L.isValidRtp(ok), true)
-  for (const bad of [19.99, 19, 100.01, 100.5, NaN, Infinity, '90', null]) assert.equal(L.isValidRtp(bad), false, String(bad))
+test('RTP: 30 to 100 only', () => {
+  for (const ok of [30, 87.5, 90, 100]) assert.equal(L.isValidRtp(ok), true)
+  for (const bad of [29.5, 100.5, NaN, Infinity, '90', null]) assert.equal(L.isValidRtp(bad), false, String(bad))
 })
 
 test('rtpRefusal: the range, then the lock', () => {
   assert.equal(L.rtpRefusal(90, 87), null)
-  assert.equal(L.rtpRefusal(20, 10), null)
-  assert.equal(L.rtpRefusal(19, 10), 'RTP must be a number between 20 and 100.')
-  assert.equal(L.rtpRefusal(101, 10), 'RTP must be a number between 20 and 100.')
+  assert.equal(L.rtpRefusal(29, 10), 'RTP must be a number between 30 and 100.')
+  assert.equal(L.rtpRefusal(101, 10), 'RTP must be a number between 30 and 100.')
   assert.match(String(L.rtpRefusal(90, 88)), /^Locked/)
 })
 
