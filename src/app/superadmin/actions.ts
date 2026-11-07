@@ -8,6 +8,7 @@ import { asRpc, type CurrentRound } from '@/lib/rpc'
 import { fetchMoneySummary } from '@/lib/money-totals'
 import { combineGames, houseResult, EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
 import { roundId } from '@/lib/round-id'
+import { TC_RTP_MAX, TC_RTP_MIN, isValidTcRtp } from './live-game/triple-chance-rtp'
 
 /**
  * SuperAdmin system actions — v2.
@@ -229,11 +230,12 @@ export async function updateRtpAction(rtpPercentage: number) {
   const auth = await requireAuth(['superadmin'])
   if (auth.error || !auth.user) return { success: false, error: auth.error ?? 'Unauthorized' }
 
-  // The database enforces this range too (CHECK on game_config); validating
-  // here just produces a friendlier message.
-  if (typeof rtpPercentage !== 'number' || !Number.isFinite(rtpPercentage)
-      || rtpPercentage < 50 || rtpPercentage > 100) {
-    return { success: false, error: 'RTP must be a number between 50 and 100.' }
+  // Triple Chance RTP, 30 to 100 (was 50 to 100 before
+  // 20261107140000_tc_rtp_30_to_100.sql). The database enforces this range too
+  // (CHECK on game_config and rounds); validating here just produces a
+  // friendlier message. Range shared with the slider: live-game/triple-chance-rtp.ts.
+  if (!isValidTcRtp(rtpPercentage)) {
+    return { success: false, error: `RTP must be a number between ${TC_RTP_MIN} and ${TC_RTP_MAX}.` }
   }
 
   try {
