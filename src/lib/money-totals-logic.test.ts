@@ -180,3 +180,31 @@ test('combineGames with no Lucky 16 Card bets equals the three games', () => {
   const s = M.readMoneySummary({ today: { lucky_card: { bets: 2, stake: 200, payout: 10 } } })
   assert.deepEqual(M.combineGames(s.today), { bets: 2, stake: 200, payout: 10 })
 })
+
+// ---------------------------------------------------------------------------
+// The game list (GAMES): one entry per game the database reports on
+// ---------------------------------------------------------------------------
+
+test('GAMES lists the 4 games in display order, each key once', () => {
+  assert.deepEqual(M.GAMES.map((g: { key: string }) => g.key), ['triple_chance', 'lucky_card', 'spin2win', 'lucky16'])
+  assert.deepEqual(M.GAMES.map((g: { label: string }) => g.label), ['Triple Chance', 'Lucky Card', 'Spin2Win', 'Lucky 16 Card'])
+  assert.equal(new Set(M.GAMES.map((g: { key: string }) => g.key)).size, M.GAMES.length)
+})
+
+test('GAMES matches the games staff_money_summary returns (latest migration of that function)', async () => {
+  const fs = await import('node:fs')
+  const dir = 'supabase/migrations/'
+  const latest = fs.readdirSync(dir).filter((f: string) => fs.readFileSync(dir + f, 'utf8').includes('FUNCTION public.staff_money_summary')).sort().pop()
+  const sql = fs.readFileSync(dir + latest, 'utf8')
+  const list = sql.match(/CROSS JOIN \(VALUES ([^)]*\)(?:, \([^)]*\))*)\) AS g\(game\)/)
+  assert.ok(list, 'game list found in ' + latest)
+  const sqlKeys = [...list[1].matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1])
+  assert.deepEqual([...sqlKeys].sort(), M.GAMES.map((g: { key: string }) => g.key).sort())
+})
+
+test('readers and totals follow GAMES: every game present, unknown games ignored', () => {
+  const s = M.readMoneySummary({ window: { lucky16: { bets: 1, stake: 10, payout: 0 }, some_future_game: { bets: 9, stake: 900, payout: 0 } } })
+  assert.deepEqual(Object.keys(s.window).sort(), M.GAMES.map((g: { key: string }) => g.key).sort())
+  assert.deepEqual(M.combineGames(s.window), { bets: 1, stake: 10, payout: 0 })
+  assert.deepEqual(Object.keys(M.EMPTY_MONEY_BY_GAME).sort(), M.GAMES.map((g: { key: string }) => g.key).sort())
+})

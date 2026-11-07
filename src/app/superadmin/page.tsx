@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
-import { Users, Coins, Percent, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, ArrowUpRight, ArrowDownRight, Search, Gamepad2 } from 'lucide-react'
+import { Users, Coins, Percent, ShieldCheck, TrendingUp, TrendingDown, RefreshCw, ArrowUpRight, ArrowDownRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
@@ -13,8 +13,7 @@ import { formatCurrency } from '@/lib/utils'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
-import { MoneySplitLine } from '@/components/money-split-line'
-import { EMPTY_MONEY_BY_GAME, houseResult, type MoneyByGame } from '@/lib/money-totals-logic'
+import { GameplayStatsCard } from '@/components/gameplay-stats-card'
 
 export default function SuperAdminDashboard() {
   const [rtpValue, setRtpValue] = React.useState(96.5)
@@ -23,20 +22,8 @@ export default function SuperAdminDashboard() {
   const [activeAgents, setActiveAgents] = React.useState(0)
   const [activePlayers, setActivePlayers] = React.useState(0)
 
-  // Gameplay & Bet Volume Metrics State
-  const [gameplayScope, setGameplayScope] = React.useState<'today' | 'lifetime'>('today')
-  const [totalBetsCount, setTotalBetsCount] = React.useState(0)
-  const [totalBetCoins, setTotalBetCoins] = React.useState(0)
-  const [totalWinCoins, setTotalWinCoins] = React.useState(0)
-  const [totalLostCoins, setTotalLostCoins] = React.useState(0)
-  const [todayBetsCount, setTodayBetsCount] = React.useState(0)
-  const [todayBetCoins, setTodayBetCoins] = React.useState(0)
-  const [todayWinCoins, setTodayWinCoins] = React.useState(0)
-  const [todayLostCoins, setTodayLostCoins] = React.useState(0)
-  // Each game's own share of the combined figures above (Triple Chance, Lucky
-  // Card) -- shown as a small line under each figure (Issue #122 / Lucky Card D3).
-  const [lifetimeSplit, setLifetimeSplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
-  const [todaySplit, setTodaySplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
+  // Gameplay figures (bets, coins bet/won, net) live in their own card now:
+  // GameplayStatsCard (per-game tabs + date range), which loads its own data.
 
   const [systemLogs, setSystemLogs] = React.useState<Array<{ id: string; kind: string; detail: string; time: string; actor: string }>>([])
   // Issue #15: surfaces a real backend failure instead of silently leaving
@@ -93,16 +80,6 @@ export default function SuperAdminDashboard() {
         setTodayWithdrawn(resMetrics.today_withdrawn || 0)
         setActiveAgents(resMetrics.active_agents || 0)
         setActivePlayers(resMetrics.active_players || 0)
-        setTotalBetsCount(resMetrics.lifetime_bets || 0)
-        setTotalBetCoins(resMetrics.lifetime_stake || 0)
-        setTotalWinCoins(resMetrics.lifetime_payout || 0)
-        setTotalLostCoins(resMetrics.lifetime_house || 0)
-        setTodayBetsCount(resMetrics.today_bets || 0)
-        setTodayBetCoins(resMetrics.today_stake || 0)
-        setTodayWinCoins(resMetrics.today_payout || 0)
-        setTodayLostCoins(resMetrics.today_house || 0)
-        setLifetimeSplit(resMetrics.lifetime_split)
-        setTodaySplit(resMetrics.today_split)
       }
       // resRtp.rtp is a truthy 96 even on error (its own hardcoded fallback),
       // so this must check .error explicitly -- a bare truthy check on rtp
@@ -140,11 +117,11 @@ export default function SuperAdminDashboard() {
   // "SUBSCRIBED"/connected status was proven able to stay true for an entire
   // session while every event silently failed a server-side authorization
   // check, with zero client-visible signal. Tier 'normal' (10s, not the 3s
-  // 'fast' tier) since getSystemOverviewMetricsAction does full-table scans
-  // (profiles/coin_ledger/bets, unfiltered) -- this is a summary view, not a
+  // 'fast' tier) since getSystemOverviewMetricsAction scans profiles and
+  // today's coin_ledger credits -- this is a summary view, not a
   // live-gameplay-outcome page, so the heavier query cost gets a longer
-  // interval. Matches getSystemOverviewMetricsAction's actual query scope,
-  // re-verified by reading the live action body. Note: getAuditLogsAction
+  // interval. (Bet totals moved to GameplayStatsCard on 2026-11-07, which has
+  // its own useLiveSync on bets/coin_ledger.) Note: getAuditLogsAction
   // reads audit_log, which is not in the Realtime publication (out of scope
   // since Issue #91's original design) -- the audit log list on this page
   // still only refreshes on this same poll or a manual refresh, never on its
@@ -176,8 +153,6 @@ export default function SuperAdminDashboard() {
     setLastLogFilters([logCategory, logSearchQuery])
     setLogPage(1)
   }
-
-  const gameSplit = gameplayScope === 'today' ? todaySplit : lifetimeSplit
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto px-2 sm:px-4 md:px-0 pb-12">
@@ -317,116 +292,8 @@ export default function SuperAdminDashboard() {
         </Card>
       </div>
 
-      {/* 📊 Unified Gameplay & Bets Audit Widget (Compact Mobile First Layout) */}
-      <Card className="bg-card border-border/80 shadow-2xs rounded-2xl p-2.5 sm:p-4 space-y-2.5">
-        <div className="flex items-center justify-between gap-1 border-b border-border/50 pb-2">
-          <div className="flex items-center space-x-1.5 sm:space-x-2">
-            <div className="p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
-              <Gamepad2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </div>
-            <div>
-              <h2 className="text-xs sm:text-base font-black tracking-tight text-foreground leading-tight">
-                Gameplay & Bets Audit
-              </h2>
-              <p className="text-[10px] text-muted-foreground font-semibold hidden sm:block">
-                Network-wide bet counts, total wagered coins, payouts, and net house profit.
-              </p>
-            </div>
-          </div>
-
-          {/* Scope Toggle Pills: Today (IST) vs Lifetime */}
-          <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[9px] sm:text-[10px] font-bold shrink-0">
-            <button
-              onClick={() => setGameplayScope('today')}
-              className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer ${
-                gameplayScope === 'today'
-                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Today (IST)
-            </button>
-            <button
-              onClick={() => setGameplayScope('lifetime')}
-              className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer ${
-                gameplayScope === 'lifetime'
-                  ? 'bg-primary text-primary-foreground font-black shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Lifetime
-            </button>
-          </div>
-        </div>
-
-        {/* 4-Metric High-Density Grid (2-Column Mobile / 4-Column Desktop) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 sm:divide-x divide-border/60">
-          {/* Metric 1: Bet Count (Number of Plays) */}
-          <div className="p-2 sm:p-0 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
-              Bets Placed
-            </span>
-            {isLoadingMetrics ? (
-              <div className="h-5 sm:h-6 w-14 sm:w-16 bg-secondary/80 animate-pulse rounded my-0.5" />
-            ) : (
-              <div className="text-xs sm:text-xl font-black font-mono text-foreground truncate">
-                {gameplayScope === 'today' ? todayBetsCount : totalBetsCount} <span className="text-[10px] sm:text-[11px] text-muted-foreground font-normal">Plays</span>
-              </div>
-            )}
-            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.bets} lucky={gameSplit.lucky_card.bets} spin={gameSplit.spin2win.bets} l16={gameSplit.lucky16.bets} kind="count" />}
-            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total bets placed by players</p>
-          </div>
-
-          {/* Metric 2: Coins Wagered (In) */}
-          <div className="p-2 sm:p-0 sm:pl-3 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
-              Coins Bet (In)
-            </span>
-            {isLoadingMetrics ? (
-              <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
-            ) : (
-              <div className="text-xs sm:text-xl font-black font-mono text-foreground truncate">
-                {formatCurrency(gameplayScope === 'today' ? todayBetCoins : totalBetCoins)}
-              </div>
-            )}
-            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.stake} lucky={gameSplit.lucky_card.stake} spin={gameSplit.spin2win.stake} l16={gameSplit.lucky16.stake} />}
-            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Total wagered coins</p>
-          </div>
-
-          {/* Metric 3: Coins Won (Out) */}
-          <div className="p-2 sm:p-0 sm:pl-3 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
-              Coins Won (Out)
-            </span>
-            {isLoadingMetrics ? (
-              <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
-            ) : (
-              <div className="text-xs sm:text-xl font-black font-mono text-amber-500 truncate">
-                {formatCurrency(gameplayScope === 'today' ? todayWinCoins : totalWinCoins)}
-              </div>
-            )}
-            {!isLoadingMetrics && <MoneySplitLine triple={gameSplit.triple_chance.payout} lucky={gameSplit.lucky_card.payout} spin={gameSplit.spin2win.payout} l16={gameSplit.lucky16.payout} />}
-            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Returned to winning players</p>
-          </div>
-
-          {/* Metric 4: Net Lost Coins (House P/L) */}
-          <div className="p-2 sm:p-0 sm:pl-3 rounded-xl bg-secondary/20 sm:bg-transparent border border-border/40 sm:border-0 space-y-0.5">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground block truncate">
-              Net Lost (House P/L)
-            </span>
-            {isLoadingMetrics ? (
-              <div className="h-5 sm:h-6 w-16 sm:w-20 bg-secondary/80 animate-pulse rounded my-0.5" />
-            ) : (
-              <div className={`text-xs sm:text-xl font-black font-mono truncate ${(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                {(gameplayScope === 'today' ? todayLostCoins : totalLostCoins) >= 0 ? '+' : ''}
-                {formatCurrency(gameplayScope === 'today' ? todayLostCoins : totalLostCoins)}
-              </div>
-            )}
-            {!isLoadingMetrics && <MoneySplitLine triple={houseResult(gameSplit.triple_chance)} lucky={houseResult(gameSplit.lucky_card)} spin={houseResult(gameSplit.spin2win)} l16={houseResult(gameSplit.lucky16)} kind="signed" />}
-            <p className="text-[9px] text-muted-foreground/70 hidden sm:block">Net lost coins by players</p>
-          </div>
-        </div>
-      </Card>
+      {/* Gameplay & Bets Audit: per-game tabs + date range (components/gameplay-stats-card.tsx) */}
+      <GameplayStatsCard />
 
 
 

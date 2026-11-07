@@ -6,7 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { requireAuth } from '@/lib/auth-guard'
 import { asRpc, type CurrentRound } from '@/lib/rpc'
 import { fetchMoneySummary } from '@/lib/money-totals'
-import { combineGames, houseResult, EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
+import { EMPTY_MONEY_BY_GAME, type MoneyByGame } from '@/lib/money-totals-logic'
+import { rangeProblem, rangeToInstants, type DayRange } from '@/lib/gameplay-range'
 import { roundId } from '@/lib/round-id'
 import { TC_RTP_MAX, TC_RTP_MIN, isValidTcRtp } from './live-game/triple-chance-rtp'
 
@@ -115,26 +116,14 @@ export interface SystemMetrics {
   today_withdrawn: number
   active_agents: number
   active_players: number
-  lifetime_bets: number
-  lifetime_stake: number
-  lifetime_payout: number
-  lifetime_house: number
-  today_bets: number
-  today_stake: number
-  today_payout: number
-  today_house: number
-  // Issue #122 / Lucky Card D3: the lifetime_* and today_* figures above now
-  // add up BOTH games; these show each game's own share (bets, stake, payout).
-  lifetime_split: MoneyByGame
-  today_split: MoneyByGame
+  // The bet/stake/payout figures moved to getGameplayStatsAction (2026-11-07,
+  // per-game tabs with a date range), so this action no longer reads them.
   error: string | null
 }
 
 const EMPTY_METRICS: SystemMetrics = {
   total_coins: 0, today_deposited: 0, today_withdrawn: 0, active_agents: 0, active_players: 0,
-  lifetime_bets: 0, lifetime_stake: 0, lifetime_payout: 0, lifetime_house: 0,
-  today_bets: 0, today_stake: 0, today_payout: 0, today_house: 0,
-  lifetime_split: EMPTY_MONEY_BY_GAME, today_split: EMPTY_MONEY_BY_GAME, error: null,
+  error: null,
 }
 
 export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
@@ -145,17 +134,15 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
     const db = createAdminClient()
     const dayStart = istDayStartISO()
 
-    // Issue #122: bets and payouts of BOTH games are added up by the database
-    // (exact, no row limit) instead of downloading every bet row and summing in
-    // JavaScript, which silently stopped at 1,000 rows. NOTE: the .range() on
-    // the two reads below does NOT lift PostgREST's 1,000-row cap (it was
-    // believed to); both tables are small today, flagged in Issue #122.
-    const [profilesRes, issuedRes, money] = await Promise.all([
+    // Bets and payouts are no longer read here: the Gameplay & Bets Audit card
+    // gets them from getGameplayStatsAction. NOTE: the .range() on the two
+    // reads below does NOT lift PostgREST's 1,000-row cap (it was believed
+    // to); both tables are small today, flagged in Issue #122.
+    const [profilesRes, issuedRes] = await Promise.all([
       db.from('profiles').select('role, coin_balance, is_active').range(0, 999999),
       db.from('coin_ledger').select('amount')
         .in('kind', ['admin_credit', 'admin_debit'])
         .gte('created_at', dayStart).range(0, 999999),
-      fetchMoneySummary({ dayStart }),
     ])
     if (profilesRes.error)  throw new Error(`profiles: ${profilesRes.error.message}`)
     if (issuedRes.error)    throw new Error(`ledger: ${issuedRes.error.message}`)
@@ -180,31 +167,52 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
       else today_withdrawn += amount
     }
 
-    // Both games added together; each game's own share goes out as *_split.
-    const lifetime = combineGames(money.lifetime)
-    const today = combineGames(money.today)
-
     return {
       total_coins,
       today_deposited,
       today_withdrawn,
       active_agents,
       active_players,
-      lifetime_bets: lifetime.bets,
-      lifetime_stake: lifetime.stake,
-      lifetime_payout: lifetime.payout,
-      lifetime_house: houseResult(lifetime),
-      today_bets: today.bets,
-      today_stake: today.stake,
-      today_payout: today.payout,
-      today_house: houseResult(today),
-      lifetime_split: money.lifetime,
-      today_split: money.today,
       error: null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { ...EMPTY_METRICS, error: `Could not load metrics: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAMEPLAY & BETS AUDIT (per game, any IST date range)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Each game's bets, coins bet and coins won for the superadmin dashboard's
+ * "Gameplay & Bets Audit" card (components/gameplay-stats-card.tsx). `range`
+ * is whole IST days (inclusive), null = lifetime. Read-only: it uses the same
+ * database function as every other money figure (staff_money_summary, through
+ * fetchMoneySummary) with its from/to window; no game function is involved.
+ * A bet counts on the IST day it was placed. One "bet" = one player in one
+ * round (their phone bets and Print tickets in that round together).
+ */
+export async function getGameplayStatsAction(range: DayRange | null): Promise<{
+  games: MoneyByGame
+  error: string | null
+}> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) return { games: EMPTY_MONEY_BY_GAME, error: auth.error }
+
+  if (range !== null) {
+    const problem = rangeProblem(range, new Date())
+    if (problem) return { games: EMPTY_MONEY_BY_GAME, error: problem }
+  }
+
+  try {
+    const window = range ? rangeToInstants(range) : { from: null, to: null }
+    const money = await fetchMoneySummary(window)
+    return { games: money.window, error: null }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { games: EMPTY_MONEY_BY_GAME, error: `Could not load gameplay figures: ${message}` }
   }
 }
 

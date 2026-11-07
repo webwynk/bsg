@@ -10,6 +10,28 @@
  * 2026-10-25, Lucky 16 Card added 2026-10-30).
  */
 
+// ---------------------------------------------------------------------------
+// The game list (registry) -- the ONE place the dashboard lists its games
+// ---------------------------------------------------------------------------
+
+/**
+ * Every game the dashboard reports on, in display order. `key` is the name the
+ * database function staff_money_summary uses for that game's figures. Adding a
+ * game = its bet table added to staff_money_summary (one migration) + one entry
+ * here; the Gameplay & Bets Audit card then shows a tab for it by itself, and
+ * the readers/totals below include it automatically. Lives in this pure file
+ * (no imports) so the node --test tests can load it directly.
+ */
+export const GAMES = [
+  { key: 'triple_chance', label: 'Triple Chance', dot: 'bg-violet-500' },
+  { key: 'lucky_card', label: 'Lucky Card', dot: 'bg-rose-500' },
+  { key: 'spin2win', label: 'Spin2Win', dot: 'bg-amber-500' },
+  { key: 'lucky16', label: 'Lucky 16 Card', dot: 'bg-sky-500' },
+] as const
+
+/** A game's database key, e.g. 'lucky_card'. */
+export type GameKey = (typeof GAMES)[number]['key']
+
 /** One game's figures over one window: how many bets, the coins bet, the coins paid out. */
 export interface GameMoney {
   bets: number
@@ -17,12 +39,8 @@ export interface GameMoney {
   payout: number
 }
 
-export interface MoneyByGame {
-  triple_chance: GameMoney
-  lucky_card: GameMoney
-  spin2win: GameMoney
-  lucky16: GameMoney
-}
+/** Each game's figures, one entry per game in GAMES. */
+export type MoneyByGame = Record<GameKey, GameMoney>
 
 /** The three windows staff_money_summary answers in one call. */
 export interface MoneySummary {
@@ -33,12 +51,12 @@ export interface MoneySummary {
 
 export const ZERO_GAME_MONEY: GameMoney = { bets: 0, stake: 0, payout: 0 }
 
-export const EMPTY_MONEY_BY_GAME: MoneyByGame = {
-  triple_chance: ZERO_GAME_MONEY,
-  lucky_card: ZERO_GAME_MONEY,
-  spin2win: ZERO_GAME_MONEY,
-  lucky16: ZERO_GAME_MONEY,
+/** Builds a MoneyByGame with one entry per game in GAMES. */
+function byGame(make: (key: GameKey) => GameMoney): MoneyByGame {
+  return Object.fromEntries(GAMES.map(g => [g.key, make(g.key)])) as MoneyByGame
 }
+
+export const EMPTY_MONEY_BY_GAME: MoneyByGame = byGame(() => ZERO_GAME_MONEY)
 
 export const EMPTY_MONEY_SUMMARY: MoneySummary = {
   lifetime: EMPTY_MONEY_BY_GAME,
@@ -58,13 +76,9 @@ function readGame(raw: unknown): GameMoney {
 
 function readByGame(raw: unknown): MoneyByGame {
   const r = (raw ?? {}) as Record<string, unknown>
-  // An answer from before a game was added has no part for it: it reads as 0.
-  return {
-    triple_chance: readGame(r.triple_chance),
-    lucky_card: readGame(r.lucky_card),
-    spin2win: readGame(r.spin2win),
-    lucky16: readGame(r.lucky16),
-  }
+  // One entry per game in GAMES. An answer from before a game was added has no
+  // part for it: it reads as 0. A part for a game not in GAMES is ignored.
+  return byGame(key => readGame(r[key]))
 }
 
 /** Turns the database's JSON answer into numbers; anything missing becomes 0. */
@@ -77,13 +91,15 @@ export function readMoneySummary(raw: unknown): MoneySummary {
   }
 }
 
-/** All four games added together. */
+/** Every game in GAMES added together. */
 export function combineGames(m: MoneyByGame): GameMoney {
-  return {
-    bets: m.triple_chance.bets + m.lucky_card.bets + m.spin2win.bets + m.lucky16.bets,
-    stake: m.triple_chance.stake + m.lucky_card.stake + m.spin2win.stake + m.lucky16.stake,
-    payout: m.triple_chance.payout + m.lucky_card.payout + m.spin2win.payout + m.lucky16.payout,
+  const total = { bets: 0, stake: 0, payout: 0 }
+  for (const g of GAMES) {
+    total.bets += m[g.key].bets
+    total.stake += m[g.key].stake
+    total.payout += m[g.key].payout
   }
+  return total
 }
 
 /** What the house kept: the coins bet minus the coins paid out (negative when players won more). */
