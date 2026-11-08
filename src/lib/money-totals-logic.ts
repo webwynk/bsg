@@ -120,29 +120,6 @@ export function marginPct(m: GameMoney): number {
   return m.stake > 0 ? (houseResult(m) / m.stake) * 100 : 0
 }
 
-/** One player's row from staff_player_money_rows (all four games combined). */
-export interface PlayerMoneyRow {
-  user_id: string
-  plays: number
-  stake: number
-  payout: number
-  last_played_at: string | null
-}
-
-/** Turns the database's rows into numbers. */
-export function readPlayerMoneyRows(raw: unknown): PlayerMoneyRow[] {
-  if (!Array.isArray(raw)) return []
-  return raw.map(r => {
-    const x = (r ?? {}) as Record<string, unknown>
-    return {
-      user_id: String(x.user_id ?? ''),
-      plays: num(x.plays),
-      stake: num(x.stake),
-      payout: num(x.payout),
-      last_played_at: x.last_played_at == null ? null : String(x.last_played_at),
-    }
-  })
-}
 
 // ---------------------------------------------------------------------------
 // The small "Triple Chance · Lucky Card · Spin2Win · Lucky 16 Card" line under a combined figure

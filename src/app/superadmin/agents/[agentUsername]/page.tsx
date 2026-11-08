@@ -27,7 +27,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, Activity, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, Gamepad2, X, RefreshCw, TrendingUp, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Users, Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, Gamepad2, X, RefreshCw, TrendingUp, CheckCircle2 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { pickedDayKey } from "@/lib/date-range"
 import { playerStatus } from "@/lib/player-status"
@@ -36,6 +36,7 @@ import { ErrorBanner } from "@/components/error-banner"
 import type { PlayerCoinMovement } from '@/app/agent/players/actions'
 import { PlayerGameHistory } from "@/components/player-game-history"
 import { PlayerPnlAudit } from "@/components/player-pnl-audit"
+import { AgentOverviewPanel } from "@/components/agent-overview-panel"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
@@ -674,69 +675,15 @@ export default function AgentDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Stats Metric Strip (Compact Modern 3-Column Grid) */}
-      <div className="grid gap-2 sm:gap-3 grid-cols-3">
-        <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-emerald-500/30 transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate">
-              Coins
-            </span>
-            <div className="hidden sm:flex p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-              <Coins className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            {isRefreshing ? (
-              <div className="h-5 w-16 bg-secondary/80 rounded animate-pulse" />
-            ) : (
-              <div className="text-xs sm:text-lg font-mono font-black text-foreground tracking-tight truncate">
-                {formatCurrency(agentInfo?.coin_balance || 0)}
-              </div>
-            )}
-            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Available for allocation</span>
-          </div>
-        </Card>
-
-        <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-primary/30 transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate">
-              Players
-            </span>
-            <div className="hidden sm:flex p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
-              <Users className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            {isRefreshing ? (
-              <div className="h-5 w-10 bg-secondary/80 rounded animate-pulse" />
-            ) : (
-              <div className="text-xs sm:text-lg font-mono font-black text-foreground tracking-tight">
-                {players.length}
-              </div>
-            )}
-            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Sub-registered network</span>
-          </div>
-        </Card>
-
-        <Card className="bg-card border border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs hover:border-amber-500/30 transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground truncate">
-              Status
-            </span>
-            <div className="hidden sm:flex p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
-              <Activity className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <div className="flex items-center justify-between mt-1">
-            {agentInfo && (
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${playerStatus(agentInfo).badgeClass}`}>
-                {playerStatus(agentInfo).label}
-              </span>
-            )}
-            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">Operational status</span>
-          </div>
-        </Card>
-      </div>
+      {/* Agent overview (2026-11-08): Coins, Players, Status, Commission % chips + P&L & Commission block */}
+      <AgentOverviewPanel
+        agentIdentifier={agentUsername}
+        agentUsername={agentInfo?.username ?? agentUsername}
+        coins={agentInfo?.coin_balance || 0}
+        playersCount={players.length}
+        status={agentInfo ? playerStatus(agentInfo) : null}
+        loading={isRefreshing}
+      />
 
       {/* Main Player & History Layout Grid (3:9 Ratio) */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 min-h-[600px]">

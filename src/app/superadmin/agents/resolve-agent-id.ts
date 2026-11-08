@@ -2,9 +2,10 @@ import { createAdminClient } from '@/lib/supabase'
 
 /**
  * Issue #93: split out of actions.ts (a 'use server' file) into its own
- * plain module so it can be imported by profit-report-logic.ts and
- * player-history-logic.ts without creating a circular import between those
- * modules and superadmin/agents/actions.ts (which itself imports from both).
+ * plain module so it can be imported by player-history-logic.ts and the
+ * commission actions without creating a circular import with
+ * superadmin/agents/actions.ts. (profit-report-logic.ts, its other early user,
+ * was removed on 2026-11-08 with the old agent P&L page.)
  */
 export async function resolveAgentId(identifier: string): Promise<string | null> {
   if (!identifier || identifier === 'all') return null

@@ -2,9 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase'
 import {
   readMoneySummary,
-  readPlayerMoneyRows,
   type MoneySummary,
-  type PlayerMoneyRow,
 } from '@/lib/money-totals-logic'
 
 /**
@@ -54,19 +52,4 @@ export async function fetchMoneySummary(args: {
   })
   if (error) throw new Error(`money totals: ${error.message}`)
   return readMoneySummary(data)
-}
-
-/** One row per player of `agentId` who played in the window (both games combined). */
-export async function fetchPlayerMoneyRows(
-  agentId: string,
-  from?: string | null,
-  to?: string | null
-): Promise<PlayerMoneyRow[]> {
-  const { data, error } = await db().rpc('staff_player_money_rows', {
-    p_agent_id: agentId,
-    p_from: from ?? null,
-    p_to: to ?? null,
-  })
-  if (error) throw new Error(`player money rows: ${error.message}`)
-  return readPlayerMoneyRows(data)
 }

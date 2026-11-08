@@ -167,7 +167,7 @@ async function runAgentDetail(agentId: string) {
  * report it also loaded was dropped on 2026-11-08: the page's P&L Audit tab now
  * shows the selected player's days via getPlayerPnlDaysAction.) It replaced --
  * replaces the superadmin agent-detail page's previous 2-3 separate actions
- * (getAgentDetailAction + getAgentProfitReportAction +
+ * (getAgentDetailAction + getAgentProfitReportAction (removed 2026-11-08) +
  * getPlayerDetailHistoryAction), which fired independently every 3-second
  * live-sync poll, each paying its own auth round-trip. agentIdentifier is
  * resolved once here and reused for both the detail lookup and the profit

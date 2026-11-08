@@ -81,24 +81,6 @@ test('marginPct is the house result as a percentage of the stake, 0 when nothing
   assert.equal(M.marginPct({ bets: 3, stake: 0, payout: 5 }), 0)
 })
 
-test('readPlayerMoneyRows reads rows, text numbers and a missing last-played time', () => {
-  const rows = M.readPlayerMoneyRows([
-    { user_id: 'u1', plays: '79', stake: 174196, payout: '171733', last_played_at: '2026-10-06T18:00:49.781793+00:00' },
-    { user_id: 'u2', plays: 2, stake: 20, payout: 0, last_played_at: null },
-    { user_id: 'u3' },
-  ])
-  assert.deepEqual(rows[0], { user_id: 'u1', plays: 79, stake: 174196, payout: 171733, last_played_at: '2026-10-06T18:00:49.781793+00:00' })
-  assert.deepEqual(rows[1], { user_id: 'u2', plays: 2, stake: 20, payout: 0, last_played_at: null })
-  assert.deepEqual(rows[2], { user_id: 'u3', plays: 0, stake: 0, payout: 0, last_played_at: null })
-})
-
-test('readPlayerMoneyRows: not a list means no rows', () => {
-  assert.deepEqual(M.readPlayerMoneyRows(null), [])
-  assert.deepEqual(M.readPlayerMoneyRows(undefined), [])
-  assert.deepEqual(M.readPlayerMoneyRows({}), [])
-  assert.deepEqual(M.readPlayerMoneyRows([]), [])
-})
-
 test('formatSplitValue: counts, coins, signed coins and percentages', () => {
   assert.equal(M.formatSplitValue(9508, 'count'), '9508')
   assert.equal(M.formatSplitValue(0, 'count'), '0')
