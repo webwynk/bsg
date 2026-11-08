@@ -9,10 +9,8 @@ import { isCredit, toWholeCoins, type TransferDirection } from '@/lib/ledger'
 import { USERNAME_PATTERN } from '@/lib/validation'
 import { fetchAccountCodes } from '@/lib/account-codes'
 import { resolveAgentId } from './resolve-agent-id'
-import { runAgentProfitReport, EMPTY_PROFIT_REPORT } from '@/app/agent/profit/profit-report-logic'
 import { runPlayerDetailHistory } from '@/app/agent/players/player-history-logic'
-import type { ProfitReportParams, ProfitReport } from '@/app/agent/profit/actions'
-import type { PlayerGamePlay, PlayerCoinMovement } from '@/app/agent/players/actions'
+import type { PlayerCoinMovement } from '@/app/agent/players/actions'
 
 /**
  * Agent administration — v2.
@@ -164,8 +162,10 @@ async function runAgentDetail(agentId: string) {
 }
 
 /**
- * Issue #93: combines the agent-detail lookup, the profit report, and
- * (optionally) the selected player's history into ONE requireAuth() call --
+ * Issue #93: combines the agent-detail lookup and (optionally) the selected
+ * player's coin movements into ONE requireAuth() call. (The agent-wide profit
+ * report it also loaded was dropped on 2026-11-08: the page's P&L Audit tab now
+ * shows the selected player's days via getPlayerPnlDaysAction.) It replaced --
  * replaces the superadmin agent-detail page's previous 2-3 separate actions
  * (getAgentDetailAction + getAgentProfitReportAction +
  * getPlayerDetailHistoryAction), which fired independently every 3-second
@@ -175,33 +175,30 @@ async function runAgentDetail(agentId: string) {
  */
 export async function getAgentDetailBundleAction(
   agentIdentifier: string,
-  profitParams: Omit<ProfitReportParams, 'targetAgentId'>,
   selectedPlayerId?: string
 ): Promise<{
   agent: Awaited<ReturnType<typeof runAgentDetail>>['agent']
   players: Awaited<ReturnType<typeof runAgentDetail>>['players']
   error: string | null
-  profit: ProfitReport
-  history: { game_plays: PlayerGamePlay[]; coin_movements: PlayerCoinMovement[]; error: string | null }
+  history: { coin_movements: PlayerCoinMovement[]; error: string | null }
 }> {
-  const emptyHistory = { game_plays: [] as PlayerGamePlay[], coin_movements: [] as PlayerCoinMovement[], error: null }
+  const emptyHistory = { coin_movements: [] as PlayerCoinMovement[], error: null }
   const auth = await requireAuth(['superadmin'])
   if (auth.error || !auth.user) {
-    return { agent: null, players: [], error: auth.error, profit: EMPTY_PROFIT_REPORT, history: emptyHistory }
+    return { agent: null, players: [], error: auth.error, history: emptyHistory }
   }
 
   const agentId = await resolveAgentId(agentIdentifier)
   if (!agentId) {
-    return { agent: null, players: [], error: 'Agent not found.', profit: EMPTY_PROFIT_REPORT, history: emptyHistory }
+    return { agent: null, players: [], error: 'Agent not found.', history: emptyHistory }
   }
 
-  const [detail, profit, history] = await Promise.all([
+  const [detail, history] = await Promise.all([
     runAgentDetail(agentId),
-    runAgentProfitReport(auth.user, { ...profitParams, targetAgentId: agentId }),
     selectedPlayerId ? runPlayerDetailHistory(auth.user, selectedPlayerId) : Promise.resolve(emptyHistory),
   ])
 
-  return { agent: detail.agent, players: detail.players, error: detail.error, profit, history }
+  return { agent: detail.agent, players: detail.players, error: detail.error, history }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

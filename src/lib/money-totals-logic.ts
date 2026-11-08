@@ -81,6 +81,14 @@ function readByGame(raw: unknown): MoneyByGame {
   return byGame(key => readGame(r[key]))
 }
 
+/**
+ * One per-game answer (e.g. staff_player_money_summary's) as numbers, one entry
+ * per game in GAMES; anything missing becomes 0.
+ */
+export function readByGameFrom(raw: unknown): MoneyByGame {
+  return readByGame(raw)
+}
+
 /** Turns the database's JSON answer into numbers; anything missing becomes 0. */
 export function readMoneySummary(raw: unknown): MoneySummary {
   const r = (raw ?? {}) as Record<string, unknown>

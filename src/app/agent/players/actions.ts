@@ -127,10 +127,10 @@ export async function getPlayersWithHistoryAction(
 ): Promise<{
   players: PlayerRow[]
   error: string | null
-  history: { game_plays: PlayerGamePlay[]; coin_movements: PlayerCoinMovement[]; error: string | null }
+  history: { coin_movements: PlayerCoinMovement[]; error: string | null }
 }> {
   const auth = await requireAuth(['agent', 'superadmin'])
-  const emptyHistory = { game_plays: [] as PlayerGamePlay[], coin_movements: [] as PlayerCoinMovement[], error: null }
+  const emptyHistory = { coin_movements: [] as PlayerCoinMovement[], error: null }
   if (auth.error || !auth.user) return { players: [], error: auth.error, history: emptyHistory }
 
   const [list, history] = await Promise.all([
@@ -151,12 +151,11 @@ export async function getPlayersWithHistoryAction(
  * just to get one player's history.
  */
 export async function getPlayerDetailHistoryAction(playerIdentifier: string): Promise<{
-  game_plays: PlayerGamePlay[]
   coin_movements: PlayerCoinMovement[]
   error: string | null
 }> {
   const auth = await requireAuth(['agent', 'superadmin'])
-  if (auth.error || !auth.user) return { game_plays: [], coin_movements: [], error: auth.error }
+  if (auth.error || !auth.user) return { coin_movements: [], error: auth.error }
   return runPlayerDetailHistory(auth.user, playerIdentifier)
 }
 

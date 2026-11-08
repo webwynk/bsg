@@ -21,7 +21,7 @@ import { useParams } from 'next/navigation'
 import {
   Plus, Loader2, ArrowUpRight, ArrowDownRight, UserX, UserCheck, KeyRound,
   ArrowLeft, Eye, EyeOff, Search, Users, Gamepad2, Coins,
-  Calendar as CalendarIcon, Activity, RefreshCw, X,
+  Calendar as CalendarIcon, RefreshCw, X,
   CheckCircle2, AlertCircle, Lock
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
@@ -31,15 +31,11 @@ import { playerStatus } from "@/lib/player-status"
 import { ResponsivePagination } from "@/components/responsive-pagination"
 import { ErrorBanner } from "@/components/error-banner"
 import { ResetPasswordDialog } from "@/components/reset-password-dialog"
-import { GamePlayDetailDialog } from "@/components/game-play-detail-dialog"
-import { TicketArrow, TicketList, TicketTableRow, useRoundTickets } from '@/components/round-tickets'
-import { LuckyCardPlayerHistory } from "@/components/lucky-card-player-history"
-import { Spin2WinPlayerHistory } from "@/components/spin2win-player-history"
-import { Lucky16PlayerHistory } from "@/components/lucky16-player-history"
+import { PlayerGameHistory } from "@/components/player-game-history"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
-import type { PlayerGamePlay, PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
+import type { PlayerCoinMovement, PlayerRow } from '@/app/agent/players/actions'
 import { createPlayerAction, getPlayersWithHistoryAction, setPlayerActiveAction, getPlayerDetailHistoryAction, transferPlayerCoinsAction } from '@/app/agent/players/actions'
 
 import {
@@ -50,16 +46,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { roundId } from '@/lib/round-id'
-
-const NO_PLAYS: PlayerGamePlay[] = []
 
 export default function PlayersPage() {
   const [players, setPlayers] = React.useState<PlayerRow[]>([])
   const [selectedPlayer, setSelectedPlayer] = React.useState<typeof players[0] | null>(null)
   const [activeTab, setActiveTab] = React.useState<'games' | 'points'>('games')
   // Which game's plays the Game Plays tab shows (spec 13.2, 17AT).
-  const [gameTab, setGameTab] = React.useState<'triple_chance' | 'lucky_card' | 'spin2win' | 'lucky16'>('triple_chance')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [isLoadingPlayers, setIsLoadingPlayers] = React.useState(true)
   const params = useParams()
@@ -73,13 +65,9 @@ export default function PlayersPage() {
   const [showMobileDetail, setShowMobileDetail] = React.useState(false)
 
   // History data states
-  const [gamePlays, setGamePlays] = React.useState<PlayerGamePlay[]>([])
 
   const [pointsHistory, setPointsHistory] = React.useState<PlayerCoinMovement[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false)
-
-  // Scope state for Performance Summary Bar: 'today' | 'lifetime'
-  const [statsScope, setStatsScope] = React.useState<'today' | 'lifetime'>('today')
 
   // Filter states
   // Issue #90 fix: filterDate is a plain IST day key ("2026-08-15"), not a
@@ -91,73 +79,22 @@ export default function PlayersPage() {
   // downstream can accidentally apply the wrong conversion to the wrong kind
   // of origin the way a shared Date + single downstream conversion could.
   const [filterDate, setFilterDate] = React.useState<string | undefined>(undefined)
-  const [filterOutcome, setFilterOutcome] = React.useState<'all' | 'WON' | 'LOST'>('all')
-  const [filterMode, setFilterMode] = React.useState<'all' | 'SINGLE' | 'DOUBLE' | 'TRIPLE'>('all')
 
   // Pagination states
-  const [gamesPage, setGamesPage] = React.useState(1)
   const [pointsPage, setPointsPage] = React.useState(1)
   const itemsPerPage = 5
   // Housekeeping #87 fix: tracks the last-seen filter values so pagination
   // can be corrected during render itself -- React's own recommended
   // pattern for "adjust state when a dependency changes" -- instead of an
   // effect, which draws one wrong frame before fixing itself a render later.
-  const [lastFilters, setLastFilters] = React.useState<[string | undefined, typeof filterOutcome, typeof filterMode]>([filterDate, filterOutcome, filterMode])
+  const [lastFilters, setLastFilters] = React.useState<[string | undefined]>([filterDate])
 
   // Reset pagination when filters change -- corrected during render (see
   // lastFilters above), not in an effect.
-  if (lastFilters[0] !== filterDate || lastFilters[1] !== filterOutcome || lastFilters[2] !== filterMode) {
-    setLastFilters([filterDate, filterOutcome, filterMode])
-    setGamesPage(1)
+  if (lastFilters[0] !== filterDate) {
+    setLastFilters([filterDate])
     setPointsPage(1)
   }
-
-  // Compute performance metrics
-  const performanceStats = React.useMemo(() => {
-    const todayIstStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // 'YYYY-MM-DD'
-
-    const targetPlays = gamePlays.filter(spin => {
-      if (statsScope === 'today') {
-        if (spin.created_at_iso) {
-          const spinIstStr = new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          return spinIstStr === todayIstStr
-        }
-        return true
-      }
-      return true
-    })
-
-    const totalPlays = targetPlays.length
-    const totalBet = targetPlays.reduce((sum, p) => sum + p.total_stake, 0)
-    const totalWin = targetPlays.reduce((sum, p) => sum + p.total_payout, 0)
-    const netGgr = totalBet - totalWin
-    const marginPct = totalBet > 0 ? (netGgr / totalBet) * 100 : 0
-
-    return { totalPlays, totalBet, totalWin, netGgr, marginPct }
-  }, [gamePlays, statsScope])
-
-  // Filtered games list
-  const filteredGames = React.useMemo(() => {
-    return gamePlays.filter(spin => {
-      // Issue #90 fix: filterDate is already the resolved IST day key.
-      if (filterDate) {
-        const spinDateStr = spin.created_at_iso
-          ? new Date(spin.created_at_iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-          : spin.created_at
-        if (spinDateStr !== filterDate) return false
-      }
-
-      if (filterOutcome !== 'all' && spin.outcome !== filterOutcome) {
-        return false
-      }
-
-      if (filterMode !== 'all' && !spin.mode.toUpperCase().includes(filterMode)) {
-        return false
-      }
-
-      return true
-    })
-  }, [gamePlays, filterDate, filterOutcome, filterMode])
 
   // Filtered points history list — uses ISO date comparison for accuracy across midnight boundaries
   const filteredPoints = React.useMemo(() => {
@@ -172,14 +109,6 @@ export default function PlayersPage() {
       return true
     })
   }, [pointsHistory, filterDate])
-
-  const paginatedGames = React.useMemo(() => {
-    const start = (gamesPage - 1) * itemsPerPage
-    return filteredGames.slice(start, start + itemsPerPage)
-  }, [filteredGames, gamesPage])
-
-  // Only while the Triple Chance side is open; the other games load their own.
-  const tickets = useRoundTickets(selectedPlayer?.id, 'TC', activeTab === 'games' && gameTab === 'triple_chance' ? paginatedGames : NO_PLAYS)
 
   const paginatedPoints = React.useMemo(() => {
     const start = (pointsPage - 1) * itemsPerPage
@@ -230,7 +159,6 @@ export default function PlayersPage() {
   // inside loadPlayers's getPlayersWithHistoryAction response, not just
   // history fetched by loadPlayerHistory's own standalone call.
   const applyHistoryResult = React.useCallback((playerId: string, res: {
-    game_plays: PlayerGamePlay[]
     coin_movements: PlayerCoinMovement[]
     error: string | null
   }) => {
@@ -238,7 +166,6 @@ export default function PlayersPage() {
     setIsLoadingHistory(false)
     setLoadError(res.error)
     if (!res.error) {
-      setGamePlays(res.game_plays)
       setPointsHistory(res.coin_movements)
     }
   }, [])
@@ -247,7 +174,6 @@ export default function PlayersPage() {
     const isSwitchingPlayer = loadedHistoryPlayerIdRef.current !== playerId
     if (isSwitchingPlayer) {
       setIsLoadingHistory(true)
-      setGamesPage(1)
       setPointsPage(1)
     }
     const token = historyRequest.nextGeneration()
@@ -397,12 +323,8 @@ export default function PlayersPage() {
     setShowMobileDetail(true)
     setToggleStatusError(null)
     setIsLoadingHistory(true)
-    setGamePlays([])
     setPointsHistory([])
     setFilterDate(undefined)
-    setFilterOutcome('all')
-    setFilterMode('all')
-    setGamesPage(1)
     setPointsPage(1)
     loadPlayerHistory(player.id)
     if (typeof window !== 'undefined') {
@@ -998,92 +920,6 @@ export default function PlayersPage() {
                 </div>
               </Card>
 
-              {/* 📊 SLIM HIGH-DENSITY PERFORMANCE METRIC STRIP */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center space-x-1.5">
-                    <Activity className="h-3.5 w-3.5 text-primary" />
-                    <h3 className="text-[10px] font-black uppercase tracking-wider text-foreground">
-                      Triple Chance Performance Summary
-                    </h3>
-                  </div>
-
-                  {/* Scope Toggle: Today vs Lifetime */}
-                  <div className="flex items-center bg-secondary/40 border border-border/60 rounded-lg p-0.5 text-[9px] font-bold">
-                    <button
-                      onClick={() => setStatsScope('today')}
-                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                        statsScope === 'today' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Today
-                    </button>
-                    <button
-                      onClick={() => setStatsScope('lifetime')}
-                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                        statsScope === 'lifetime' ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Lifetime
-                    </button>
-                  </div>
-                </div>
-
-                {isLoadingHistory || isRefreshing ? (
-                  /* Skeleton Loader for Performance Cards */
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[1, 2, 3, 4].map(i => (
-                      <Card key={i} className="p-2 bg-card border-border/60 animate-pulse space-y-1.5 rounded-xl">
-                        <div className="h-2.5 bg-secondary/80 rounded w-1/2" />
-                        <div className="h-4 bg-secondary/60 rounded w-3/4" />
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {/* Card 1: Total Plays */}
-                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Plays</span>
-                      <span className="text-base font-mono font-black text-foreground">{performanceStats.totalPlays}</span>
-                    </Card>
-
-                    {/* Card 2: Bet Volume */}
-                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Bet Volume</span>
-                      <span className="text-base font-mono font-black text-foreground">{formatCurrency(performanceStats.totalBet)}</span>
-                    </Card>
-
-                    {/* Card 3: Win Payout */}
-                    <Card className="bg-card border border-border/80 p-2.5 rounded-xl shadow-xs">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Win Payout</span>
-                      <span className="text-base font-mono font-black text-foreground">{formatCurrency(performanceStats.totalWin)}</span>
-                    </Card>
-
-                    {/* Card 4: Net House GGR / Agent Profit */}
-                    <Card className={`border p-2.5 rounded-xl shadow-xs ${
-                      performanceStats.netGgr >= 0 
-                        ? 'bg-emerald-500/10 border-emerald-500/30' 
-                        : 'bg-red-500/10 border-red-500/30'
-                    }`}>
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Net House GGR</span>
-                      <div className="flex items-center justify-between">
-                        <span className={`text-base font-mono font-black ${
-                          performanceStats.netGgr >= 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          {performanceStats.netGgr >= 0 ? `+${formatCurrency(performanceStats.netGgr)}` : formatCurrency(performanceStats.netGgr)}
-                        </span>
-                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
-                          performanceStats.netGgr >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
-                        }`}>
-                          {performanceStats.marginPct.toFixed(1)}%
-                        </span>
-                      </div>
-                    </Card>
-                  </div>
-                )}
-              </div>
-
-              {/* History Section Container with Filter Toolbar */}
               <Card className="border-border/80 bg-card rounded-2xl overflow-hidden shadow-md">
                 {/* Filter Toolbar (Date Picker + Quick Filters) */}
                 <div className="p-3 border-b border-border/60 bg-secondary/10 flex flex-wrap items-center justify-between gap-2.5">
@@ -1097,7 +933,6 @@ export default function PlayersPage() {
                     >
                       <Gamepad2 className="h-3.5 w-3.5 text-primary" />
                       <span>Game Plays</span>
-                      <span className="text-[10px] text-muted-foreground">({filteredGames.length})</span>
                     </button>
                     <button
                       onClick={() => setActiveTab('points')}
@@ -1113,143 +948,82 @@ export default function PlayersPage() {
 
                   {/* Right Side: Date Picker & Quick Filter Pills */}
                   <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
-                    {/* Today / Lifetime Quick Date Presets */}
-                    <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                      <button
-                        // Issue #90 fix: "Today" is a real instant, so it
-                        // genuinely needs the IST-aware conversion (unlike a
-                        // Calendar pick below, which does not).
-                        onClick={() => setFilterDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))}
-                        className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
-                          filterDate === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-                            ? 'bg-primary text-primary-foreground font-black shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        Today
-                      </button>
-                      <button
-                        onClick={() => setFilterDate(undefined)}
-                        className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
-                          !filterDate
-                            ? 'bg-primary text-primary-foreground font-black shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        Lifetime
-                      </button>
-                    </div>
-
-                    {/* Date Picker Popover */}
-                    <Popover>
-                      <PopoverTrigger className="h-8 px-2.5 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-xl flex items-center justify-center cursor-pointer">
-                        <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
-                        {/* Display-only: parsed back to a local Date purely to
-                            format it, never compared or sent anywhere. */}
-                        {filterDate ? new Date(`${filterDate}T00:00:00`).toLocaleDateString() : 'Custom Date'}
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
-                        <Calendar
-                          mode="single"
-                          selected={filterDate ? new Date(`${filterDate}T00:00:00`) : undefined}
-                          // Issue #90 fix: a Calendar pick has no real instant
-                          // to convert -- pickedDayKey reads back exactly the
-                          // day the widget shows, in its own local frame.
-                          onSelect={(d) => setFilterDate(d ? pickedDayKey(d) : undefined)}
-                          disabled={(date) => date > new Date()}
-                        />
-                      </PopoverContent>
-                    </Popover>
-
-                    {filterDate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setFilterDate(undefined)}
-                        className="h-8 px-2 text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
-                      >
-                        <X className="mr-1 h-3 w-3" /> Clear
-                      </Button>
-                    )}
-
-                    {/* Game switch: which game's plays the Game Plays tab shows */}
-                    {activeTab === 'games' && (
-                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {([['triple_chance', 'Triple Chance'], ['lucky_card', 'Lucky Card'], ['spin2win', 'Spin2Win'], ['lucky16', 'Lucky 16 Card']] as const).map(([game, label]) => (
+                    {/* Day filter for the Coins tab (the Game Plays tab has its own
+                        filters inside PlayerGameHistory) */}
+                    {activeTab !== 'games' && (
+                      <>
+                        {/* Today / Lifetime Quick Date Presets */}
+                        <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
                           <button
-                            key={game}
-                            onClick={() => setGameTab(game)}
+                            // Issue #90 fix: "Today" is a real instant, so it
+                            // genuinely needs the IST-aware conversion (unlike a
+                            // Calendar pick below, which does not).
+                            onClick={() => setFilterDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))}
                             className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
-                              gameTab === game ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                              filterDate === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+                                ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
-                            {label}
+                            Today
                           </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Outcome Quick Filter Pills */}
-                    {activeTab === 'games' && (
-                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {(['all', 'WON', 'LOST'] as const).map((outcome) => (
                           <button
-                            key={outcome}
-                            onClick={() => setFilterOutcome(outcome)}
-                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
-                              filterOutcome === outcome ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                            onClick={() => setFilterDate(undefined)}
+                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+                              !filterDate
+                                ? 'bg-primary text-primary-foreground font-black shadow-xs'
+                                : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
-                            {outcome}
+                            Lifetime
                           </button>
-                        ))}
-                      </div>
-                    )}
+                        </div>
 
-                    {/* Mode Quick Filter Pills (Triple Chance only) */}
-                    {activeTab === 'games' && gameTab === 'triple_chance' && (
-                      <div className="flex items-center bg-secondary/40 border border-border/60 rounded-xl p-0.5 text-[10px] font-bold">
-                        {(['all', 'SINGLE', 'DOUBLE', 'TRIPLE'] as const).map((m) => (
-                          <button
-                            key={m}
-                            onClick={() => setFilterMode(m)}
-                            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer uppercase ${
-                              filterMode === m ? 'bg-primary text-primary-foreground font-black shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                            }`}
+                        {/* Date Picker Popover */}
+                        <Popover>
+                          <PopoverTrigger className="h-8 px-2.5 text-[11px] font-extrabold border border-border/80 bg-card hover:bg-secondary/60 rounded-xl flex items-center justify-center cursor-pointer">
+                            <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                            {/* Display-only: parsed back to a local Date purely to
+                                format it, never compared or sent anywhere. */}
+                            {filterDate ? new Date(`${filterDate}T00:00:00`).toLocaleDateString() : 'Custom Date'}
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 bg-card border-border" align="end">
+                            <Calendar
+                              mode="single"
+                              selected={filterDate ? new Date(`${filterDate}T00:00:00`) : undefined}
+                              // Issue #90 fix: a Calendar pick has no real instant
+                              // to convert -- pickedDayKey reads back exactly the
+                              // day the widget shows, in its own local frame.
+                              onSelect={(d) => setFilterDate(d ? pickedDayKey(d) : undefined)}
+                              disabled={(date) => date > new Date()}
+                            />
+                          </PopoverContent>
+                        </Popover>
+
+                        {filterDate && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFilterDate(undefined)}
+                            className="h-8 px-2 text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
                           >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
+                            <X className="mr-1 h-3 w-3" /> Clear
+                          </Button>
+                        )}
+
+                      </>
                     )}
                   </div>
                 </div>
 
                 {/* Tab Content Display */}
                 <div className="overflow-hidden">
-                  {activeTab === 'games' && gameTab === 'lucky_card' && selectedPlayer ? (
-                    <LuckyCardPlayerHistory
+                  {activeTab === 'games' && selectedPlayer ? (
+                    <PlayerGameHistory
+                      key={selectedPlayer.id}
                       playerIdentifier={selectedPlayer.id}
                       playerFullName={selectedPlayer.full_name}
                       playerUsername={selectedPlayer.username}
-                      filterDate={filterDate}
-                      filterOutcome={filterOutcome}
-                    />
-                  ) : activeTab === 'games' && gameTab === 'spin2win' && selectedPlayer ? (
-                    <Spin2WinPlayerHistory
-                      playerIdentifier={selectedPlayer.id}
-                      playerFullName={selectedPlayer.full_name}
-                      playerUsername={selectedPlayer.username}
-                      filterDate={filterDate}
-                      filterOutcome={filterOutcome}
-                    />
-                  ) : activeTab === 'games' && gameTab === 'lucky16' && selectedPlayer ? (
-                    <Lucky16PlayerHistory
-                      playerIdentifier={selectedPlayer.id}
-                      playerFullName={selectedPlayer.full_name}
-                      playerUsername={selectedPlayer.username}
-                      filterDate={filterDate}
-                      filterOutcome={filterOutcome}
                     />
                   ) : isLoadingHistory ? (
                     <div className="p-4 space-y-2.5">
@@ -1262,181 +1036,6 @@ export default function PlayersPage() {
                         </div>
                       ))}
                     </div>
-                  ) : activeTab === 'games' ? (
-                    filteredGames.length > 0 ? (
-                      <>
-                        {/* --- MOBILE CARDS VIEW (< sm) --- */}
-                        <div className="space-y-2.5 sm:hidden p-3 bg-background/50">
-                          {paginatedGames.map((spin) => (
-                            <Card key={spin.hand_id} className="p-3 bg-card border-border/70 rounded-xl space-y-2 shadow-xs">
-                              {/* Card Header */}
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2 min-w-0">
-                                  <span className="font-mono text-xs font-black text-foreground">{roundId('TC', spin.round_number)}</span>
-                                  <span className="text-xs font-semibold text-muted-foreground truncate">{'Triple Chance'}</span>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                    spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
-                                  }`}>
-                                    {spin.outcome}
-                                  </span>
-                                  <TicketArrow tickets={tickets} round={spin.round_number} />
-                                  <GamePlayDetailDialog
-                                    spin={spin}
-                                    playerFullName={selectedPlayer?.full_name || ''}
-                                    playerUsername={selectedPlayer?.username || ''}
-                                    tickets={tickets.ticketsFor(spin.round_number)}
-                                    trigger={
-                                      <button
-                                        className="p-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
-                                        aria-label="View Details"
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </button>
-                                    }
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Card Sub-header */}
-                              <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{spin.mode}</span>
-                                  {/* Issue #100: this round's own pinned bonus multiplier. */}
-                                  <span className={`font-mono font-black px-1.5 py-0.5 rounded ${
-                                    spin.bonus_multiplier === 1
-                                      ? 'text-muted-foreground bg-secondary/40'
-                                      : 'text-amber-400 bg-amber-500/10'
-                                  }`}>
-                                    {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
-                                  </span>
-                                </div>
-                                <span className="font-mono">{spin.created_at}</span>
-                              </div>
-
-                              {/* Card Metrics Strip */}
-                              <div className="grid grid-cols-3 gap-1.5 p-2 rounded-lg bg-secondary/30 text-center text-xs">
-                                <div>
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Result</span>
-                                  <span className="font-mono font-black text-primary bg-primary/10 px-1.5 py-0.2 rounded inline-block">
-                                    {spin.result.toString().padStart(3, '0')}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Bet</span>
-                                  <span className="font-mono font-black text-foreground">{formatCurrency(spin.total_stake)}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block">Total Win</span>
-                                  <span className={`font-mono font-black ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                    {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
-                                  </span>
-                                </div>
-                              </div>
-                              <TicketList tickets={tickets} round={spin.round_number} />
-                            </Card>
-                          ))}
-                        </div>
-
-                        {/* --- DESKTOP TABLE VIEW (>= sm) --- */}
-                        <div className="hidden sm:block overflow-x-auto table-scroll">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="border-border hover:bg-transparent bg-secondary/20">
-                                <TableHead className="w-8"></TableHead>
-                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Round ID</TableHead>
-                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[100px]">Game</TableHead>
-                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[120px]">Mode</TableHead>
-                                <TableHead className="text-muted-foreground text-[10px] uppercase tracking-wider min-w-[130px]">Date & Time</TableHead>
-                                <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win Result</TableHead>
-                                <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[60px]">Bonus</TableHead>
-                                <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Bet</TableHead>
-                                <TableHead className="text-right text-muted-foreground text-[10px] uppercase tracking-wider min-w-[80px]">Win</TableHead>
-                                <TableHead className="text-center text-muted-foreground text-[10px] uppercase tracking-wider min-w-[70px]">Status</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {paginatedGames.map((spin) => (
-                                <React.Fragment key={spin.hand_id}>
-                                  <TableRow className="border-border hover:bg-secondary/30 transition-colors">
-                                    <TableCell className="p-2">
-                                      <div className="flex items-center gap-1">
-                                        <GamePlayDetailDialog
-                                          spin={spin}
-                                          playerFullName={selectedPlayer?.full_name || ''}
-                                          playerUsername={selectedPlayer?.username || ''}
-                                          tickets={tickets.ticketsFor(spin.round_number)}
-                                          trigger={
-                                            <button
-                                              className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
-                                              aria-label="View Details"
-                                            >
-                                              <Eye className="h-3.5 w-3.5" />
-                                            </button>
-                                          }
-                                        />
-                                        <TicketArrow tickets={tickets} round={spin.round_number} />
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="font-mono text-[11px] font-bold text-foreground p-2.5">{roundId('TC', spin.round_number)}</TableCell>
-                                    <TableCell className="text-[11px] font-semibold text-foreground p-2.5">{'Triple Chance'}</TableCell>
-                                    <TableCell className="text-[11px] font-bold text-primary p-2.5">{spin.mode}</TableCell>
-                                    <TableCell className="text-[11px] text-muted-foreground font-mono whitespace-nowrap p-2.5">{spin.created_at}</TableCell>
-                                    <TableCell className="text-center p-2.5">
-                                      <span className="font-mono font-black text-xs text-primary bg-primary/10 rounded-md px-2 py-0.5 inline-block">
-                                        {spin.result.toString().padStart(3, '0')}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="text-center p-2.5">
-                                      {/* Issue #100: this round's own pinned bonus multiplier. */}
-                                      <span className={`font-mono font-black text-[10px] rounded-md px-1.5 py-0.5 inline-block ${
-                                        spin.bonus_multiplier === 1
-                                          ? 'text-muted-foreground bg-secondary/40'
-                                          : 'text-amber-400 bg-amber-500/10'
-                                      }`}>
-                                        {spin.bonus_multiplier === 1 ? 'N' : `${spin.bonus_multiplier}X`}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono text-[11px] font-bold text-foreground p-2.5">
-                                      {formatCurrency(spin.total_stake)}
-                                    </TableCell>
-                                    <TableCell className={`text-right font-mono text-[11px] font-bold p-2.5 ${spin.total_payout > 0 ? 'text-success-text' : 'text-muted-foreground'}`}>
-                                      {spin.total_payout > 0 ? `+${formatCurrency(spin.total_payout)}` : '-'}
-                                    </TableCell>
-                                    <TableCell className="text-center p-2.5">
-                                      <span className={`inline-flex items-center rounded-full px-2 py-0.2 text-[9px] font-black ${
-                                        spin.outcome === 'WON' ? 'bg-success-bg text-success-text border border-emerald-500/20' : 'bg-danger-bg text-danger-text border border-red-500/20'
-                                      }`}>
-                                        {spin.outcome}
-                                      </span>
-                                    </TableCell>
-                                  </TableRow>
-                                  <TicketTableRow tickets={tickets} round={spin.round_number} colSpan={10} />
-                                </React.Fragment>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-
-                        {/* Pagination Bar for Game Plays */}
-                        {filteredGames.length > itemsPerPage && (
-                          <div className="p-3 border-t border-border/60">
-                            <ResponsivePagination 
-                              currentPage={gamesPage}
-                              totalPages={Math.ceil(filteredGames.length / itemsPerPage)}
-                              onPageChange={setGamesPage}
-                              totalItems={filteredGames.length}
-                              itemsPerPage={itemsPerPage}
-                            />
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="p-10 text-center text-xs text-muted-foreground font-medium">
-                        No game play history recorded for the selected filter.
-                      </div>
-                    )
                   ) : (
                     filteredPoints.length > 0 ? (
                       <>

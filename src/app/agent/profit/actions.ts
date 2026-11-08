@@ -69,10 +69,8 @@ export interface ProfitReport {
 
 /**
  * Issue #93: thin requireAuth() wrapper -- the actual query/aggregation logic
- * now lives in profit-report-logic.ts's runAgentProfitReport, shared with
- * getAgentDetailBundleAction (superadmin/agents/actions.ts) so that page can
- * fold this report into its one combined action instead of a separate
- * requireAuth() round-trip per poll cycle.
+ * lives in profit-report-logic.ts's runAgentProfitReport (the agent's own P&L
+ * page; the superadmin agent page no longer uses it since 2026-11-08).
  */
 export async function getAgentProfitReportAction(
   params: ProfitReportParams = {}

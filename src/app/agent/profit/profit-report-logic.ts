@@ -42,9 +42,9 @@ function istRange(preset?: string, filterDate?: string) {
 
 /**
  * Issue #93: core profit-report logic, extracted out of the 'use server'
- * getAgentProfitReportAction so it can also be called, already-authorized,
- * from getAgentDetailBundleAction (superadmin/agents/actions.ts) without a
- * second requireAuth() round-trip. Deliberately NOT exported from a 'use
+ * getAgentProfitReportAction (the agent's own P&L page). It was also called by
+ * the superadmin agent page's bundle until 2026-11-08, when that page's P&L
+ * Audit tab switched to the selected player's days. Deliberately NOT exported from a 'use
  * server' file: doing so would make it directly callable as its own Server
  * Action, bypassing requireAuth() entirely for a caller who forges the
  * `caller` argument -- this file has no directive, so it is plain
