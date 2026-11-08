@@ -22,21 +22,17 @@ import { transferPlayerCoinsAction } from './players/actions'
 import { getAgentDashboardDataAction } from './actions'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
-import { MoneySplitLine } from '@/components/money-split-line'
-import { EMPTY_MONEY_BY_GAME, houseResult, type MoneyByGame } from '@/lib/money-totals-logic'
 import { useRequestGeneration } from '@/hooks/use-request-generation'
+import { AgentCommissionTodayCard } from '@/components/agent-commission-today-card'
 
 export default function AgentDashboard() {
   const [players, setPlayers] = React.useState<Array<{ id: string; full_name: string; username: string; coin_balance: number }>>([])
   const [recentTransactions, setRecentTransactions] = React.useState<Array<{ id: string; direction: 'deposit' | 'withdraw'; amount: number; target_name: string; target_username: string; created_at: string }>>([])
   const [agentInfo, setAgentInfo] = React.useState<{ name: string; username: string; accountCode: string | null; joinedDate: string } | null>(null)
   const [balance, setBalance] = React.useState(0)
-  const [todaysBets, setTodaysBets] = React.useState(0)
-  const [todaysWins, setTodaysWins] = React.useState(0)
   const [todaysProfitLoss, setTodaysProfitLoss] = React.useState(0)
   // Each game's own share of today's figures above (Triple Chance, Lucky Card, Spin2Win, Lucky 16 Card) --
   // a small line under each (Issue #122 / Lucky Card D3).
-  const [todaysSplit, setTodaysSplit] = React.useState<MoneyByGame>(EMPTY_MONEY_BY_GAME)
   const [isLoadingDashboard, setIsLoadingDashboard] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
 
@@ -70,10 +66,7 @@ export default function AgentDashboard() {
       setLoadError(resDash.error)
       if (!resDash.error) {
         setBalance(resDash.coin_balance || 0)
-        setTodaysBets(resDash.todays_stake || 0)
-        setTodaysWins(resDash.todays_payout || 0)
         setTodaysProfitLoss(resDash.todays_profit || 0)
-        setTodaysSplit(resDash.todays_split)
         if (resDash.full_name) {
           setAgentInfo({
             name: resDash.full_name,
@@ -204,70 +197,56 @@ export default function AgentDashboard() {
         </div>
       </div>
 
-      {/* Top KPI Metric Cards (5 Micro Cards Grid - Mobile First) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3">
+      {/* Top KPI cards (redesigned 2026-11-08 per Hasan, compact version): 4 cards only,
+          Available Coins, My Players, Today's P/L and Commission Today. Today Bets (In) and
+          Today Wins (Out) were removed. Icon on the left, title + figure on the right.
+          2 per row on phones and tablets, 4 in one row from the lg breakpoint. Card size="sm"
+          and a single inner wrapper keep the shadcn Card's built-in gap from spacing things out. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2.5">
         {/* Card 1: Available Coins */}
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
-            <span>Available Coins</span>
-            <Coins className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
+        <Card size="sm" className="bg-card border-border/80 px-2.5 sm:px-3 rounded-xl shadow-2xs">
+          <div className="flex items-start gap-2 sm:gap-2.5 min-w-0">
+            <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><Coins className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] sm:text-xs font-bold text-muted-foreground truncate">Available Coins</div>
+              <div className={`text-sm sm:text-xl font-black font-mono leading-tight truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} text-emerald-500`}>
+                {formatCurrency(balance)}
+              </div>
+              <p className="text-[9px] sm:text-[10px] text-muted-foreground/70 truncate hidden sm:block">Coins available to allocate</p>
+            </div>
           </div>
-          <div className={`text-xs sm:text-lg font-black font-mono text-emerald-500 mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
-            {formatCurrency(balance)}
-          </div>
-          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Coins available to allocate</p>
         </Card>
 
         {/* Card 2: My Players */}
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
-            <span>My Players</span>
-            <Users className="h-3.5 w-3.5 text-blue-500 shrink-0 hidden sm:block" />
+        <Card size="sm" className="bg-card border-border/80 px-2.5 sm:px-3 rounded-xl shadow-2xs">
+          <div className="flex items-start gap-2 sm:gap-2.5 min-w-0">
+            <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0"><Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] sm:text-xs font-bold text-muted-foreground truncate">My Players</div>
+              <div className={`text-sm sm:text-xl font-black font-mono leading-tight truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} text-foreground`}>
+                {players.length}
+              </div>
+              <p className="text-[9px] sm:text-[10px] text-muted-foreground/70 truncate hidden sm:block">Registered player network</p>
+            </div>
           </div>
-          <div className={`text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
-            {players.length}
-          </div>
-          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Registered player network</p>
         </Card>
 
-        {/* Card 3: Today's P/L */}
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
-            <span>Today&apos;s P/L</span>
-            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
+        {/* Card 3: Today's P/L (combined total only; per-game lines removed 2026-11-08 per Hasan) */}
+        <Card size="sm" className="bg-card border-border/80 px-2.5 sm:px-3 rounded-xl shadow-2xs">
+          <div className="flex items-start gap-2 sm:gap-2.5 min-w-0">
+            <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] sm:text-xs font-bold text-muted-foreground truncate">Today&apos;s P/L</div>
+              <div className={`text-sm sm:text-xl font-black font-mono leading-tight truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
+              </div>
+              <p className="text-[9px] sm:text-[10px] text-muted-foreground/70 truncate hidden sm:block">Resets daily 00:00 IST</p>
+            </div>
           </div>
-          <div className={`text-xs sm:text-lg font-black font-mono mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'} ${todaysProfitLoss >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-            {todaysProfitLoss >= 0 ? '+' : ''}{formatCurrency(todaysProfitLoss)}
-          </div>
-          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={houseResult(todaysSplit.triple_chance)} lucky={houseResult(todaysSplit.lucky_card)} spin={houseResult(todaysSplit.spin2win)} l16={houseResult(todaysSplit.lucky16)} kind="signed" />}
-          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Resets daily 00:00 IST</p>
         </Card>
 
-        {/* Card 4: Today's Bets (In) */}
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
-            <span>Today Bets (In)</span>
-            <ArrowUpRight className="h-3.5 w-3.5 text-blue-400 shrink-0 hidden sm:block" />
-          </div>
-          <div className={`text-xs sm:text-lg font-black font-mono text-foreground mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
-            {formatCurrency(todaysBets)}
-          </div>
-          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.stake} lucky={todaysSplit.lucky_card.stake} spin={todaysSplit.spin2win.stake} l16={todaysSplit.lucky16.stake} />}
-          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Wagered coins today</p>
-        </Card>
-
-        {/* Card 5: Today's Wins (Out) */}
-        <Card className="bg-card border-border/80 p-2.5 sm:p-3 rounded-xl shadow-2xs col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-muted-foreground">
-            <span>Today Wins (Out)</span>
-            <ArrowDownRight className="h-3.5 w-3.5 text-amber-500 shrink-0 hidden sm:block" />
-          </div>
-          <div className={`text-xs sm:text-lg font-black font-mono text-amber-500 mt-0.5 truncate transition-opacity duration-200 ${isLoadingDashboard ? 'opacity-50 animate-pulse' : 'opacity-100'}`}>
-            {formatCurrency(todaysWins)}
-          </div>
-          {!isLoadingDashboard && <MoneySplitLine className="mt-0.5" triple={todaysSplit.triple_chance.payout} lucky={todaysSplit.lucky_card.payout} spin={todaysSplit.spin2win.payout} l16={todaysSplit.lucky16.payout} />}
-          <p className="text-[9px] text-muted-foreground/70 hidden sm:block mt-0.5">Returned to players today</p>
-        </Card>
+        {/* Card 4: Commission today (this agent's % of today's bets; read-only) */}
+        <AgentCommissionTodayCard />
       </div>
 
       {/* Main Grid: Quick Transfer & Recent Activity Feed */}
