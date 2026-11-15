@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import { randomUUID } from 'crypto'
 import { createClient, createAdminClient } from '@/lib/supabase'
 import { asRpc, type StaffLoginAttemptResult, type StaffSessionLoginResult } from '@/lib/rpc'
-import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS } from '@/lib/staff-session'
+import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS, alreadyInUseMessage } from '@/lib/staff-session'
 
 /**
  * Agent back-office login.
@@ -121,10 +121,13 @@ export async function agentLogin(formData: FormData) {
     redirect('/agent/login?error=Invalid credentials or account not authorized for this portal.')
   }
 
-  // Single-device enforcement -- refuses outright if another device's
-  // session is still within the 6h safety-net window (game_config's
-  // staff_session_grace_sec). No convenient auto-swap; the only intended
-  // way past this is an explicit logout on the first device. Checked last,
+  // Single-device enforcement -- refuses outright while another device's
+  // session is still active: its open tab sends a keep-alive every 30 s
+  // (StaffSessionHeartbeat), and a seat whose keep-alive stopped frees itself
+  // after game_config's staff_session_grace_sec (180 s). No takeover; the
+  // first session is never disturbed. Ways past this: sign out on the first
+  // device, close it and wait out the grace window, or a superadmin's
+  // "Clear login" on the agent page. Checked last,
   // after every other rejection reason above, so a claim is never made for
   // a login that was going to be refused anyway for an unrelated reason.
   const sessionToken = randomUUID()
@@ -146,7 +149,10 @@ export async function agentLogin(formData: FormData) {
     if (sessionResult?.reason === 'account_blocked') {
       redirect('/agent/login?error=Your Agent account is suspended, contact your admin for unblock')
     }
-    redirect('/agent/login?error=Already logged in on another device. Please sign out there first.')
+    const secondsUntilFree = sessionResult?.reason === 'session_active_elsewhere'
+      ? sessionResult.seconds_until_free
+      : undefined
+    redirect(`/agent/login?error=${encodeURIComponent(alreadyInUseMessage(secondsUntilFree))}`)
   }
 
   const cookieStore = await cookies()

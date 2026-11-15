@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { LayoutDashboard, Users, LogOut, ShieldAlert, Radio, Bell, Monitor } from 'lucide-react'
 import { AgentNotificationsProvider, useAgentNotifications } from '@/components/agent-notifications-provider'
 import { LiveDataProvider } from '@/components/live-data-provider'
+import { StaffSessionHeartbeat } from '@/components/staff-session-heartbeat'
 
 /** Same treatment as the agent portal's identical badge -- kept as a
  * separate copy rather than a shared import since it's a 6-line component
@@ -30,6 +31,8 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
 
   return (
     <LiveDataProvider>
+      {/* Keeps this tab's single-login seat while it is open (30 s keep-alive). */}
+      <StaffSessionHeartbeat />
       <AgentNotificationsProvider>
         <SuperAdminLayoutShell pathname={pathname}>{children}</SuperAdminLayoutShell>
       </AgentNotificationsProvider>

@@ -92,10 +92,14 @@ export type StaffLoginAttemptResult =
   | { success: false; reason: 'invalid_credentials'; attempts_remaining: number }
 
 /** Return shape of staff_session_login -- claims or refuses the single-device
- * seat for an agent/superadmin login. */
+ * seat for an agent/superadmin login. seconds_until_free comes with
+ * 'session_active_elsewhere' from 20261115100000_staff_session_short_lock.sql
+ * on (how long until the other seat frees itself if its keep-alive has
+ * stopped); optional so the code also works against the older function. */
 export type StaffSessionLoginResult =
   | { allowed: true }
-  | { allowed: false; reason: 'account_blocked' | 'session_active_elsewhere' }
+  | { allowed: false; reason: 'account_blocked' }
+  | { allowed: false; reason: 'session_active_elsewhere'; seconds_until_free?: number }
 
 /** Return shape of staff_session_touch -- called independently from
  * src/proxy.ts's own navigation-level single-device gate. No longer called

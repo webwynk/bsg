@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import { randomUUID } from 'crypto'
 import { createClient, createAdminClient } from '@/lib/supabase'
 import { asRpc, type StaffLoginAttemptResult, type StaffSessionLoginResult } from '@/lib/rpc'
-import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS } from '@/lib/staff-session'
+import { STAFF_SESSION_COOKIE, STAFF_SESSION_COOKIE_OPTIONS, alreadyInUseMessage } from '@/lib/staff-session'
 
 /**
  * SuperAdmin portal login.
@@ -130,7 +130,10 @@ export async function superAdminLogin(formData: FormData) {
     if (sessionResult?.reason === 'account_blocked') {
       redirect('/superadmin/login?error=This account is suspended.')
     }
-    redirect('/superadmin/login?error=Already logged in on another device. Please sign out there first.')
+    const secondsUntilFree = sessionResult?.reason === 'session_active_elsewhere'
+      ? sessionResult.seconds_until_free
+      : undefined
+    redirect(`/superadmin/login?error=${encodeURIComponent(alreadyInUseMessage(secondsUntilFree))}`)
   }
 
   const cookieStore = await cookies()

@@ -27,7 +27,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Users, Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, Gamepad2, X, RefreshCw, TrendingUp, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Users, Coins, CalendarIcon, ArrowUpRight, ArrowDownRight, Loader2, UserX, UserCheck, Key, Eye, EyeOff, Gamepad2, X, RefreshCw, TrendingUp, CheckCircle2, LogOut } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { pickedDayKey } from "@/lib/date-range"
 import { playerStatus } from "@/lib/player-status"
@@ -40,7 +40,7 @@ import { AgentOverviewPanel } from "@/components/agent-overview-panel"
 import { useLiveSync } from "@/hooks/use-live-sync"
 import { LiveSyncBadge } from "@/components/live-sync-badge"
 import { useRequestGeneration } from "@/hooks/use-request-generation"
-import { getAgentDetailBundleAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
+import { clearAgentLoginAction, getAgentDetailBundleAction, issueAgentCoinsAction, setAgentActiveAction, updateAgentPasswordAction } from '../actions'
 import { getPlayerDetailHistoryAction } from '@/app/agent/players/actions'
 
 interface Props {
@@ -117,6 +117,8 @@ export default function AgentDetailPage({ params }: Props) {
   // Status toggle state
   const [isTogglingStatus, setIsTogglingStatus] = React.useState(false)
   const [toggleStatusError, setToggleStatusError] = React.useState<string | null>(null)
+  const [isClearingLogin, setIsClearingLogin] = React.useState(false)
+  const [clearLoginNote, setClearLoginNote] = React.useState<{ ok: boolean; text: string } | null>(null)
 
   // Password reset modal state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false)
@@ -352,6 +354,23 @@ export default function AgentDetailPage({ params }: Props) {
       // previously this action could never fail, so there was nowhere for an
       // error to be shown.
       setToggleStatusError(res.error)
+    }
+  }
+
+  /** "Clear login": frees this agent's single-login seat so they can sign in
+   * again at once (e.g. the browser was closed on another PC). See
+   * clearAgentLoginAction for what happens to a still-open session. */
+  const handleClearLogin = async () => {
+    setIsClearingLogin(true)
+    setClearLoginNote(null)
+    const res = await clearAgentLoginAction(resolvedAgentIdRef.current)
+    setIsClearingLogin(false)
+    if (res.error) {
+      setClearLoginNote({ ok: false, text: res.error })
+    } else if (res.wasLocked) {
+      setClearLoginNote({ ok: true, text: 'Login cleared. This agent can sign in again now.' })
+    } else {
+      setClearLoginNote({ ok: true, text: 'This agent was not signed in anywhere. Nothing to clear.' })
     }
   }
 
@@ -650,6 +669,18 @@ export default function AgentDetailPage({ params }: Props) {
             </DialogContent>
           </Dialog>
 
+          {/* Clear login: frees a stuck single-login seat */}
+          <Button
+            onClick={handleClearLogin}
+            disabled={isClearingLogin}
+            variant="outline"
+            title="Sign this agent out of the dashboard everywhere, so they can log in again now"
+            className="h-8 sm:h-10 px-2.5 sm:px-3 font-extrabold cursor-pointer rounded-xl text-[11px] sm:text-xs flex items-center justify-center border-border"
+          >
+            {isClearingLogin ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-1 h-3.5 w-3.5" />}
+            Clear login
+          </Button>
+
           {/* Block / Unblock Agent Button */}
           <Button 
             onClick={handleToggleAgentStatus}
@@ -672,6 +703,16 @@ export default function AgentDetailPage({ params }: Props) {
       {toggleStatusError && (
         <div className="p-2.5 text-xs font-bold rounded-lg bg-danger-bg text-danger-text border border-red-500/20">
           {toggleStatusError}
+        </div>
+      )}
+
+      {clearLoginNote && (
+        <div className={`p-2.5 text-xs font-bold rounded-lg border ${
+          clearLoginNote.ok
+            ? 'bg-success-bg text-success-text border-emerald-500/20'
+            : 'bg-danger-bg text-danger-text border-red-500/20'
+        }`}>
+          {clearLoginNote.text}
         </div>
       )}
 

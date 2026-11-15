@@ -7,7 +7,7 @@
  * of one of them drifting out of sync with the others.
  *
  * Deliberately NOT the Supabase access token -- that rotates silently in the
- * background over a session this long (6h safety net), which would cause
+ * background over a long-lived session, which would cause
  * random false "logged in elsewhere" failures if compared directly. This is
  * an independent, application-minted value that only ever changes at a real
  * login.
@@ -25,4 +25,21 @@ export const STAFF_SESSION_COOKIE_OPTIONS = {
   // long enough that the cookie itself is never the reason someone gets
   // logged out.
   maxAge: 60 * 60 * 24 * 30,
+}
+
+/**
+ * Login-page message for a refused second login (staff_session_login said
+ * 'session_active_elsewhere'). Shared by the agent and superadmin login
+ * actions so both portals word it the same. The account's first session is
+ * left untouched; this text is only shown to the browser that was refused.
+ *
+ * secondsUntilFree is how long until the other seat frees itself IF that
+ * window was closed (its 30 s keep-alive stopped). While that window stays
+ * open the seat never frees, which is why the text says "if".
+ */
+export function alreadyInUseMessage(secondsUntilFree?: number): string {
+  const base = 'This account is already open on another device or browser. Please sign out there first.'
+  if (secondsUntilFree == null) return base
+  const minutes = Math.max(1, Math.ceil(secondsUntilFree / 60))
+  return `${base} If that window was closed, try again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`
 }

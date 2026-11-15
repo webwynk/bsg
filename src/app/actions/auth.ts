@@ -17,8 +17,9 @@ export async function signOutAction(redirectTo: string = '/agent/login') {
     await supabase.rpc('session_logout')
   } catch {
     // Non-fatal -- proceed to sign out regardless. A failure here only
-    // means the seat isn't freed until the 6h safety net catches it; it
-    // must never be the reason a sign-out itself fails.
+    // means the seat isn't freed until staff_session_grace_sec (180 s for
+    // staff, counted from the tab's last keep-alive) runs out; it must
+    // never be the reason a sign-out itself fails.
   }
 
   // scope: 'local' -- supabase-js defaults signOut() to 'global', which signs

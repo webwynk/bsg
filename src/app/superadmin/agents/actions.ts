@@ -432,6 +432,54 @@ export async function updateAgentPasswordAction(agentIdentifier: string, newPass
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CLEAR LOGIN  (frees a stuck single-login seat; 2026-11-15, option A)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Deletes the agent's active_sessions row, so their next dashboard login is
+ * accepted at once instead of waiting for staff_session_grace_sec (180 s) to
+ * run out. For the case "agent closed the browser elsewhere and can't get
+ * back in", or a crashed PC.
+ *
+ * If the agent IS still signed in somewhere, that browser loses its seat:
+ * its next click or page load is sent to the login page by src/proxy.ts
+ * ("Signed in from another device"), and its keep-alive can't re-claim the
+ * seat (staff_auth_check only refreshes a row whose token still matches).
+ * The Auth account itself, its password and is_active are not touched.
+ *
+ * Agents only: a superadmin's own seat is not cleared from here (a stuck
+ * superadmin frees itself after 180 s).
+ */
+export async function clearAgentLoginAction(agentIdentifier: string) {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error || !auth.user) return { error: auth.error ?? 'Unauthorized' }
+
+  try {
+    const agentId = await resolveAgentId(agentIdentifier)
+    if (!agentId) return { error: 'Agent not found.' }
+
+    const db = createAdminClient()
+    // resolveAgentId passes a UUID straight through, so the role is
+    // re-checked here: this must never clear a superadmin's or a player's seat.
+    const { data: agent } = await db
+      .from('profiles').select('username, role').eq('id', agentId).maybeSingle()
+    if (!agent || agent.role !== 'agent') return { error: 'Agent not found.' }
+
+    const { data: cleared, error } = await db
+      .from('active_sessions').delete().eq('user_id', agentId).select('user_id')
+    if (error) return { error: error.message }
+
+    const wasLocked = (cleared?.length ?? 0) > 0
+    if (wasLocked) {
+      await logAuditEventAction('security', `Cleared dashboard login for agent @${agent.username}`)
+    }
+    return { success: true, wasLocked }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: `Could not clear login: ${message}` }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COINS ISSUED LEDGER
 // ─────────────────────────────────────────────────────────────────────────────
 export async function getAgentCoinLedgerAction(params?: {
