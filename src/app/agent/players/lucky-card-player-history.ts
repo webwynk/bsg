@@ -13,7 +13,7 @@ import { istDateTime, resolvePlayerId, assertOwnership } from './players-shared'
  * Game Plays tab on the agent players page and the superadmin agent page. The
  * Lucky Card counterpart of player-history-logic.ts (Triple Chance), which is
  * left untouched: this is its own file so the Triple Chance history, its
- * 3-second refresh and its data shapes cost and change nothing.
+ * refresh and its data shapes cost and change nothing.
  *
  * Like runPlayerDetailHistory, this is deliberately NOT exported from a 'use
  * server' file: a function exported there becomes directly callable as a Server

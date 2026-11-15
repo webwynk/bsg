@@ -22,7 +22,14 @@ import type { CommissionAgent } from '@/app/superadmin/agents/agent-commission-d
 
 /** Hasan's filter for this block: Pick dates | Today | 7 days | 30 days | Lifetime (IST days). */
 const PRESETS: readonly GameplayPreset[] = ['today', '7d', '30d', 'lifetime']
-const LIVE_TABLES: LiveTable[] = ['rounds', 'lucky_card_rounds', 'spin2win_rounds', 'lucky16_rounds', 'coin_ledger']
+/** Live signal: coin_ledger only (2026-11-15, dashboard server-call
+ *  optimisation step 5). Every money change this box shows is a coin_ledger
+ *  row (stake on a bet, payout on a win, stake_refund when a bet is removed,
+ *  in all four games). The four games' round tables were dropped: they change
+ *  on every round of every game, all day, even with nobody playing, which
+ *  refreshed this box about 6 extra times a minute for no money change. The
+ *  useLiveSync poll still catches everything else. */
+const LIVE_TABLES: LiveTable[] = ['coin_ledger']
 const DAYS_PER_PAGE = 10
 
 type Loader = typeof getAgentCommissionReportAction

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResponsivePagination } from '@/components/responsive-pagination'
 import { ErrorBanner } from '@/components/error-banner'
-import { getRtpAction, getAuditLogsAction, getSystemOverviewMetricsAction } from './actions'
+import { getSuperadminHomeAction } from './actions'
 import { formatCurrency } from '@/lib/utils'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
@@ -65,11 +65,9 @@ export default function SuperAdminDashboard() {
   // see the in-flight guard in use-live-sync.ts (Issue #93).
   const fetchMetrics = React.useCallback(() => {
     const token = metricsRequest.nextGeneration()
-    return Promise.all([
-      getSystemOverviewMetricsAction(),
-      getRtpAction(),
-      getAuditLogsAction()
-    ]).then(([resMetrics, resRtp, resLogs]) => {
+    // One bundled request (getSuperadminHomeAction, 2026-11-15 step 4): the
+    // KPI figures, the RTP tile and the audit log, each with its own error.
+    return getSuperadminHomeAction().then(({ metrics: resMetrics, rtp: resRtp, logs: resLogs }) => {
       if (!metricsRequest.isCurrent(token)) return
       setIsLoadingMetrics(false)
       setIsRefreshing(false)
@@ -101,8 +99,9 @@ export default function SuperAdminDashboard() {
   // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
   // fetchMetrics directly -- a direct call bypassed the in-flight guard
   // entirely, confirmed live to leave this button stuck spinning 24+
-  // seconds straight (this page's 3-action Promise.all is heavy enough to
-  // regularly approach the 10s poll interval).
+  // seconds straight (back then this page made 3 separate requests per
+  // refresh, heavy enough to regularly approach the 10s poll interval; one
+  // bundled request since 2026-11-15).
   const handleManualRefresh = () => {
     setIsRefreshing(true)
     refresh() // cleared by fetchMetrics' own completion above
@@ -117,11 +116,11 @@ export default function SuperAdminDashboard() {
   // "SUBSCRIBED"/connected status was proven able to stay true for an entire
   // session while every event silently failed a server-side authorization
   // check, with zero client-visible signal. Tier 'normal' (10s, not the 3s
-  // 'fast' tier) since getSystemOverviewMetricsAction scans profiles and
+  // 'fast' tier) since getSuperadminHomeAction scans profiles and
   // today's coin_ledger credits -- this is a summary view, not a
   // live-gameplay-outcome page, so the heavier query cost gets a longer
   // interval. (Bet totals moved to GameplayStatsCard on 2026-11-07, which has
-  // its own useLiveSync on bets/coin_ledger.) Note: getAuditLogsAction
+  // its own useLiveSync on bets/coin_ledger.) Note: the audit-log part
   // reads audit_log, which is not in the Realtime publication (out of scope
   // since Issue #91's original design) -- the audit log list on this page
   // still only refreshes on this same poll or a manual refresh, never on its
@@ -303,7 +302,7 @@ export default function SuperAdminDashboard() {
           settings, so they now live next to that game's own live monitor
           instead of the general dashboard. This card no longer needs a
           12-column grid partner, so it's full width now instead of
-          md:col-span-7. rtpValue/getRtpAction stay on THIS page -- the
+          md:col-span-7. rtpValue (from getSuperadminHomeAction) stays on THIS page -- the
           "Global RTP Target" KPI tile above still reads it. */}
         <Card className="bg-card border-border/80 shadow-md rounded-2xl p-3.5 sm:p-4 space-y-3">
           {/* Header Bar + Log Filters & Search */}

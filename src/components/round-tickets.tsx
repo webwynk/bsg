@@ -16,7 +16,7 @@ export interface RoundTickets {
 
 /**
  * Printed tickets for the rounds on screen. Loads again only when those rounds,
- * or their stake or result, change, so the history's 3-second poll adds no read.
+ * or their stake or result, change, so the history's periodic poll adds no read.
  * A failed read shows no arrow: tickets must never stop a history loading.
  */
 export function useRoundTickets(

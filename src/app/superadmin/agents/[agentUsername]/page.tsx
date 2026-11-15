@@ -266,7 +266,7 @@ export default function AgentDetailPage({ params }: Props) {
             // overwrite it. Deliberately NOT gated behind a shared
             // generation counter with loadPlayerHistory here (an earlier
             // version of this fix was): under real production latency this
-            // page's own requests sometimes run close to or past the 3s poll
+            // page's own requests sometimes ran close to or past the then-3s poll
             // interval, and a counter bumped by every single poll tick
             // regardless of relevance meant a response could permanently
             // never catch up to "current", leaving the history skeleton
@@ -299,20 +299,22 @@ export default function AgentDetailPage({ params }: Props) {
   // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
   // connection from LiveDataProvider, mounted once in superadmin/layout.tsx
   // -- still usually well under a second when Realtime is actually
-  // delivering) but adds a guaranteed 3s poll backstop instead of the old
+  // delivering) but adds a guaranteed poll backstop instead of the old
   // 90s one. Realtime's own "SUBSCRIBED"/connected status was proven able to
   // stay true for an entire session while every event silently failed a
   // server-side authorization check, with zero client-visible signal -- this
   // is the exact page that was live-tested when that was found. See
   // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91 for the full evidence.
-  // Tier 'fast' (3s, not the 10s 'normal' tier) since this page shows live
-  // gameplay outcomes for an agent's own players, not a heavy full-table-scan
-  // summary. Cascades into a full history reload (reloadHistory: true) on
-  // every fire, matching agent/players' equivalent behavior.
+  // Tier 'normal' (10 s) since 2026-11-15 (dashboard server-call
+  // optimisation step 6, Hasan's choice; was 'fast', 3 s): coin and profile
+  // changes still arrive within about a second through Realtime; the
+  // backstop only covers a missed push. Cascades into a full history reload
+  // (reloadHistory: true) on every fire, matching agent/players' equivalent
+  // behavior.
   const { lastSyncedAt, tierMs, refresh } = useLiveSync(
     ['profiles', 'bets', 'coin_ledger'],
     () => loadAgentDetails({ reloadHistory: true }),
-    'fast'
+    'normal'
   )
 
   // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of

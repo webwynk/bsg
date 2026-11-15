@@ -3,7 +3,6 @@
 import * as React from "react"
 import { getAgentNotificationsAction, markNotificationReadAction, type AgentNotification } from "@/app/agent/players/actions"
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser"
-import { LIVE_SYNC_TIER_MS } from "@/hooks/use-live-sync"
 
 interface AgentNotificationsContextValue {
   notifications: AgentNotification[]
@@ -26,21 +25,21 @@ interface AgentNotificationsContextValue {
 
 const AgentNotificationsContext = React.createContext<AgentNotificationsContextValue | null>(null)
 
-// Issue #91 addendum (2026-08-25): shortened from 5 minutes to the shared
-// 'fast' tier (see use-live-sync.ts, LIVE_SYNC_TIER_MS) -- the investigation
-// that led to LiveDataProvider getting a much tighter poll backstop found
-// this provider's own Realtime subscription is subject to the exact same
-// silent-failure mode: a real notification insert on this exact
-// channel/table produced zero events while the channel reported healthy the
-// whole time (see MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91). This
-// carries security-relevant content (account lockouts) -- it deserves at
-// least as tight a guaranteed worst case as gameplay pages, not a looser
-// one. Still a safety net only, not the primary update path (that's the
-// Realtime subscription below) -- never trust Realtime as the only source
-// of truth: a dropped WebSocket, a missed event during a brief disconnect,
-// or simply loading the page before the subscription finishes connecting
-// all need a fallback that eventually self-corrects on its own.
-const FALLBACK_POLL_MS = LIVE_SYNC_TIER_MS.fast
+// Backup refresh only -- the primary update path is the Realtime
+// subscription below, which shows a new alert as soon as it is inserted.
+// History: 5 minutes, then the shared 3 s 'fast' tier (Issue #91 addendum,
+// 2026-08-25, after a Realtime insert was seen silently not delivered), and
+// since 2026-11-15 (dashboard server-call optimisation step 2, Hasan's
+// choice) 180 s. Measured before that change: the notifications table had 0
+// rows (28 ever) yet was read ~19,900 times, 20 times a minute per open tab.
+// Alerts are account lockouts -- the account is already locked, so a missed
+// push showing up to 3 minutes late is acceptable. The list still refreshes
+// at once on tab refocus, on the Alerts page's Refresh button, and after a
+// password reset from the Alerts page. Never trust Realtime as the only
+// source of truth: a dropped WebSocket or a missed event still self-corrects
+// within this interval. LiveSyncBadge reads this value (tierMs) and only turns "stale"
+// after twice this long without a sync.
+const FALLBACK_POLL_MS = 180_000
 
 /**
  * Single source of truth for security alerts, read once here rather than

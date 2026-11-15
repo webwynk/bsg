@@ -113,7 +113,7 @@ async function runPlayersList(
 /**
  * Issue #93: combines the player list + the CURRENTLY selected player's
  * history into one requireAuth() call instead of two -- used for the
- * page's periodic 3-second live-sync poll and manual refresh, where the
+ * page's periodic live-sync poll (10 s since 2026-11-15) and manual refresh, where the
  * selected player (if any) is already known up front. selectedPlayerId is
  * optional because the page has no player selected on first load (no
  * /players/<username> slug in the URL). Switching to a DIFFERENT player

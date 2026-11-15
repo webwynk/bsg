@@ -11,7 +11,14 @@ import { presetRange } from '@/lib/gameplay-range'
 import { coins, commissionLines, formatPct } from '@/lib/agent-commission'
 import { getAgentCommissionReportAction } from '@/app/superadmin/agents/agent-commission-actions'
 
-const LIVE_TABLES: LiveTable[] = ['rounds', 'lucky_card_rounds', 'spin2win_rounds', 'lucky16_rounds', 'coin_ledger']
+/** Live signal: coin_ledger only (2026-11-15, dashboard server-call
+ *  optimisation step 5). Every money change this box shows is a coin_ledger
+ *  row (stake on a bet, payout on a win, stake_refund when a bet is removed,
+ *  in all four games). The four games' round tables were dropped: they change
+ *  on every round of every game, all day, even with nobody playing, which
+ *  refreshed this box about 6 extra times a minute for no money change. The
+ *  useLiveSync poll still catches everything else. */
+const LIVE_TABLES: LiveTable[] = ['coin_ledger']
 
 /**
  * Agent dashboard: "Commission today" micro card (2026-11-08). The logged-in

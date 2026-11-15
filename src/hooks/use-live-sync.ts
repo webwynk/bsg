@@ -6,11 +6,12 @@ import { useLiveVersion, type LiveTable } from "@/components/live-data-provider"
 export type LiveSyncTier = "fast" | "normal"
 
 /** Poll interval per tier, in ms -- the guaranteed worst-case staleness
- *  bound regardless of Realtime's state. 'fast' is for pages showing live
- *  gameplay/security outcomes (agent & player detail pages, live monitor,
- *  cashier, alerts); 'normal' is for summary/audit/directory pages, whose
- *  underlying queries are heavier (full-table scans) and whose staleness
- *  tolerance is higher. */
+ *  bound regardless of Realtime's state. 'fast' is for the Live Game tabs,
+ *  which follow a round second by second. 'normal' is for every other page
+ *  (since 2026-11-15, dashboard server-call optimisation step 6: agent home,
+ *  agent players, the superadmin agent page and player game history moved
+ *  here from 'fast'); their changes arrive through Realtime within about a
+ *  second, and this poll only covers a missed push. */
 export const LIVE_SYNC_TIER_MS: Record<LiveSyncTier, number> = {
   fast: 3_000,
   normal: 10_000,
@@ -105,7 +106,7 @@ export function useLiveSync(
   // their per-page actions bundled into one heavier combined action, and
   // that single request's round-trip time (1.2-2.9s, driven by a Vercel/
   // Supabase region mismatch -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md
-  // Issue #93) now regularly meets or exceeds the 3s poll interval. Every
+  // Issue #93) regularly met or exceeded the 3s poll interval those pages had then. Every
   // route's own fetch function guards against out-of-order responses with
   // useRequestGeneration, accepting only the response for the LATEST-issued
   // request -- so once ticks start piling up faster than they resolve, NO

@@ -101,9 +101,11 @@ export type StaffSessionLoginResult =
   | { allowed: false; reason: 'account_blocked' }
   | { allowed: false; reason: 'session_active_elsewhere'; seconds_until_free?: number }
 
-/** Return shape of staff_session_touch -- called independently from
- * src/proxy.ts's own navigation-level single-device gate. No longer called
- * from requireAuth(), which uses staff_auth_check instead (Issue #93). */
+/** Return shape of staff_session_touch -- called only from src/proxy.ts's
+ * navigation-level single-device gate (page opens and client-side
+ * navigations; server action POSTs skip the proxy check since 2026-11-15).
+ * Not called from requireAuth(), which uses staff_auth_check instead
+ * (Issue #93). */
 export type StaffSessionTouchResult = { valid: boolean }
 
 /** Return shape of staff_auth_check -- called from requireAuth() on every

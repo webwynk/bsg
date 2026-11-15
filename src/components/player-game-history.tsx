@@ -20,8 +20,14 @@ import { HISTORY_OUTCOMES, HISTORY_PAGE_SIZE, parseRoundSearch, type HistoryOutc
 import { getPlayerGamePlaysAction, getPlayerGameStatsAction } from '@/app/agent/players/player-game-history-actions'
 import type { PlayerHistoryPlay } from '@/app/agent/players/player-game-history'
 
-/** Live signals: any game's rounds moving (a draw or a settle) or the coin ledger. */
-const LIVE_TABLES: LiveTable[] = ['rounds', 'lucky_card_rounds', 'spin2win_rounds', 'lucky16_rounds', 'coin_ledger']
+/** Live signal: coin_ledger only (2026-11-15, dashboard server-call
+ *  optimisation step 5). Bets, wins and removed bets all write a coin_ledger
+ *  row (stake / payout / stake_refund) and refresh this at once. A LOSING
+ *  round writes no coin row, so its "Lost" result appears on the next
+ *  useLiveSync poll instead of instantly. The four games' round tables were
+ *  dropped because they change on every round of every game, all day, which
+ *  refreshed this box about 6 extra times a minute even with nobody playing. */
+const LIVE_TABLES: LiveTable[] = ['coin_ledger']
 
 /**
  * Player History: the "Game Plays" side of a player's page, the same on the
@@ -39,8 +45,8 @@ const LIVE_TABLES: LiveTable[] = ['rounds', 'lucky_card_rounds', 'spin2win_round
  *
  * Data: getPlayerGameStatsAction (all games at once, per range) and
  * getPlayerGamePlaysAction (one page of the open game). Kept fresh by
- * useLiveSync ('fast': realtime on the games' rounds and coin_ledger, plus a
- * 3-second poll), like the lists it replaces.
+ * useLiveSync ('normal': realtime on coin_ledger, plus a 10-second poll; was
+ * 'fast', 3 s, until 2026-11-15 step 6).
  */
 type Loaders = {
   stats: typeof getPlayerGameStatsAction
@@ -106,7 +112,7 @@ export function PlayerGameHistory({
     return Promise.all([statsP, listP]).catch((e) => setError(e instanceof Error ? e.message : 'Could not load the history.'))
   }, [statsRequest, listRequest, loaders])
 
-  const { refresh } = useLiveSync(LIVE_TABLES, load, 'fast')
+  const { refresh } = useLiveSync(LIVE_TABLES, load, 'normal')
 
   // Any change of player or filter: load at once (useLiveSync covers the first
   // load and the live ticks).

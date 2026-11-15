@@ -258,7 +258,7 @@ export default function PlayersPage() {
             // Deliberately NOT gated behind a shared generation counter with
             // loadPlayerHistory here (an earlier version of this fix was):
             // under real production latency this page's own requests
-            // sometimes run close to or past the 3s poll interval, and a
+            // sometimes ran close to or past the then-3s poll interval, and a
             // counter bumped by every single poll tick regardless of
             // relevance meant a response could permanently never catch up to
             // "current", leaving the history skeleton stuck loading forever
@@ -288,18 +288,21 @@ export default function PlayersPage() {
   // superadmin-portal equivalent of this page). useLiveSync keeps the same
   // Realtime-driven fast path (the shared connection from LiveDataProvider,
   // mounted once in agent/layout.tsx -- still usually well under a second
-  // when Realtime is actually delivering) but adds a guaranteed 3s poll
+  // when Realtime is actually delivering) but adds a guaranteed poll
   // backstop instead of the old 90s one. Realtime's own "SUBSCRIBED"/
   // connected status was proven able to stay true for an entire session
   // while every event silently failed a server-side authorization check,
   // with zero client-visible signal -- see MASTER_AUDIT_AND_REMEDIATION_PLAN.md
-  // Issue #91 for the full evidence. Tier 'fast' (3s) since this page shows
-  // live gameplay outcomes for this agent's own players. No separate
-  // mount-only effect is needed -- useLiveSync fires once on mount too.
+  // Issue #91 for the full evidence. Tier 'normal' (10 s) since 2026-11-15
+  // (dashboard server-call optimisation step 6, Hasan's choice; was 'fast',
+  // 3 s): this agent's players' coin and profile changes still arrive within
+  // about a second through Realtime; the backstop only covers a missed push.
+  // No separate mount-only effect is needed -- useLiveSync fires once on
+  // mount too.
   const { lastSyncedAt, tierMs, refresh } = useLiveSync(
     ['profiles', 'bets', 'coin_ledger'],
     () => loadPlayers({ reloadHistory: true }),
-    'fast'
+    'normal'
   )
 
   // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of

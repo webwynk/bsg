@@ -94,15 +94,19 @@ export default function AgentDashboard() {
   // effect. useLiveSync keeps the same Realtime-driven fast path (the shared
   // connection from LiveDataProvider, mounted once in agent/layout.tsx --
   // still usually well under a second when Realtime is actually delivering)
-  // but adds a guaranteed 3s poll backstop instead of the old 90s one --
+  // but adds a guaranteed poll backstop instead of the old 90s one --
   // Realtime's own "SUBSCRIBED"/connected status was proven able to stay
   // true for an entire session while every event silently failed a
   // server-side authorization check, with zero client-visible signal. See
-  // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91. Tier 'fast' (3s) since
-  // this is the agent's own cashier home, showing live stake/payout activity
-  // for their own players. Fires once on mount (the initial load) and again
-  // on every subsequent change.
-  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchDashboardData, 'fast')
+  // MASTER_AUDIT_AND_REMEDIATION_PLAN.md Issue #91. Tier 'normal' (10 s)
+  // since 2026-11-15 (dashboard server-call optimisation step 6, Hasan's
+  // choice; was 'fast', 3 s): stake/payout/transfer changes for this agent's
+  // players still arrive within about a second through Realtime, and this
+  // bundled request (balance, players, today's money summary, last 50 coin
+  // moves) is heavy enough that a 3 s backstop kept it running almost back
+  // to back. Only a missed push now waits up to 10 s. Fires once on mount
+  // (the initial load) and again on every subsequent change.
+  const { lastSyncedAt, tierMs, refresh } = useLiveSync(['profiles', 'bets', 'coin_ledger'], fetchDashboardData, 'normal')
 
   // Issue #93 bug fix: calls useLiveSync's own guarded refresh() instead of
   // fetchDashboardData directly -- a direct call bypassed the in-flight

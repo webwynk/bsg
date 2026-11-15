@@ -25,7 +25,7 @@ import { TC_RTP_MAX, TC_RTP_MIN, isValidTcRtp } from './live-game/triple-chance-
  *        so withdrawals never reduced it. Later netted credits against debits
  *        into one number. User later asked for two separate, non-netted
  *        numbers instead (today_deposited / today_withdrawn) -- see the
- *        2026-08-10 note in getSystemOverviewMetricsAction.
+ *        2026-08-10 note in readSystemMetrics.
  *   M-7  The game_history fallback is gone; that table never existed.
  *
  * Errors are surfaced rather than swallowed — `catch (_) {}` around a query is
@@ -60,13 +60,12 @@ export async function logAuditEventAction(kind: AuditKind, detail: string) {
   }
 }
 
-export async function getAuditLogsAction(): Promise<{
-  logs: Array<{ id: string; kind: string; detail: string; time: string; actor: string }>
-  error: string | null
-}> {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { logs: [], error: auth.error }
+export interface AuditLogRow { id: string; kind: string; detail: string; time: string; actor: string }
 
+/** The last 50 audit-log lines with actor names. NOT a server action and does
+ *  no auth itself: only called from getSuperadminHomeAction, after its
+ *  requireAuth(['superadmin']). */
+async function readAuditLogs(): Promise<{ logs: AuditLogRow[]; error: string | null }> {
   try {
     const db = createAdminClient()
     const { data, error } = await db
@@ -126,10 +125,10 @@ const EMPTY_METRICS: SystemMetrics = {
   error: null,
 }
 
-export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { ...EMPTY_METRICS, error: auth.error }
-
+/** Superadmin home KPI figures. NOT a server action and does no auth itself:
+ *  only called from getSuperadminHomeAction, after its
+ *  requireAuth(['superadmin']). */
+async function readSystemMetrics(): Promise<SystemMetrics> {
   try {
     const db = createAdminClient()
     const dayStart = istDayStartISO()
@@ -182,6 +181,37 @@ export async function getSystemOverviewMetricsAction(): Promise<SystemMetrics> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SUPERADMIN HOME (one bundled read)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Everything the superadmin home page refreshes, except the Gameplay & Bets
+ * Audit card (which has its own date filter and its own action), in ONE
+ * request (2026-11-15, dashboard server-call optimisation step 4, Hasan's
+ * approval). Replaces getSystemOverviewMetricsAction, getRtpAction and
+ * getAuditLogsAction: one requireAuth() instead of three, the same three reads
+ * run in parallel. Each part keeps its own error, so one failing part never
+ * hides the others (same as the old three separate calls).
+ */
+export async function getSuperadminHomeAction(): Promise<{
+  metrics: SystemMetrics
+  rtp: { rtp: number; error: string | null }
+  logs: { logs: AuditLogRow[]; error: string | null }
+  error: string | null
+}> {
+  const auth = await requireAuth(['superadmin'])
+  if (auth.error) {
+    return {
+      metrics: { ...EMPTY_METRICS, error: auth.error },
+      rtp: { rtp: 96, error: auth.error },
+      logs: { logs: [], error: auth.error },
+      error: auth.error,
+    }
+  }
+  const [metrics, rtp, logs] = await Promise.all([readSystemMetrics(), readTcRtp(), readAuditLogs()])
+  return { metrics, rtp, logs, error: null }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GAMEPLAY & BETS AUDIT (per game, any IST date range)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -219,10 +249,11 @@ export async function getGameplayStatsAction(range: DayRange | null): Promise<{
 // ─────────────────────────────────────────────────────────────────────────────
 // RTP CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getRtpAction(): Promise<{ rtp: number; error: string | null }> {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { rtp: 96, error: auth.error }
-
+/** Triple Chance's next-round RTP for the superadmin home tile. NOT a server
+ *  action and does no auth itself: only called from getSuperadminHomeAction,
+ *  after its requireAuth(['superadmin']). The 96 on error is a placeholder;
+ *  callers must check .error before using it. */
+async function readTcRtp(): Promise<{ rtp: number; error: string | null }> {
   try {
     const { data, error } = await createAdminClient()
       .from('game_config').select('rtp_percentage').eq('id', 'global').single()
@@ -275,23 +306,9 @@ export async function updateRtpAction(rtpPercentage: number) {
 // 2/3/4 = 2X/3X/4X. Pinned onto each round at creation exactly like
 // rtp_percentage (see 20260920120000_pin_bonus_multiplier_to_round.sql) --
 // settle_round reads only the round's own pinned copy, so a change made here
-// can never affect a round already in progress. Mirrors getRtpAction's/
-// updateRtpAction's exact auth/error/audit-log contract.
-export async function getBonusMultiplierAction(): Promise<{ bonusMultiplier: number; error: string | null }> {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { bonusMultiplier: 1, error: auth.error }
-
-  try {
-    const { data, error } = await createAdminClient()
-      .from('game_config').select('bonus_multiplier').eq('id', 'global').single()
-    if (error) throw new Error(error.message)
-    return { bonusMultiplier: Number(data.bonus_multiplier), error: null }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return { bonusMultiplier: 1, error: `Could not read bonus multiplier: ${message}` }
-  }
-}
-
+// can never affect a round already in progress. Mirrors updateRtpAction's
+// exact auth/error/audit-log contract. The current value is read by
+// getTripleChanceLiveAction (the Live Game tab's single bundled read).
 export async function updateBonusMultiplierAction(bonusMultiplier: number) {
   const auth = await requireAuth(['superadmin'])
   if (auth.error || !auth.user) return { success: false, error: auth.error ?? 'Unauthorized' }
@@ -323,92 +340,6 @@ export async function updateBonusMultiplierAction(bonusMultiplier: number) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return { success: false, error: `Could not update bonus multiplier: ${message}` }
-  }
-}
-
-// Lightweight, poll-friendly round-timing check — used to lock both the RTP
-// Configuration widget and the "Next Round" side of the Bonus Multiplier
-// widget in the closing seconds of a round. Deliberately separate from
-// getLatestGameDrawsAction (which also fetches 20 rounds of nested bet
-// history) since this needs to be polled every couple of seconds and that
-// one does not.
-//
-// Returns seconds_into (not just seconds_remaining) so the caller can derive
-// the SAME 0-90 countdown the player-facing app displays
-// (bsg_app/lib/providers/game_provider.dart's _cycleToCountdown: roughly
-// `90 - seconds_into`, clamped to 0). seconds_remaining alone counts down
-// over the full 103-second server cycle, which is a different, later-ending
-// clock than what players (and now, these widgets) actually watch.
-//
-// This lock is a UX/discipline convenience only, not a correctness
-// requirement for the "Next Round" dial -- a change submitted at any point
-// still only ever affects the next round (each round pins its own
-// rtp_percentage AND bonus_multiplier at creation time, see
-// get_current_round/tick_rounds), so a stale or failed poll here fails open
-// (unlocked) rather than risking the widget getting stuck disabled.
-//
-// The old (pre-Issue #89) payout multiplier no longer has a widget of its
-// own to lock (permanent x9/x90/x900, removed from the dashboard entirely).
-//
-// Issue #99 addition: also returns the CURRENT round's own, real
-// bonus_multiplier/drawn state -- a direct `rounds` table read (privileged,
-// service-role access), not through get_current_round()'s jsonb response,
-// because that response deliberately hides bonus_multiplier until the round
-// is drawn (a player-fairness rule, not something the admin's own dashboard
-// should be bound by). This is what lets the "This Round" boost button
-// group show what's genuinely active right now, and lets it self-disable
-// the instant that round is drawn -- unlike the "Next Round" dial's lock
-// above, THIS lock (current_round_drawn) IS a correctness signal, not just
-// a courtesy: apply_bonus_to_current_round() itself refuses once drawn, so
-// the UI reflecting that accurately avoids a confusing "why did my click
-// fail" moment, it doesn't create the safety guarantee.
-export async function getActiveRoundTimingAction(): Promise<{
-  seconds_remaining: number | null
-  seconds_into: number | null
-  round_number: number | null
-  current_round_bonus_multiplier: number | null
-  current_round_drawn: boolean
-  error: string | null
-}> {
-  const auth = await requireAuth(['superadmin'])
-  if (auth.error) {
-    return {
-      seconds_remaining: null, seconds_into: null, round_number: null,
-      current_round_bonus_multiplier: null, current_round_drawn: false, error: auth.error,
-    }
-  }
-
-  try {
-    const db = createAdminClient()
-    const { data: rawCur, error } = await db.rpc('get_current_round')
-    if (error) throw new Error(error.message)
-    const cur = asRpc<CurrentRound | null>(rawCur)
-
-    let currentRoundBonusMultiplier: number | null = null
-    let currentRoundDrawn = false
-    if (cur) {
-      const { data: roundRow, error: roundError } = await db
-        .from('rounds').select('bonus_multiplier, red').eq('id', cur.round_id).single()
-      if (roundError) throw new Error(roundError.message)
-      currentRoundBonusMultiplier = Number(roundRow.bonus_multiplier)
-      currentRoundDrawn = roundRow.red !== null
-    }
-
-    return {
-      seconds_remaining: cur ? Number(cur.seconds_remaining) : null,
-      seconds_into: cur ? Number(cur.seconds_into) : null,
-      round_number: cur ? Number(cur.round_number) : null,
-      current_round_bonus_multiplier: currentRoundBonusMultiplier,
-      current_round_drawn: currentRoundDrawn,
-      error: null,
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return {
-      seconds_remaining: null, seconds_into: null, round_number: null,
-      current_round_bonus_multiplier: null, current_round_drawn: false,
-      error: `Could not read round timing: ${message}`,
-    }
   }
 }
 
@@ -485,7 +416,38 @@ export interface DrawRow {
   bonus_multiplier: number
 }
 
-export async function getLatestGameDrawsAction(): Promise<{
+/**
+ * Everything the Live Game "Triple Chance" tab shows, in ONE request
+ * (2026-11-15, dashboard server-call optimisation step 3, Hasan's approval).
+ * Replaces three separate per-poll actions plus a 2 s timing poll
+ * (getLatestGameDrawsAction, getRtpAction for this tab, getBonusMultiplierAction,
+ * getActiveRoundTimingAction): one requireAuth() instead of four, and one
+ * get_current_round call per refresh instead of up to three. Read-only; it
+ * calls the same database objects the old actions called, unchanged.
+ *
+ * Returns:
+ *  - draws: the last 20 drawn rounds with each player's bet (same query and
+ *    same DrawRow shape as before).
+ *  - active_round: get_current_round()'s view of the round in progress.
+ *    seconds_into is returned (not only seconds_remaining) so the page can
+ *    count the SAME 0-90 betting countdown players see (bsg_app
+ *    game_provider.dart _cycleToCountdown: about 90 - seconds_into) locally
+ *    every second; seconds_remaining counts the full 103 s cycle instead.
+ *  - current_round_bonus_multiplier / current_round_drawn: read straight
+ *    from the rounds row (service role), because get_current_round()
+ *    deliberately hides bonus_multiplier until the draw (a player-fairness
+ *    rule the admin view is not bound by -- Issue #99). current_round_drawn
+ *    lets the "This Round" boost buttons disable themselves once drawn;
+ *    apply_bonus_to_current_round() itself still refuses after the draw, so
+ *    this is a courtesy, not the safety guarantee.
+ *  - rtp / bonus_multiplier: game_config's NEXT-round settings, read in one
+ *    select. Null when that read failed (the rest still loads).
+ *
+ * The RTP / next-bonus locks shown on the page are a UX convenience only:
+ * every round pins its own rtp_percentage and bonus_multiplier at creation,
+ * so a change always affects the next round only.
+ */
+export async function getTripleChanceLiveAction(): Promise<{
   draws: DrawRow[]
   active_round: {
     round_number: number
@@ -499,23 +461,35 @@ export async function getLatestGameDrawsAction(): Promise<{
     green: number | null
     black: number | null
   } | null
+  current_round_bonus_multiplier: number | null
+  current_round_drawn: boolean
+  rtp: number | null
+  bonus_multiplier: number | null
   error: string | null
 }> {
+  const empty = {
+    draws: [], active_round: null, current_round_bonus_multiplier: null,
+    current_round_drawn: false, rtp: null, bonus_multiplier: null,
+  }
   const auth = await requireAuth(['superadmin'])
-  if (auth.error) return { draws: [], active_round: null, error: auth.error }
+  if (auth.error) return { ...empty, error: auth.error }
 
   try {
     const db = createAdminClient()
 
-    const roundsRes = await db
-      .from('rounds')
-      .select(`id, round_number, red, green, black, total_stake, total_payout,
-               scheduled_at, drawn_at, bonus_multiplier,
-               bets ( total_stake, total_payout, profiles:user_id ( username ) )`)
-      .not('red', 'is', null)
-      .order('round_number', { ascending: false })
-      .limit(20)
+    const [roundsRes, curRes, configRes] = await Promise.all([
+      db.from('rounds')
+        .select(`id, round_number, red, green, black, total_stake, total_payout,
+                 scheduled_at, drawn_at, bonus_multiplier,
+                 bets ( total_stake, total_payout, profiles:user_id ( username ) )`)
+        .not('red', 'is', null)
+        .order('round_number', { ascending: false })
+        .limit(20),
+      db.rpc('get_current_round'),
+      db.from('game_config').select('rtp_percentage, bonus_multiplier').eq('id', 'global').single(),
+    ])
     if (roundsRes.error) throw new Error(`rounds: ${roundsRes.error.message}`)
+    if (curRes.error) throw new Error(`current round: ${curRes.error.message}`)
 
     const draws: DrawRow[] = (roundsRes.data ?? []).map(r => {
       const bets = (r as unknown as {
@@ -552,10 +526,19 @@ export async function getLatestGameDrawsAction(): Promise<{
 
     // Current round telemetry. get_current_round() only reveals digits once the
     // betting window has closed, so this cannot leak an outcome even to an
-    // admin screen that is polling every 5 seconds.
-    const { data: rawCur, error: curError } = await db.rpc('get_current_round')
-    if (curError) throw new Error(`current round: ${curError.message}`)
-    const cur = asRpc<CurrentRound | null>(rawCur)
+    // admin screen that refreshes every few seconds.
+    const cur = asRpc<CurrentRound | null>(curRes.data)
+
+    // The current round's real bonus and drawn state (see the doc comment).
+    let currentRoundBonusMultiplier: number | null = null
+    let currentRoundDrawn = false
+    if (cur) {
+      const { data: roundRow, error: roundError } = await db
+        .from('rounds').select('bonus_multiplier, red').eq('id', cur.round_id).single()
+      if (roundError) throw new Error(`current round row: ${roundError.message}`)
+      currentRoundBonusMultiplier = Number(roundRow.bonus_multiplier)
+      currentRoundDrawn = roundRow.red !== null
+    }
 
     const hasDigits = cur?.red !== null && cur?.red !== undefined
     return {
@@ -572,10 +555,14 @@ export async function getLatestGameDrawsAction(): Promise<{
         green: hasDigits ? Number(cur.green) : null,
         black: hasDigits ? Number(cur.black) : null,
       } : null,
-      error: null,
+      current_round_bonus_multiplier: currentRoundBonusMultiplier,
+      current_round_drawn: currentRoundDrawn,
+      rtp: configRes.error ? null : Number(configRes.data.rtp_percentage),
+      bonus_multiplier: configRes.error ? null : Number(configRes.data.bonus_multiplier),
+      error: configRes.error ? `Could not read RTP / bonus settings: ${configRes.error.message}` : null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    return { draws: [], active_round: null, error: `Could not load telemetry: ${message}` }
+    return { ...empty, error: `Could not load telemetry: ${message}` }
   }
 }

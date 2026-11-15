@@ -441,9 +441,11 @@ export async function updateAgentPasswordAction(agentIdentifier: string, newPass
  * back in", or a crashed PC.
  *
  * If the agent IS still signed in somewhere, that browser loses its seat:
- * its next click or page load is sent to the login page by src/proxy.ts
- * ("Signed in from another device"), and its keep-alive can't re-claim the
- * seat (staff_auth_check only refreshes a row whose token still matches).
+ * its next page open or navigation is sent to the login page by src/proxy.ts
+ * ("Signed in from another device"); until then its background refreshes and
+ * buttons get requireAuth()'s "signed in from another device" error, and its
+ * keep-alive can't re-claim the seat (staff_auth_check only refreshes a row
+ * whose token still matches).
  * The Auth account itself, its password and is_active are not touched.
  *
  * Agents only: a superadmin's own seat is not cleared from here (a stuck

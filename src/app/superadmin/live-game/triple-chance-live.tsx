@@ -2,14 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  getLatestGameDrawsAction,
-  getRtpAction,
+  getTripleChanceLiveAction,
   updateRtpAction,
-  getBonusMultiplierAction,
   updateBonusMultiplierAction,
-  getActiveRoundTimingAction,
   applyBonusToCurrentRoundAction,
 } from '../actions'
+import { tcSecondsInto } from './triple-chance-live-logic'
 import { TC_RTP_MAX, TC_RTP_MIN, TC_RTP_PRESETS, TC_RTP_STEP } from './triple-chance-rtp'
 import { useLiveSync } from '@/hooks/use-live-sync'
 import { LiveSyncBadge } from '@/components/live-sync-badge'
@@ -92,7 +90,13 @@ export function TripleChanceLive() {
   const [isSavingBonusMultiplier, setIsSavingBonusMultiplier] = useState(false)
   const [bonusMultiplierSuccess, setBonusMultiplierSuccess] = useState<string | null>(null)
 
-  const [roundSecondsInto, setRoundSecondsInto] = useState<number | null>(null)
+  // The round's current second, counted locally every second from the last
+  // server read (getTripleChanceLiveAction's active_round.seconds_into plus
+  // the time since it arrived) -- same clock as the "Cycle Phase" line below.
+  // Drives the RTP / next-bonus lock countdown and the "This Round" boost
+  // lock. Replaced the separate 2 s getActiveRoundTimingAction poll on
+  // 2026-11-15 (dashboard server-call optimisation step 3).
+  const roundSecondsInto = tcSecondsInto(activeRound?.seconds_into, activeRoundFetchedAt, nowTime)
   const displayCountdown = roundSecondsInto === null ? null : Math.max(0, Math.min(90, 90 - roundSecondsInto))
   const roundConfigLocked = displayCountdown !== null && displayCountdown <= 12
 
@@ -117,28 +121,32 @@ export function TripleChanceLive() {
   }, [])
 
   const drawsRequest = useRequestGeneration()
+  // One bundled read per refresh (getTripleChanceLiveAction): draws, current
+  // round, current-round bonus/drawn state, RTP and next bonus. Returned (not
+  // fire-and-forget) so useLiveSync's in-flight guard can skip a tick while
+  // the previous one is still running.
   const loadDraws = useCallback(() => {
     const token = drawsRequest.nextGeneration()
-    return Promise.all([
-      getLatestGameDrawsAction(),
-      getRtpAction(),
-      getBonusMultiplierAction(),
-    ]).then(([res, resRtp, resBonus]) => {
+    return getTripleChanceLiveAction().then((res) => {
       if (!drawsRequest.isCurrent(token)) return
       setIsLoading(false)
       setIsRefreshing(false)
-      const errors = [res.error, resRtp.error, resBonus.error].filter(Boolean)
-      setLoadError(errors.length > 0 ? errors.join(' — ') : null)
-      if (!res.error) {
+      setLoadError(res.error)
+      // A whole-read failure returns everything empty with an error -- keep
+      // the last good screen instead of blanking it, as before.
+      const loaded = !res.error || res.draws.length > 0 || res.active_round !== null
+      if (loaded) {
         setLatestDraws(res.draws)
         setActiveRound(res.active_round)
         setActiveRoundFetchedAt(Date.now())
+        setCurrentRoundBonus(res.current_round_bonus_multiplier)
+        setCurrentRoundDrawn(res.current_round_drawn)
       }
-      if (resRtp && !resRtp.error && resRtp.rtp) {
-        setRtpValue(resRtp.rtp)
+      if (res.rtp) {
+        setRtpValue(res.rtp)
       }
-      if (resBonus && !resBonus.error && resBonus.bonusMultiplier) {
-        setBonusMultiplier(resBonus.bonusMultiplier)
+      if (res.bonus_multiplier) {
+        setBonusMultiplier(res.bonus_multiplier)
       }
     }).catch((e) => {
       if (!drawsRequest.isCurrent(token)) return
@@ -198,61 +206,6 @@ export function TripleChanceLive() {
     }
     setTimeout(() => setCurrentRoundBonusMessage(null), 3500)
   }
-
-  // Dedicated poll for the RTP/Bonus round-lock countdown -- pauses when the
-  // browser tab is hidden (e.g. user on another tab/window) and catches up
-  // immediately upon return, matching useLiveSync's visibility behavior.
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-
-    let cancelled = false
-    let inFlight = false
-    let timingPoll: ReturnType<typeof setInterval> | null = null
-
-    const poll = () => {
-      if (inFlight) return
-      inFlight = true
-      getActiveRoundTimingAction().then(res => {
-        if (cancelled) return
-        setRoundSecondsInto(res.seconds_into)
-        setCurrentRoundBonus(res.current_round_bonus_multiplier)
-        setCurrentRoundDrawn(res.current_round_drawn)
-      }).finally(() => {
-        inFlight = false
-      })
-    }
-
-    const start = () => {
-      if (timingPoll) return
-      timingPoll = setInterval(poll, 2000)
-    }
-    const stop = () => {
-      if (!timingPoll) return
-      clearInterval(timingPoll)
-      timingPoll = null
-    }
-
-    if (document.visibilityState === 'visible') {
-      poll()
-      start()
-    }
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        poll()
-        start()
-      } else {
-        stop()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-
-    return () => {
-      cancelled = true
-      stop()
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [])
 
   // Filtered draws for historical table
   const filteredDraws = latestDraws.filter(draw => {
@@ -619,11 +572,7 @@ export function TripleChanceLive() {
           <div className="pt-3 border-t border-border/80 flex items-center justify-between text-xs">
             <span className="text-muted-foreground font-semibold">Cycle Phase:</span>
             {(() => {
-              const fetchedSecondsInto = activeRound?.seconds_into ?? 0
-              const elapsedSinceFetch = activeRoundFetchedAt > 0 && nowTime > 0
-                ? Math.floor((nowTime - activeRoundFetchedAt) / 1000)
-                : 0
-              const currentSecondsInto = Math.min(103, fetchedSecondsInto + elapsedSinceFetch)
+              const currentSecondsInto = roundSecondsInto ?? 0
               const remainingSecs = Math.max(0, 90 - currentSecondsInto)
               const isLocked = currentSecondsInto >= 90
 

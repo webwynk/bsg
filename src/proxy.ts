@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
 import { asRpc, type StaffSessionTouchResult } from '@/lib/rpc'
+import { isServerActionRequest } from '@/lib/server-action-request'
 
 // Renamed from middleware.ts (Next.js 16 deprecated the `middleware` file
 // convention in favor of `proxy` -- same behavior, same config.matcher
@@ -22,6 +23,23 @@ export async function proxy(request: NextRequest) {
   // Exclude login pages, _next internal routes, api routes, and static asset extensions
   const isStaticFile = /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2|ttf|eot|map|json)$/i.test(pathname)
   if (pathname.includes('/login') || pathname.startsWith('/_next') || pathname.startsWith('/api') || isStaticFile) {
+    return response
+  }
+
+  // Server actions (every dashboard data refresh, and every button that saves
+  // something) are POSTs to the page's own URL with a `next-action` header.
+  // Each one already runs requireAuth() itself -- Supabase Auth getUser plus
+  // staff_auth_check (profile, is_active, role, single-device seat, and the
+  // seat's last_seen_at refresh) -- so running this proxy's getUser +
+  // staff_session_touch on the same request only doubled the work
+  // (2026-11-15, dashboard server-call optimisation step 1: 4 login/session
+  // steps per refresh -> 2). Page opens and client-side navigations are GETs
+  // and still go through every check below, including the "signed in from
+  // another device" redirect. A superseded tab's background refreshes get
+  // requireAuth()'s "signed in from another device" error instead (Next.js
+  // never turned this proxy's redirect into a page change for an action
+  // request anyway -- only a redirect() inside the action does that).
+  if (isServerActionRequest(request.method, request.headers)) {
     return response
   }
 

@@ -16,7 +16,14 @@ import { getPlayerPnlDaysAction } from '@/app/agent/players/player-game-history-
 
 /** The P&L tab's own filter, in Hasan's order (the calendar comes first). */
 const PNL_PRESETS: readonly GameplayPreset[] = ['today', '7d', 'lifetime']
-const LIVE_TABLES: LiveTable[] = ['rounds', 'lucky_card_rounds', 'spin2win_rounds', 'lucky16_rounds', 'coin_ledger']
+/** Live signal: coin_ledger only (2026-11-15, dashboard server-call
+ *  optimisation step 5). Every money change this box shows is a coin_ledger
+ *  row (stake on a bet, payout on a win, stake_refund when a bet is removed,
+ *  in all four games). The four games' round tables were dropped: they change
+ *  on every round of every game, all day, even with nobody playing, which
+ *  refreshed this box about 6 extra times a minute for no money change. The
+ *  useLiveSync poll still catches everything else. */
+const LIVE_TABLES: LiveTable[] = ['coin_ledger']
 
 type Loader = typeof getPlayerPnlDaysAction
 
@@ -32,7 +39,7 @@ type Loader = typeof getPlayerPnlDaysAction
  * day the player played -- Date | Plays | Bets | Wins | Net P/L | Margin --
  * newest first, 10 per page. All four games, phone bets and Print tickets
  * together. Data: getPlayerPnlDaysAction (staff_player_daily_money), kept fresh
- * by useLiveSync ('normal': realtime + 10 s poll).
+ * by useLiveSync ('normal': realtime on coin_ledger + 10 s poll).
  */
 export function PlayerPnlAudit({
   playerIdentifier,
