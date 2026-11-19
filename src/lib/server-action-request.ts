@@ -9,8 +9,9 @@
  *
  * Used by src/proxy.ts to skip its own login/seat check on server actions
  * (2026-11-15, dashboard server-call optimisation step 1): every dashboard
- * server action already runs requireAuth() itself (Supabase Auth getUser +
- * staff_auth_check: profile, is_active, role and the single-device seat), so
+ * server action already runs requireAuth() itself (signed-in check, getClaims
+ * since 2026-11-19, + staff_auth_check: profile, is_active, role and the
+ * single-device seat), so
  * the proxy's check on the same request was a duplicate. A request that only
  * pretends to be an action gains nothing: every dashboard page is a client
  * page with no data in it, and all data comes from actions that check auth

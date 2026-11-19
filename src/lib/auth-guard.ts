@@ -20,6 +20,10 @@ import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
  * admin client was doing, so this function no longer needs the service-role
  * credential at all.
  *
+ * Since 2026-11-19 (speed plan phase 2) the remaining Auth server call is
+ * gone too: getUser() was replaced by getClaims(), which verifies the token
+ * locally. Each call is now 1 round trip (staff_auth_check) instead of 2.
+ *
  * S-3 FIX — this used to fall back to `user.user_metadata.role` whenever the
  * profile lookup failed:
  *
@@ -55,9 +59,21 @@ export type AuthGuardResult =
 export async function requireAuth(allowedRoles: AppRole[]): Promise<AuthGuardResult> {
   try {
     const supabase = await createServerSupabase()
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    if (userError || !user) {
+    // Signed-in check, done locally (2026-11-19, speed plan phase 2).
+    // getClaims() reads the session from the cookies (refreshing an expired
+    // access token, same as getUser() did) and verifies the token's signature
+    // with the project's public ECC (P-256) key, cached in memory for 10
+    // minutes -- no Supabase Auth server call per action any more. Revocation
+    // is NOT lost: a blocked/suspended account, a signed-out or superseded
+    // staff session, a deleted profile and a role change are all caught on
+    // this same call by staff_auth_check below, which reads the database
+    // fresh every time (and the database itself verifies the same token
+    // again before auth.uid() is set). Any failure here fails closed.
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims()
+    const claims = claimsData?.claims
+
+    if (claimsError || !claims?.sub) {
       return { error: 'Unauthorized: a valid authentication session is required.', user: null }
     }
 
@@ -114,7 +130,7 @@ export async function requireAuth(allowedRoles: AppRole[]): Promise<AuthGuardRes
       error: null,
       user: {
         id: check.id,
-        email: user.email,
+        email: claims.email,
         role: check.role as AppRole,
         username: check.username,
         coin_balance: Number(check.coin_balance ?? 0),

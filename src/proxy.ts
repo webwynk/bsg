@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import type { JwtPayload } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { STAFF_SESSION_COOKIE } from '@/lib/staff-session'
@@ -28,9 +29,10 @@ export async function proxy(request: NextRequest) {
 
   // Server actions (every dashboard data refresh, and every button that saves
   // something) are POSTs to the page's own URL with a `next-action` header.
-  // Each one already runs requireAuth() itself -- Supabase Auth getUser plus
-  // staff_auth_check (profile, is_active, role, single-device seat, and the
-  // seat's last_seen_at refresh) -- so running this proxy's getUser +
+  // Each one already runs requireAuth() itself -- the signed-in check
+  // (getClaims since 2026-11-19, getUser before) plus staff_auth_check
+  // (profile, is_active, role, single-device seat, and the seat's
+  // last_seen_at refresh) -- so running this proxy's login check +
   // staff_session_touch on the same request only doubled the work
   // (2026-11-15, dashboard server-call optimisation step 1: 4 login/session
   // steps per refresh -> 2). Page opens and client-side navigations are GETs
@@ -78,7 +80,33 @@ export async function proxy(request: NextRequest) {
     },
   })
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // Who is signed in, checked locally (2026-11-19, speed plan phase 2).
+  //
+  // getClaims() verifies the access token's signature right here with the
+  // project's public ECC (P-256) signing key, fetched once from Supabase's
+  // JWKS endpoint and cached in memory for 10 minutes -- no call to the
+  // Supabase Auth server on each page open, which getUser() used to make.
+  // Like getUser(), it first reads the session from the cookies and refreshes
+  // an expired access token (the refreshed cookies are written by setAll
+  // above). It only falls back to calling the Auth server for a token signed
+  // with the old HS256 secret.
+  //
+  // What this does NOT check any more on page opens: whether the Auth user was
+  // deleted/banned since the token was issued (tokens last up to 1 hour). That
+  // is still enforced immediately because (a) staff pages run the
+  // staff_session_touch seat check below, and (b) every server action -- all
+  // the data on every page -- runs requireAuth(), whose staff_auth_check reads
+  // the profile's is_active, role and single-login seat fresh from the
+  // database. A failed check (bad signature, no session, network error
+  // fetching the key) counts as "not signed in": fail closed to the login
+  // page, exactly as a failed getUser() did.
+  let claims: JwtPayload | null = null
+  try {
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims()
+    if (!claimsError && claimsData?.claims?.sub) claims = claimsData.claims
+  } catch {
+    claims = null
+  }
 
   // S-2 FIX: read the role from `app_metadata`, never `user_metadata`.
   //
@@ -89,12 +117,14 @@ export async function proxy(request: NextRequest) {
   // promote themselves and walk into every /superadmin route.
   //
   // app_metadata (raw_app_meta_data) can only be written with the service role.
-  // It is kept in step with profiles.role by a database trigger, so it is safe
-  // to trust here and costs no database round trip on each navigation.
+  // It is kept in step with profiles.role by a database trigger, and copied
+  // into the signed access token, so it is safe to trust here and costs no
+  // round trip. Since getClaims() reads it from the token, a role change shows
+  // here only once the token is refreshed (at most ~1 hour).
   //
   // This guard covers page routes only. Server actions independently re-verify
   // through requireAuth(), which reads public.profiles directly.
-  const userRole = user?.app_metadata?.role
+  const userRole = claims?.app_metadata?.role
 
   // Redirect root to whoever's actual portal, not unconditionally to agent
   // login. Previously this ran BEFORE user/role were even known (the very
@@ -121,7 +151,7 @@ export async function proxy(request: NextRequest) {
 
   // Protect /superadmin routes
   if (pathname.startsWith('/superadmin')) {
-    if (!user) {
+    if (!claims) {
       return NextResponse.redirect(new URL('/superadmin/login', request.url))
     }
     // Strict RBAC, explicit allow-list -- fails closed on a missing/falsy
@@ -143,7 +173,7 @@ export async function proxy(request: NextRequest) {
 
   // Protect /agent routes
   if (pathname.startsWith('/agent')) {
-    if (!user) {
+    if (!claims) {
       return NextResponse.redirect(new URL('/agent/login', request.url))
     }
     // Strict RBAC: If logged-in user is a SuperAdmin, redirect to /superadmin
@@ -166,7 +196,7 @@ export async function proxy(request: NextRequest) {
   // History: single-device was first enforced via a client-side poll
   // (SessionGuardProvider, since removed) running independently every 30s.
   // That created two uncoordinated systems both checking "is this session
-  // still valid" -- this file's existing getUser() check, and the
+  // still valid" -- this file's existing login check, and the
   // separate poll -- which raced against each other and against normal page
   // data-fetches, producing repeated, confirmed-live false "signed in from
   // another device" kicks on a perfectly valid session. Moved into the one
